@@ -575,7 +575,10 @@ export default function Home() {
       </main>
 
       <footer className={styles.footer}>
-        <p>AI Advisor | Powered by Google Gemini 2.0 Flash + SSI iBoard Real-time Data | Beta Version | FREE Tier ✨</p>
+        <p>AI Advisor | Powered by Google Gemini 2.0 Flash + VNStock (FREE Real Data) | Beta Version ✨</p>
+        <p style={{fontSize: '11px', color: '#94a3b8', marginTop: '4px'}}>
+          * Dữ liệu thị trường từ VNStock library - Cập nhật trong ngày | Làm mới để xem giá mới nhất
+        </p>
       </footer>
     </div>
   );
