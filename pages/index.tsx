@@ -497,7 +497,7 @@ export default function Home() {
       </main>
 
       <footer className={styles.footer}>
-        <p>AI Advisor | Powered by Claude AI | Beta Version</p>
+        <p>AI Advisor | Powered by Google Gemini 2.0 Flash | Beta Version | FREE Tier ✨</p>
       </footer>
     </div>
   );

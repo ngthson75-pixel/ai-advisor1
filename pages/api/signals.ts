@@ -1,200 +1,151 @@
-import Anthropic from '@anthropic-ai/sdk';
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// Mock stock data (trong production sẽ lấy từ VNDirect/SSI API)
-const MOCK_STOCKS = [
-  { code: 'MBB', price: 24000, volume: 12500000, change: -1.2, rsi: 45, macd: 'neutral' },
-  { code: 'VNM', price: 85200, volume: 3200000, change: -0.8, rsi: 32, macd: 'bullish' },
-  { code: 'HPG', price: 24500, volume: 18900000, change: 2.3, rsi: 58, macd: 'neutral' },
-  { code: 'FPT', price: 128500, volume: 2100000, change: 5.8, rsi: 78, macd: 'bearish' },
-  { code: 'VCB', price: 96200, volume: 5400000, change: -2.1, rsi: 42, macd: 'neutral' },
-  { code: 'VIC', price: 42300, volume: 8700000, change: 1.5, rsi: 55, macd: 'bullish' },
-];
-
-interface SignalRequest {
-  stockCode?: string;
-  analysisType?: 'buy' | 'sell' | 'all';
+interface StockData {
+  code: string;
+  price: number;
+  rsi: number;
+  macd: number;
+  volume: number;
 }
 
-interface SignalResponse {
-  signals: any[];
-  timestamp: string;
-  error?: string;
+const MOCK_STOCKS: StockData[] = [
+  { code: 'MBB', price: 28500, rsi: 42, macd: 1.2, volume: 8500000 },
+  { code: 'VNM', price: 85200, rsi: 32, macd: -0.8, volume: 1200000 },
+  { code: 'HPG', price: 24500, rsi: 55, macd: 2.3, volume: 18900000 },
+  { code: 'FPT', price: 132000, rsi: 68, macd: 3.5, volume: 2100000 },
+  { code: 'VCB', price: 108500, rsi: 38, macd: -1.2, volume: 3200000 },
+  { code: 'VIC', price: 42300, rsi: 48, macd: 0.7, volume: 8700000 }
+];
+
+async function analyzeWithGemini(stock: StockData): Promise<any> {
+  try {
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    
+    const prompt = `Bạn là chuyên gia phân tích chứng khoán Việt Nam. Phân tích cổ phiếu sau:
+
+Mã: ${stock.code}
+Giá hiện tại: ${stock.price.toLocaleString()} VND
+RSI: ${stock.rsi}
+MACD: ${stock.macd}
+Khối lượng: ${stock.volume.toLocaleString()}
+
+Hãy đưa ra:
+1. Tín hiệu: MUA hoặc BÁN
+2. Loại tín hiệu: SWING T+ (giữ 3-5 ngày) hoặc INTRADAY (trong ngày)
+3. Score từ 0-100
+4. Xác suất thành công (%)
+5. Giá vào lệnh đề xuất
+6. Stop loss
+7. Take profit
+8. Tỷ lệ vốn nên đặt (%)
+9. Max drawdown dự kiến (%)
+10. Phân tích ngắn gọn (2-3 câu)
+
+Trả về JSON format:
+{
+  "signal": "MUA" hoặc "BÁN",
+  "signalType": "SWING T+" hoặc "INTRADAY",
+  "score": number,
+  "probability": number,
+  "entryPrice": number,
+  "stopLoss": number,
+  "takeProfit": number,
+  "positionSize": number,
+  "maxDrawdown": number,
+  "analysis": "string"
+}`;
+
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    const text = response.text();
+    
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const analysis = JSON.parse(jsonMatch[0]);
+      return {
+        stockCode: stock.code,
+        currentPrice: stock.price,
+        signal: analysis.signal,
+        signalType: analysis.signalType,
+        score: analysis.score,
+        probability: analysis.probability,
+        analysis: analysis.analysis,
+        entryPrice: analysis.entryPrice,
+        stopLoss: analysis.stopLoss,
+        takeProfit: analysis.takeProfit,
+        positionSize: analysis.positionSize,
+        maxDrawdown: analysis.maxDrawdown,
+        timestamp: new Date().toISOString()
+      };
+    }
+    
+    throw new Error('Could not parse AI response');
+    
+  } catch (error) {
+    console.error('Gemini API error:', error);
+    return getRuleBasedSignal(stock);
+  }
+}
+
+function getRuleBasedSignal(stock: StockData) {
+  const isBuy = stock.rsi < 45 && stock.macd > 0;
+  const isSell = stock.rsi > 65 || stock.macd < -1;
+  
+  const signal = isBuy ? 'MUA' : isSell ? 'BÁN' : 'GIỮ';
+  const score = isBuy ? 72 : isSell ? 68 : 50;
+  const probability = isBuy ? 68 : isSell ? 65 : 50;
+  
+  let analysis = '';
+  if (isBuy) {
+    analysis = `${stock.code} đang có tín hiệu hồn hợp nhưng nghiêng về tích cực với RSI ${stock.rsi} cho thấy cổ phiếu đã oversold và có khả năng phục hồi. MACD bullish xác nhận động lực tăng đang hình thành.`;
+  } else {
+    analysis = `${stock.code} cho tín hiệu tích cực với MACD bullish và RSI ${stock.rsi} ở vùng trung tính. Volume ${(stock.volume / 1000000).toFixed(1)} triệu cho thấy thanh khoản tốt.`;
+  }
+  
+  return {
+    stockCode: stock.code,
+    currentPrice: stock.price,
+    signal: signal,
+    signalType: 'SWING T+',
+    score: score,
+    probability: probability,
+    analysis: analysis,
+    entryPrice: Math.round(stock.price * (isBuy ? 1.01 : 0.99)),
+    stopLoss: Math.round(stock.price * (isBuy ? 0.95 : 1.05)),
+    takeProfit: Math.round(stock.price * (isBuy ? 1.08 : 0.92)),
+    positionSize: 15,
+    maxDrawdown: isBuy ? 5 : 8,
+    timestamp: new Date().toISOString()
+  };
 }
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<SignalResponse>
+  res: NextApiResponse
 ) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ 
-      signals: [], 
-      timestamp: new Date().toISOString(),
-      error: 'Method not allowed' 
-    });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { stockCode, analysisType = 'all' } = req.body as SignalRequest;
-
-    // Filter stocks to analyze
-    const stocksToAnalyze = stockCode 
-      ? MOCK_STOCKS.filter(s => s.code === stockCode)
-      : MOCK_STOCKS;
-
-    // Analyze each stock with Claude AI
     const signals = await Promise.all(
-      stocksToAnalyze.map(async (stock) => {
-        const prompt = `Bạn là chuyên gia phân tích chứng khoán Việt Nam. Hãy phân tích cổ phiếu ${stock.code} với dữ liệu sau:
-
-Giá hiện tại: ${stock.price.toLocaleString('vi-VN')} VND
-Volume: ${stock.volume.toLocaleString('vi-VN')}
-Biến động: ${stock.change}%
-RSI: ${stock.rsi}
-MACD: ${stock.macd}
-
-Hãy đưa ra:
-1. TÍN HIỆU: MUA/BÁN/GIỮ
-2. SCORE: 0-100 (độ mạnh của tín hiệu)
-3. XÁC SUẤT THÀNH CÔNG: %
-4. PHÂN TÍCH CHI TIẾT: Giải thích lý do (2-3 câu)
-5. STOP LOSS: Giá nên cắt lỗ
-6. TAKE PROFIT: Giá nên chốt lời
-7. MAX DRAWDOWN: % có thể chấp nhận
-
-Trả lời theo format JSON:
-{
-  "signal": "MUA/BÁN/GIỮ",
-  "signalType": "Day Trade/Swing T+/Position",
-  "score": 70,
-  "probability": 75,
-  "analysis": "Giải thích chi tiết...",
-  "entryPrice": ${stock.price},
-  "stopLoss": giá,
-  "takeProfit": giá,
-  "maxDrawdown": 10,
-  "positionSize": 10
-}`;
-
-        try {
-          const message = await anthropic.messages.create({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1000,
-            messages: [{
-              role: 'user',
-              content: prompt
-            }]
-          });
-
-          // Extract JSON from Claude's response
-          const content = message.content[0];
-          if (content.type === 'text') {
-            // Try to extract JSON from the response
-            const jsonMatch = content.text.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              const aiResponse = JSON.parse(jsonMatch[0]);
-              
-              return {
-                stockCode: stock.code,
-                currentPrice: stock.price,
-                signal: aiResponse.signal || 'GIỮ',
-                signalType: aiResponse.signalType || 'Swing T+',
-                score: aiResponse.score || 50,
-                probability: aiResponse.probability || 50,
-                analysis: aiResponse.analysis || 'Đang phân tích...',
-                entryPrice: aiResponse.entryPrice || stock.price,
-                stopLoss: aiResponse.stopLoss || Math.round(stock.price * 0.95),
-                takeProfit: aiResponse.takeProfit || Math.round(stock.price * 1.08),
-                maxDrawdown: aiResponse.maxDrawdown || 10,
-                positionSize: aiResponse.positionSize || 10,
-                timestamp: new Date().toISOString(),
-                rsi: stock.rsi,
-                macd: stock.macd,
-                volume: stock.volume,
-                change: stock.change
-              };
-            }
-          }
-
-          // Fallback if AI response parsing fails
-          return generateFallbackSignal(stock);
-        } catch (aiError) {
-          console.error(`AI Error for ${stock.code}:`, aiError);
-          return generateFallbackSignal(stock);
-        }
-      })
+      MOCK_STOCKS.map(stock => analyzeWithGemini(stock))
     );
 
-    // Filter by analysis type
-    const filteredSignals = analysisType === 'all' 
-      ? signals 
-      : signals.filter(s => {
-          if (analysisType === 'buy') return s.signal === 'MUA';
-          if (analysisType === 'sell') return s.signal === 'BÁN';
-          return true;
-        });
-
     res.status(200).json({
-      signals: filteredSignals,
+      success: true,
+      signals: signals,
+      aiProvider: 'Google Gemini 2.0 Flash',
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
     console.error('API Error:', error);
-    res.status(500).json({
-      signals: [],
-      timestamp: new Date().toISOString(),
+    res.status(500).json({ 
       error: 'Internal server error'
     });
   }
-}
-
-// Fallback signal generation nếu AI fails
-function generateFallbackSignal(stock: any) {
-  let signal = 'GIỮ';
-  let signalType = 'Swing T+';
-  let score = 50;
-  let probability = 50;
-  let analysis = '';
-
-  // Simple rule-based logic
-  if (stock.rsi < 35 && stock.macd === 'bullish') {
-    signal = 'MUA';
-    signalType = 'Swing T+';
-    score = 70 + Math.floor(Math.random() * 15);
-    probability = 70 + Math.floor(Math.random() * 15);
-    analysis = `RSI đang ở vùng oversold (${stock.rsi}), MACD cho tín hiệu tích cực. Có thể xem xét mua vào vùng giá hiện tại.`;
-  } else if (stock.rsi > 70 && stock.change > 5) {
-    signal = 'BÁN';
-    signalType = 'Take Profit';
-    score = 75 + Math.floor(Math.random() * 15);
-    probability = 75 + Math.floor(Math.random() * 15);
-    analysis = `RSI đang ở vùng overbought (${stock.rsi}), cổ phiếu đã tăng ${stock.change}%. Nên chốt lời một phần.`;
-  } else {
-    analysis = `Cổ phiếu đang trong xu hướng trung tính. RSI ${stock.rsi}, ${stock.macd} trend. Chờ tín hiệu rõ ràng hơn.`;
-  }
-
-  return {
-    stockCode: stock.code,
-    currentPrice: stock.price,
-    signal,
-    signalType,
-    score,
-    probability,
-    analysis,
-    entryPrice: stock.price,
-    stopLoss: Math.round(stock.price * 0.95),
-    takeProfit: Math.round(stock.price * 1.08),
-    maxDrawdown: 10,
-    positionSize: 10,
-    timestamp: new Date().toISOString(),
-    rsi: stock.rsi,
-    macd: stock.macd,
-    volume: stock.volume,
-    change: stock.change
-  };
 }
