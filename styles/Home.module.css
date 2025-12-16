@@ -163,6 +163,14 @@
   margin-bottom: 12px;
 }
 
+.signalTimestamp {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 10px;
+  font-weight: 500;
+  font-family: 'JetBrains Mono', monospace;
+}
+
 .stockCode {
   font-size: 24px;
   font-weight: 800;
@@ -688,5 +696,102 @@
   
   .formButtons {
     flex-direction: column;
+  }
+}
+
+/* Portfolio Section */
+.portfolioSection {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.portfolioSection h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1f36;
+  margin-bottom: 12px;
+}
+
+.portfolioHint {
+  font-size: 14px;
+  color: #64748b;
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+
+.portfolioTable {
+  width: 100%;
+}
+
+.portfolioHeader {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1.2fr 1.5fr;
+  gap: 12px;
+  padding: 12px;
+  background: #f7f9fc;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  color: #475569;
+  margin-bottom: 12px;
+}
+
+.portfolioInput {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1.2fr 1.5fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.portfolioField {
+  padding: 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.2s;
+}
+
+.portfolioField:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.portfolioFieldReadonly {
+  padding: 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: 'JetBrains Mono', monospace;
+  background: #f7f9fc;
+  color: #475569;
+  font-weight: 600;
+}
+
+.addPortfolioBtn {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.addPortfolioBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+@media (max-width: 768px) {
+  .portfolioHeader,
+  .portfolioInput {
+    grid-template-columns: 1fr;
   }
 }

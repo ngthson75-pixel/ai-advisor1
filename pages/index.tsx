@@ -5,6 +5,11 @@ import styles from '../styles/Home.module.css';
 interface Signal {
   stockCode: string;
   currentPrice: number;
+  change?: number;
+  changePercent?: number;
+  volume?: number;
+  high?: number;
+  low?: number;
   signal: string;
   signalType: string;
   score: number;
@@ -16,6 +21,7 @@ interface Signal {
   maxDrawdown: number;
   positionSize: number;
   timestamp: string;
+  dataSource?: string;
 }
 
 interface RiskAnalysis {
@@ -298,9 +304,34 @@ export default function Home() {
                         <span className={styles.stockCode}>{signal.stockCode}</span>
                         <span className={styles.signalBadgeBuy}>{signal.signalType}</span>
                       </div>
+                      <div className={styles.signalTimestamp}>
+                        {new Date(signal.timestamp).toLocaleString('vi-VN', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
                       <div className={styles.signalPrice}>
                         {signal.currentPrice.toLocaleString('vi-VN')} VND
+                        {signal.changePercent !== undefined && (
+                          <span style={{
+                            fontSize: '14px',
+                            marginLeft: '8px',
+                            color: signal.changePercent > 0 ? '#10b981' : '#ef4444'
+                          }}>
+                            {signal.changePercent > 0 ? '+' : ''}{signal.changePercent}%
+                          </span>
+                        )}
                       </div>
+                      {signal.volume && (
+                        <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
+                          KL: {(signal.volume / 1000000).toFixed(2)}M | 
+                          Cao: {signal.high?.toLocaleString()} | 
+                          Thấp: {signal.low?.toLocaleString()}
+                        </div>
+                      )}
                       <div className={styles.signalMetrics}>
                         <div className={styles.metric}>
                           <span className={styles.metricLabel}>Score</span>
@@ -344,9 +375,34 @@ export default function Home() {
                         <span className={styles.stockCode}>{signal.stockCode}</span>
                         <span className={styles.signalBadgeSell}>{signal.signalType}</span>
                       </div>
+                      <div className={styles.signalTimestamp}>
+                        {new Date(signal.timestamp).toLocaleString('vi-VN', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
                       <div className={styles.signalPrice}>
                         {signal.currentPrice.toLocaleString('vi-VN')} VND
+                        {signal.changePercent !== undefined && (
+                          <span style={{
+                            fontSize: '14px',
+                            marginLeft: '8px',
+                            color: signal.changePercent > 0 ? '#10b981' : '#ef4444'
+                          }}>
+                            {signal.changePercent > 0 ? '+' : ''}{signal.changePercent}%
+                          </span>
+                        )}
                       </div>
+                      {signal.volume && (
+                        <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
+                          KL: {(signal.volume / 1000000).toFixed(2)}M | 
+                          Cao: {signal.high?.toLocaleString()} | 
+                          Thấp: {signal.low?.toLocaleString()}
+                        </div>
+                      )}
                       <div className={styles.signalMetrics}>
                         <div className={styles.metric}>
                           <span className={styles.metricLabel}>Score</span>
@@ -428,6 +484,28 @@ export default function Home() {
               <div className={styles.section}>
                 <h2 className={styles.sectionTitle}>🧠 AI Discipline Coach</h2>
 
+                <div className={styles.portfolioSection}>
+                  <h3>📊 Danh mục của bạn</h3>
+                  <p className={styles.portfolioHint}>
+                    Quý vị thêm danh mục của quý vị vào đây để AI tư vấn quản trị cảm xúc.
+                  </p>
+                  <div className={styles.portfolioTable}>
+                    <div className={styles.portfolioHeader}>
+                      <span>Mã</span>
+                      <span>Số lượng CP</span>
+                      <span>Giá mua</span>
+                      <span>Thành tiền</span>
+                    </div>
+                    <div className={styles.portfolioInput}>
+                      <input type="text" placeholder="VNM" className={styles.portfolioField} />
+                      <input type="number" placeholder="1000" className={styles.portfolioField} />
+                      <input type="number" placeholder="85,000" className={styles.portfolioField} />
+                      <input type="text" readOnly value="85,000,000" className={styles.portfolioFieldReadonly} />
+                    </div>
+                    <button className={styles.addPortfolioBtn}>+ Thêm cổ phiếu</button>
+                  </div>
+                </div>
+
                 <div className={styles.chatBox}>
                   <input
                     type="text"
@@ -497,7 +575,7 @@ export default function Home() {
       </main>
 
       <footer className={styles.footer}>
-        <p>AI Advisor | Powered by Google Gemini 2.0 Flash | Beta Version | FREE Tier ✨</p>
+        <p>AI Advisor | Powered by Google Gemini 2.0 Flash + SSI iBoard Real-time Data | Beta Version | FREE Tier ✨</p>
       </footer>
     </div>
   );
