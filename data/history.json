@@ -1,0 +1,62 @@
+[
+  {
+    "buyDate": "12/01/2025",
+    "code": "SAB",
+    "signalType": "Swing T+",
+    "score": 70,
+    "buyPrice": 48700,
+    "sellDate": "12/10/2025",
+    "sellPrice": 51700,
+    "profitPercent": 6.16,
+    "holdDays": 10,
+    "status": "closed"
+  },
+  {
+    "buyDate": "12/01/2025",
+    "code": "GAS",
+    "signalType": "Swing T+",
+    "score": 65,
+    "buyPrice": 64100,
+    "sellDate": "08/12/2025",
+    "sellPrice": 64700,
+    "profitPercent": 0.94,
+    "holdDays": 7,
+    "status": "closed"
+  },
+  {
+    "buyDate": "04/12/2025",
+    "code": "HAG",
+    "signalType": "Swing T+",
+    "score": 60,
+    "buyPrice": 18400,
+    "sellDate": null,
+    "sellPrice": null,
+    "profitPercent": -2.0,
+    "holdDays": null,
+    "status": "holding"
+  },
+  {
+    "buyDate": "11/12/2025",
+    "code": "BMP",
+    "signalType": "Trend Following",
+    "score": 68,
+    "buyPrice": 165000,
+    "sellDate": null,
+    "sellPrice": null,
+    "profitPercent": 5.0,
+    "holdDays": null,
+    "status": "holding"
+  },
+  {
+    "buyDate": "15/12/2025",
+    "code": "VNM",
+    "signalType": "Trend Following",
+    "score": 72,
+    "buyPrice": 61200,
+    "sellDate": null,
+    "sellPrice": null,
+    "profitPercent": 3.5,
+    "holdDays": null,
+    "status": "holding"
+  }
+]

@@ -795,3 +795,146 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* History Section */
+.historySection {
+  margin-top: 48px;
+  background: white;
+  border-radius: 20px;
+  padding: 32px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.historyTable {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.historyHeader {
+  display: grid;
+  grid-template-columns: 1fr 0.8fr 1.2fr 0.7fr 1fr 1fr 0.8fr 0.9fr 1fr;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.historyRow {
+  display: grid;
+  grid-template-columns: 1fr 0.8fr 1.2fr 0.7fr 1fr 1fr 0.8fr 0.9fr 1fr;
+  gap: 12px;
+  padding: 16px;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  transition: all 0.3s;
+  align-items: center;
+}
+
+.historyRow:hover {
+  border-color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  transform: translateY(-2px);
+}
+
+.historyCode {
+  font-weight: 800;
+  font-size: 16px;
+  color: #1a1f36;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.profitPositive {
+  color: #10b981;
+  font-weight: 700;
+}
+
+.profitNegative {
+  color: #ef4444;
+  font-weight: 700;
+}
+
+.holdingLabel {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.historySummary {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-top: 32px;
+}
+
+.summaryCard {
+  background: linear-gradient(135deg, #f7f9fc 0%, #e8ecf4 100%);
+  padding: 20px;
+  border-radius: 16px;
+  text-align: center;
+  border: 2px solid #e2e8f0;
+}
+
+.summaryCard span {
+  display: block;
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.summaryCard strong {
+  font-size: 28px;
+  font-weight: 800;
+  color: #1a1f36;
+}
+
+.winRate {
+  color: #10b981 !important;
+}
+
+.avgProfit {
+  color: #10b981 !important;
+}
+
+/* Mobile Responsive */
+@media (max-width: 1200px) {
+  .historyHeader,
+  .historyRow {
+    grid-template-columns: repeat(9, minmax(100px, 1fr));
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .historySection {
+    padding: 20px;
+  }
+
+  .historyTable {
+    overflow-x: scroll;
+  }
+
+  .historyHeader,
+  .historyRow {
+    min-width: 900px;
+  }
+
+  .historySummary {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .summaryCard strong {
+    font-size: 24px;
+  }
+}

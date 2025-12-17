@@ -423,6 +423,112 @@ export default function Home() {
                 <button onClick={loadData} className={styles.refreshButton}>
                   🔄 Làm mới tín hiệu
                 </button>
+
+                {/* Lịch sử khuyến nghị */}
+                <div className={styles.historySection}>
+                  <h2 className={styles.sectionTitle}>📊 Lịch sử khuyến nghị</h2>
+                  <div className={styles.historyTable}>
+                    <div className={styles.historyHeader}>
+                      <span>Ngày mua</span>
+                      <span>Mã</span>
+                      <span>Tín hiệu</span>
+                      <span>Score</span>
+                      <span>Giá mua</span>
+                      <span>Ngày bán</span>
+                      <span>Giá bán</span>
+                      <span>P/L (%)</span>
+                      <span>Số ngày giữ</span>
+                    </div>
+
+                    {/* SAB - Closed */}
+                    <div className={styles.historyRow}>
+                      <span>12/01/2025</span>
+                      <span className={styles.historyCode}>SAB</span>
+                      <span>Swing T+</span>
+                      <span>70</span>
+                      <span>48,700</span>
+                      <span>12/10/2025</span>
+                      <span>51,700</span>
+                      <span className={styles.profitPositive}>+6.16%</span>
+                      <span>10</span>
+                    </div>
+
+                    {/* GAS - Closed */}
+                    <div className={styles.historyRow}>
+                      <span>12/01/2025</span>
+                      <span className={styles.historyCode}>GAS</span>
+                      <span>Swing T+</span>
+                      <span>65</span>
+                      <span>64,100</span>
+                      <span>08/12/2025</span>
+                      <span>64,700</span>
+                      <span className={styles.profitPositive}>+0.94%</span>
+                      <span>7</span>
+                    </div>
+
+                    {/* HAG - Holding */}
+                    <div className={styles.historyRow}>
+                      <span>04/12/2025</span>
+                      <span className={styles.historyCode}>HAG</span>
+                      <span>Swing T+</span>
+                      <span>60</span>
+                      <span>18,400</span>
+                      <span className={styles.holdingLabel}>Đang giữ</span>
+                      <span>-</span>
+                      <span className={styles.profitNegative}>-2.0%</span>
+                      <span>-</span>
+                    </div>
+
+                    {/* BMP - Holding */}
+                    <div className={styles.historyRow}>
+                      <span>11/12/2025</span>
+                      <span className={styles.historyCode}>BMP</span>
+                      <span>Trend Following</span>
+                      <span>68</span>
+                      <span>165,000</span>
+                      <span className={styles.holdingLabel}>Đang giữ</span>
+                      <span>-</span>
+                      <span className={styles.profitPositive}>+5.0%</span>
+                      <span>-</span>
+                    </div>
+
+                    {/* VNM - Holding */}
+                    <div className={styles.historyRow}>
+                      <span>15/12/2025</span>
+                      <span className={styles.historyCode}>VNM</span>
+                      <span>Trend Following</span>
+                      <span>72</span>
+                      <span>61,200</span>
+                      <span className={styles.holdingLabel}>Đang giữ</span>
+                      <span>-</span>
+                      <span className={styles.profitPositive}>+3.5%</span>
+                      <span>-</span>
+                    </div>
+                  </div>
+
+                  <div className={styles.historySummary}>
+                    <div className={styles.summaryCard}>
+                      <span>Tổng lệnh:</span>
+                      <strong>5</strong>
+                    </div>
+                    <div className={styles.summaryCard}>
+                      <span>Đã chốt:</span>
+                      <strong>2</strong>
+                    </div>
+                    <div className={styles.summaryCard}>
+                      <span>Đang giữ:</span>
+                      <strong>3</strong>
+                    </div>
+                    <div className={styles.summaryCard}>
+                      <span>Win rate:</span>
+                      <strong className={styles.winRate}>100%</strong>
+                    </div>
+                    <div className={styles.summaryCard}>
+                      <span>Avg P/L:</span>
+                      <strong className={styles.avgProfit}>+3.55%</strong>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
