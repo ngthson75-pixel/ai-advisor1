@@ -8,8 +8,11 @@ interface HoldingStock {
   signalType: string;
   score: number;
   buyPrice: number;
+  sellDate?: string;
+  sellPrice?: number;
   currentPrice?: number;
-  profitPercent?: number;
+  profitPercent: number;  // Always required now
+  holdDays?: number;
   status: 'holding' | 'closed';
 }
 
@@ -62,6 +65,10 @@ export default async function handler(
         signalType: 'Swing T+',
         score: 70,
         buyPrice: 48700,
+        sellDate: '10/12/2025',
+        sellPrice: 51700,
+        profitPercent: 6.16,
+        holdDays: 10,
         status: 'closed'
       },
       {
@@ -70,6 +77,10 @@ export default async function handler(
         signalType: 'Swing T+',
         score: 65,
         buyPrice: 64100,
+        sellDate: '08/12/2025',
+        sellPrice: 64700,
+        profitPercent: 0.94,
+        holdDays: 7,
         status: 'closed'
       },
       {
@@ -78,6 +89,7 @@ export default async function handler(
         signalType: 'Swing T+',
         score: 60,
         buyPrice: 18400,
+        profitPercent: -2.0,
         status: 'holding'
       },
       {
@@ -86,6 +98,7 @@ export default async function handler(
         signalType: 'Trend Following',
         score: 68,
         buyPrice: 165000,
+        profitPercent: 5.0,
         status: 'holding'
       },
       {
@@ -94,6 +107,7 @@ export default async function handler(
         signalType: 'Trend Following',
         score: 72,
         buyPrice: 61200,
+        profitPercent: 3.5,
         status: 'holding'
       }
     ];

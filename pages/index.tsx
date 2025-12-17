@@ -479,8 +479,8 @@ export default function Home() {
                         <span>
                           {record.status === 'holding' ? '-' : record.sellPrice?.toLocaleString()}
                         </span>
-                        <span className={record.profitPercent >= 0 ? styles.profitPositive : styles.profitNegative}>
-                          {record.profitPercent > 0 ? '+' : ''}{record.profitPercent.toFixed(2)}%
+                        <span className={(record.profitPercent || 0) >= 0 ? styles.profitPositive : styles.profitNegative}>
+                          {(record.profitPercent || 0) > 0 ? '+' : ''}{(record.profitPercent || 0).toFixed(2)}%
                         </span>
                         <span>{record.holdDays || '-'}</span>
                       </div>
@@ -504,7 +504,7 @@ export default function Home() {
                       <span>Win rate:</span>
                       <strong className={styles.winRate}>
                         {history.filter(h => h.status === 'closed').length > 0
-                          ? Math.round((history.filter(h => h.status === 'closed' && h.profitPercent > 0).length / history.filter(h => h.status === 'closed').length) * 100)
+                          ? Math.round((history.filter(h => h.status === 'closed' && (h.profitPercent || 0) > 0).length / history.filter(h => h.status === 'closed').length) * 100)
                           : 0}%
                       </strong>
                     </div>
@@ -512,7 +512,7 @@ export default function Home() {
                       <span>Avg P/L:</span>
                       <strong className={styles.avgProfit}>
                         {history.length > 0
-                          ? `${(history.reduce((sum, h) => sum + h.profitPercent, 0) / history.length).toFixed(2)}%`
+                          ? `${(history.reduce((sum, h) => sum + (h.profitPercent || 0), 0) / history.length).toFixed(2)}%`
                           : '0%'}
                       </strong>
                     </div>
