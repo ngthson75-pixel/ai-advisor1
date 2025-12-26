@@ -734,7 +734,32 @@ ADMIN_TEMPLATE = """
 </body>
 </html>
 """
+from gemini_service import analyze_portfolio_risk, coaching_chat, check_fomo_signals
 
+# Risk Shield endpoint
+@app.route('/api/risk/analyze', methods=['POST'])
+def analyze_risk():
+    data = request.json
+    result = analyze_portfolio_risk(data)
+    return jsonify(result)
+
+# AI Coach endpoint
+@app.route('/api/coach/chat', methods=['POST'])
+def coach_chat():
+    data = request.json
+    message = data.get('message', '')
+    context = data.get('context', None)
+    result = coaching_chat(message, context)
+    return jsonify(result)
+
+# FOMO Check endpoint
+@app.route('/api/risk/fomo-check', methods=['POST'])
+def fomo_check():
+    data = request.json
+    signal = data.get('signal', {})
+    market_context = data.get('market_context', '')
+    result = check_fomo_signals(signal, market_context)
+    return jsonify(result)
 @app.route('/admin')
 def admin_panel():
     """Admin panel page"""
