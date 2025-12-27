@@ -1,0 +1,36 @@
+======================================================================
+BACKTEST SUMMARY - 4 STRATEGIES
+======================================================================
+Period: 2023-01-01 to 2024-12-31
+Initial Capital: 100,000,000 VND
+Position Size: 20.0%
+Commission: 0.15%
+
+
+BREAKOUT:
+  Trades: 23
+  Win Rate: 39.1%
+  Total Return: +1.56%
+  Profit Factor: 1.10
+  Max Drawdown: -9.07%
+
+PULLBACK:
+  Trades: 141
+  Win Rate: 31.9%
+  Total Return: -19.93%
+  Profit Factor: 0.82
+  Max Drawdown: -82.57%
+
+EMA_CROSS:
+  Trades: 12
+  Win Rate: 25.0%
+  Total Return: -13.50%
+  Profit Factor: 0.27
+  Max Drawdown: -10.08%
+
+SWING_T+:
+  Trades: 3
+  Win Rate: 66.7%
+  Total Return: +1.20%
+  Profit Factor: 2.10
+  Max Drawdown: 0.00%
