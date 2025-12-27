@@ -126,4 +126,4 @@ export default function RiskShield({ signals }) {
       </div>
     </div>
   )
-}
+}export default RiskShield

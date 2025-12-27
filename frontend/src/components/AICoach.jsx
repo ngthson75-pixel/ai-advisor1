@@ -123,4 +123,4 @@ export default function AICoach() {
       </div>
     </div>
   )
-}
+}export default AICoach
