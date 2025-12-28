@@ -48,7 +48,19 @@ function App() {
         <div className="container">
           <div className="header-content">
             <div className="brand">
-              <img src="/logo.png" alt="AI Advisor" className="brand-logo" />
+              <div className="brand-logo">
+                <svg width="48" height="48" viewBox="0 0 40 40" fill="none">
+                  <defs>
+                    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" style={{stopColor: '#3b82f6', stopOpacity: 1}} />
+                      <stop offset="100%" style={{stopColor: '#8b5cf6', stopOpacity: 1}} />
+                    </linearGradient>
+                  </defs>
+                  <path d="M20 8L32 14V26L20 32L8 26V14L20 8Z" stroke="url(#logoGradient)" strokeWidth="2" fill="none"/>
+                  <path d="M20 8V20M20 20L32 26M20 20L8 26" stroke="url(#logoGradient)" strokeWidth="2"/>
+                  <circle cx="20" cy="20" r="3" fill="url(#logoGradient)"/>
+                </svg>
+              </div>
               <div className="brand-text">
                 <h1>AI Advisor</h1>
                 <p>Stock Trading Signals</p>
