@@ -172,4 +172,4 @@ function SignalCard({ signal, index }) {
       </div>
     </div>
   )
-}export default SignalsModule
+}
