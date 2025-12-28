@@ -4,25 +4,34 @@ export default function SignalsModule({ signals, loading, onRefresh }) {
   const [filter, setFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
 
-  // Filter signals
-  const filteredSignals = signals.filter(signal => {
-    const strategyMatch = filter === 'all' || signal.strategy === filter.toUpperCase()
-    const typeMatch = typeFilter === 'all' || signal.stock_type === typeFilter
-    return strategyMatch && typeMatch
-  })
+  // Separate BUY and SELL signals
+  const buySignals = signals.filter(signal => signal.action === 'BUY' || signal.action === 'MUA' || !signal.action)
+  const sellSignals = signals.filter(signal => signal.action === 'SELL' || signal.action === 'BÁN')
 
-  // Sort by priority and strength
-  const sortedSignals = [...filteredSignals].sort((a, b) => {
-    if (a.is_priority !== b.is_priority) return b.is_priority - a.is_priority
-    return (b.strength || 0) - (a.strength || 0)
-  })
+  // Filter signals
+  const filterSignals = (signalList) => {
+    return signalList.filter(signal => {
+      const strategyMatch = filter === 'all' || signal.strategy === filter.toUpperCase()
+      const typeMatch = typeFilter === 'all' || signal.stock_type === typeFilter
+      return strategyMatch && typeMatch
+    })
+  }
+
+  const filteredBuySignals = filterSignals(buySignals)
+  const filteredSellSignals = filterSignals(sellSignals)
 
   // Calculate stats
   const stats = {
     total: signals.length,
+    buy: buySignals.length,
+    sell: sellSignals.length,
     pullback: signals.filter(s => s.strategy === 'PULLBACK').length,
     ema_cross: signals.filter(s => s.strategy === 'EMA_CROSS').length,
     priority: signals.filter(s => s.is_priority).length
+  }
+
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('vi-VN').format(price)
   }
 
   return (
@@ -50,8 +59,8 @@ export default function SignalsModule({ signals, loading, onRefresh }) {
             </svg>
           </div>
           <div className="stat-content">
-            <div className="stat-value">{stats.pullback}</div>
-            <div className="stat-label">PULLBACK</div>
+            <div className="stat-value">{stats.buy}</div>
+            <div className="stat-label">Tín hiệu MUA</div>
           </div>
         </div>
 
@@ -63,8 +72,8 @@ export default function SignalsModule({ signals, loading, onRefresh }) {
             </svg>
           </div>
           <div className="stat-content">
-            <div className="stat-value">{stats.ema_cross}</div>
-            <div className="stat-label">EMA CROSS</div>
+            <div className="stat-value">{stats.sell}</div>
+            <div className="stat-label">Tín hiệu BÁN</div>
           </div>
         </div>
 
@@ -151,124 +160,135 @@ export default function SignalsModule({ signals, loading, onRefresh }) {
         </div>
       </div>
 
-      {/* Signals Grid */}
+      {/* Signals Tables */}
       {loading ? (
         <div className="loading">
           <div className="spinner"></div>
           <p>Đang tải tín hiệu...</p>
         </div>
-      ) : sortedSignals.length === 0 ? (
-        <div className="empty-state">
-          <svg width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="32" cy="32" r="30"/>
-            <path d="M32 16v16l8 8"/>
-          </svg>
-          <h3>Không tìm thấy tín hiệu</h3>
-          <p>Thử điều chỉnh bộ lọc hoặc quay lại sau</p>
-        </div>
       ) : (
-        <div className="signals-grid">
-          {sortedSignals.map((signal, index) => (
-            <SignalCard key={signal.id || index} signal={signal} index={index} />
-          ))}
+        <div className="signals-tables">
+          {/* BUY Signals Table */}
+          <div className="signal-table-section">
+            <div className="table-header buy">
+              <h3>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                </svg>
+                1. Tín hiệu MUA
+              </h3>
+              <span className="table-count">{filteredBuySignals.length} tín hiệu</span>
+            </div>
+
+            {filteredBuySignals.length === 0 ? (
+              <div className="empty-state-small">
+                <p>Không có tín hiệu mua</p>
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="signals-table">
+                  <thead>
+                    <tr>
+                      <th>Mã</th>
+                      <th>Tín hiệu</th>
+                      <th>Score</th>
+                      <th>Xác xuất</th>
+                      <th>Giá mua</th>
+                      <th>Ngày</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredBuySignals.map((signal, index) => (
+                      <tr key={signal.id || index} className={signal.is_priority ? 'priority-row' : ''}>
+                        <td className="ticker-cell">
+                          {signal.is_priority && <span className="priority-star">⭐</span>}
+                          <strong>{signal.ticker}</strong>
+                          <span className={`stock-badge ${signal.stock_type?.toLowerCase().replace(' ', '-')}`}>
+                            {signal.stock_type}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="signal-badge buy">{signal.strategy || 'Swing T+'}</span>
+                        </td>
+                        <td>
+                          <span className="score-badge">{signal.strength || 70}</span>
+                        </td>
+                        <td>
+                          <span className="probability">{signal.strength || 70}%</span>
+                        </td>
+                        <td className="price-cell">
+                          <strong>{formatPrice(signal.entry_price)}</strong>
+                        </td>
+                        <td className="date-cell">{signal.date || new Date().toISOString().split('T')[0]}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* SELL Signals Table */}
+          <div className="signal-table-section">
+            <div className="table-header sell">
+              <h3>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="1 18 10.5 8.5 15.5 13.5 23 6"/>
+                </svg>
+                2. Tín hiệu BÁN
+              </h3>
+              <span className="table-count">{filteredSellSignals.length} tín hiệu</span>
+            </div>
+
+            {filteredSellSignals.length === 0 ? (
+              <div className="empty-state-small">
+                <p>Không có tín hiệu bán</p>
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="signals-table">
+                  <thead>
+                    <tr>
+                      <th>Mã</th>
+                      <th>Tín hiệu</th>
+                      <th>Score</th>
+                      <th>Xác xuất</th>
+                      <th>Giá bán</th>
+                      <th>Ngày</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSellSignals.map((signal, index) => (
+                      <tr key={signal.id || index} className={signal.is_priority ? 'priority-row' : ''}>
+                        <td className="ticker-cell">
+                          {signal.is_priority && <span className="priority-star">⭐</span>}
+                          <strong>{signal.ticker}</strong>
+                          <span className={`stock-badge ${signal.stock_type?.toLowerCase().replace(' ', '-')}`}>
+                            {signal.stock_type}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="signal-badge sell">{signal.strategy || 'Swing T+'}</span>
+                        </td>
+                        <td>
+                          <span className="score-badge">{signal.strength || 70}</span>
+                        </td>
+                        <td>
+                          <span className="probability">{signal.strength || 70}%</span>
+                        </td>
+                        <td className="price-cell">
+                          <strong>{formatPrice(signal.take_profit || signal.entry_price)}</strong>
+                        </td>
+                        <td className="date-cell">{signal.date || new Date().toISOString().split('T')[0]}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
-    </div>
-  )
-}
-
-// Signal Card Component
-function SignalCard({ signal, index }) {
-  const isPullback = signal.strategy === 'PULLBACK'
-  const strategyClass = isPullback ? 'pullback' : 'ema-cross'
-
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('vi-VN').format(price)
-  }
-
-  const formatPercent = (value) => {
-    return value ? `${value.toFixed(0)}%` : 'N/A'
-  }
-
-  return (
-    <div
-      className={`signal-card ${strategyClass}`}
-      style={{ animationDelay: `${index * 50}ms` }}
-    >
-      {/* Header */}
-      <div className="signal-header">
-        <div className="signal-ticker">
-          {signal.is_priority === 1 && <span className="priority-star">⭐</span>}
-          <span className="ticker">{signal.ticker}</span>
-          <span className={`stock-type ${signal.stock_type?.toLowerCase().replace(' ', '-')}`}>
-            {signal.stock_type}
-          </span>
-        </div>
-        <div className={`strategy-badge ${strategyClass}`}>
-          {signal.strategy}
-        </div>
-      </div>
-
-      {/* Strength Bar */}
-      {signal.strength && (
-        <div className="strength-container">
-          <div className="strength-bar">
-            <div
-              className="strength-fill"
-              style={{ width: `${signal.strength}%` }}
-            ></div>
-          </div>
-          <span className="strength-label">{formatPercent(signal.strength)} độ mạnh</span>
-        </div>
-      )}
-
-      {/* Price Info */}
-      <div className="price-grid">
-        <div className="price-item entry">
-          <label>Giá vào</label>
-          <div className="price-value">{formatPrice(signal.entry_price)}</div>
-        </div>
-
-        <div className="price-item stop-loss">
-          <label>Cắt lỗ</label>
-          <div className="price-value">{formatPrice(signal.stop_loss)}</div>
-          <div className="price-change">
-            -{((signal.entry_price - signal.stop_loss) / signal.entry_price * 100).toFixed(1)}%
-          </div>
-        </div>
-
-        <div className="price-item take-profit">
-          <label>Chốt lời</label>
-          <div className="price-value">{formatPrice(signal.take_profit)}</div>
-          <div className="price-change">
-            +{((signal.take_profit - signal.entry_price) / signal.entry_price * 100).toFixed(1)}%
-          </div>
-        </div>
-      </div>
-
-      {/* Risk/Reward */}
-      {signal.risk_reward && (
-        <div className="risk-reward">
-          <label>Tỷ lệ Rủi ro/Lợi nhuận</label>
-          <div className="rr-value">1 : {signal.risk_reward.toFixed(2)}</div>
-        </div>
-      )}
-
-      {/* Additional Info */}
-      <div className="additional-info">
-        {signal.rsi && (
-          <div className="info-item">
-            <span className="info-label">RSI:</span>
-            <span className="info-value">{signal.rsi.toFixed(1)}</span>
-          </div>
-        )}
-        {signal.date && (
-          <div className="info-item">
-            <span className="info-label">Ngày:</span>
-            <span className="info-value">{signal.date}</span>
-          </div>
-        )}
-      </div>
     </div>
   )
 }
