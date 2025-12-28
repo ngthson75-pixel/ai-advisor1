@@ -48,7 +48,7 @@ function App() {
         <div className="container">
           <div className="header-content">
             <div className="brand">
-              <div className="brand-logo">
+              <div className="logo">
                 <svg width="48" height="48" viewBox="0 0 40 40" fill="none">
                   <defs>
                     <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
