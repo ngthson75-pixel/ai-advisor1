@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import './App.css'
+import LandingPage from './components/LandingPage'
 import SignalsModule from './components/SignalsModule'
-import RiskShield from './components/RiskShield'
-import AICoach from './components/AICoach'
+import AIPortfolioManager from './components/AIPortfolioManager'
 
 // API Configuration
 const API_URL = import.meta.env.PROD
@@ -10,10 +10,24 @@ const API_URL = import.meta.env.PROD
   : 'http://localhost:10000/api'
 
 function App() {
+  const [user, setUser] = useState(null)
   const [activeTab, setActiveTab] = useState('signals')
   const [signals, setSignals] = useState([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
+
+  // Check for existing user on mount
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user')
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser))
+      } catch (e) {
+        console.error('Error parsing stored user:', e)
+        localStorage.removeItem('user')
+      }
+    }
+  }, [])
 
   // Fetch signals from API
   const fetchSignals = async () => {
@@ -36,11 +50,29 @@ function App() {
   }
 
   useEffect(() => {
-    fetchSignals()
-    const interval = setInterval(fetchSignals, 5 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [])
+    if (user) {
+      fetchSignals()
+      const interval = setInterval(fetchSignals, 5 * 60 * 1000)
+      return () => clearInterval(interval)
+    }
+  }, [user])
 
+  const handleLogin = (userData) => {
+    setUser(userData)
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('user')
+    setUser(null)
+    setActiveTab('signals')
+  }
+
+  // Show landing page if not logged in
+  if (!user) {
+    return <LandingPage onLogin={handleLogin} />
+  }
+
+  // Show main app if logged in
   return (
     <div className="app">
       {/* Header */}
@@ -67,12 +99,26 @@ function App() {
               </div>
             </div>
 
-            {lastUpdate && (
-              <div className="last-update">
-                <span className="pulse"></span>
-                Updated: {lastUpdate.toLocaleTimeString()}
+            <div className="header-right">
+              {lastUpdate && (
+                <div className="last-update">
+                  <span className="pulse"></span>
+                  Updated: {lastUpdate.toLocaleTimeString()}
+                </div>
+              )}
+              
+              <div className="user-menu">
+                <div className="user-avatar">
+                  {user.name?.charAt(0).toUpperCase() || 'U'}
+                </div>
+                <div className="user-info">
+                  <div className="user-name">{user.name}</div>
+                  <button onClick={handleLogout} className="logout-btn">
+                    Đăng xuất
+                  </button>
+                </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </header>
@@ -88,28 +134,18 @@ function App() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
               </svg>
-              Trading Signals
+              Tín hiệu mua bán
               <span className="badge">{signals.length}</span>
             </button>
 
             <button
-              className={`tab ${activeTab === 'risk' ? 'active' : ''}`}
-              onClick={() => setActiveTab('risk')}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              </svg>
-              Risk Shield
-            </button>
-
-            <button
-              className={`tab ${activeTab === 'coach' ? 'active' : ''}`}
-              onClick={() => setActiveTab('coach')}
+              className={`tab ${activeTab === 'portfolio' ? 'active' : ''}`}
+              onClick={() => setActiveTab('portfolio')}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
               </svg>
-              AI Coach
+              Quản trị đầu tư bằng AI
             </button>
           </div>
         </div>
@@ -126,9 +162,7 @@ function App() {
             />
           )}
           
-          {activeTab === 'risk' && <RiskShield />}
-          
-          {activeTab === 'coach' && <AICoach />}
+          {activeTab === 'portfolio' && <AIPortfolioManager user={user} />}
         </div>
       </main>
 
