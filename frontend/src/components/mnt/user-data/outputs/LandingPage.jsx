@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 export default function LandingPage({ onLogin }) {
   const [showAuth, setShowAuth] = useState(false)
+  const [showTerms, setShowTerms] = useState(false)
   const [isLogin, setIsLogin] = useState(true)
   const [formData, setFormData] = useState({
     email: '',
@@ -505,10 +506,95 @@ export default function LandingPage({ onLogin }) {
             <div className="auth-footer">
               <p>Bằng việc đăng nhập, bạn đồng ý với</p>
               <div className="auth-links">
-                <a href="#">Điều khoản dịch vụ</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setShowAuth(false); setShowTerms(true); }}>Điều khoản dịch vụ</a>
                 <span>•</span>
                 <a href="#">Chính sách bảo mật</a>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Terms & Disclaimer Modal */}
+      {showTerms && (
+        <div className="terms-modal">
+          <div className="modal-overlay" onClick={() => setShowTerms(false)}></div>
+          <div className="modal-content terms-content">
+            <button className="modal-close" onClick={() => setShowTerms(false)}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+
+            <div className="terms-header">
+              <div className="terms-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="12" y1="18" x2="12" y2="12"/>
+                  <line x1="12" y1="9" x2="12.01" y2="9"/>
+                </svg>
+              </div>
+              <h2>Disclaimer – Tuyên bố miễn trừ trách nhiệm</h2>
+              <p>AI Advisor</p>
+            </div>
+
+            <div className="terms-body">
+              <div className="terms-section">
+                <p className="terms-intro">
+                  <strong>AI Advisor là hệ thống hỗ trợ ra quyết định, không phải dịch vụ tư vấn đầu tư, và không đại diện cho bất kỳ tổ chức môi giới hay tài chính nào.</strong>
+                </p>
+              </div>
+
+              <div className="terms-section">
+                <h3>Các nội dung do AI Advisor cung cấp bao gồm (nhưng không giới hạn):</h3>
+                <ul className="terms-list">
+                  <li>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <span>Tín hiệu mua/bán và cảnh báo rủi ro</span>
+                  </li>
+                  <li>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <span>Phân tích xu hướng, kịch bản thị trường</span>
+                  </li>
+                  <li>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <span>Gợi ý quản trị hành vi và kỷ luật đầu tư</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="terms-section important-notice">
+                <div className="notice-icon">⚠️</div>
+                <div className="notice-content">
+                  <h4>Lưu ý quan trọng</h4>
+                  <p>
+                    Tất cả các nội dung trên <strong>chỉ mang tính tham khảo</strong> và hỗ trợ quá trình ra quyết định.
+                  </p>
+                  <p className="highlight">
+                    <strong>Người dùng tự chịu hoàn toàn trách nhiệm đối với mọi quyết định mua, bán, nắm giữ tài sản.</strong>
+                  </p>
+                </div>
+              </div>
+
+              <div className="terms-section">
+                <p className="terms-footer-text">
+                  Bằng việc sử dụng AI Advisor, bạn xác nhận rằng bạn đã đọc, hiểu và đồng ý với các điều khoản miễn trừ trách nhiệm này.
+                </p>
+              </div>
+            </div>
+
+            <div className="terms-actions">
+              <button className="btn-understand" onClick={() => setShowTerms(false)}>
+                Tôi đã hiểu
+              </button>
             </div>
           </div>
         </div>
@@ -541,7 +627,7 @@ export default function LandingPage({ onLogin }) {
               <div className="footer-column">
                 <h4>Hỗ trợ</h4>
                 <a href="#">Trung tâm trợ giúp</a>
-                <a href="#">Điều khoản</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setShowTerms(true); }}>Điều khoản</a>
                 <a href="#">Bảo mật</a>
               </div>
             </div>
