@@ -1,0 +1,431 @@
+/* About Us Modal - Add to App.css */
+
+/* About Modal */
+.about-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.about-content {
+  max-width: 800px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+/* Custom scrollbar for about */
+.about-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.about-content::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 4px;
+}
+
+.about-content::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.5);
+  border-radius: 4px;
+}
+
+.about-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.7);
+}
+
+/* About Header */
+.about-header {
+  text-align: center;
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 2px solid rgba(59, 130, 246, 0.2);
+}
+
+.about-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 20px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #3b82f6;
+}
+
+.about-header h2 {
+  font-size: 32px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 8px;
+}
+
+.about-header p {
+  font-size: 16px;
+  color: #94a3b8;
+}
+
+/* About Body */
+.about-body {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.about-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.about-intro {
+  font-size: 18px;
+  line-height: 1.8;
+  color: #cbd5e1;
+  padding: 24px;
+  background: rgba(59, 130, 246, 0.05);
+  border-left: 4px solid #3b82f6;
+  border-radius: 8px;
+  margin: 0;
+}
+
+.about-intro strong {
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+.about-section h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #e8eaf0;
+  margin: 0;
+}
+
+.about-section p {
+  font-size: 16px;
+  line-height: 1.7;
+  color: #cbd5e1;
+  margin: 0;
+}
+
+/* Problems List */
+.about-problems {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.about-problem-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(26, 31, 58, 0.4);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-left: 3px solid #ef4444;
+  border-radius: 8px;
+  font-size: 15px;
+  color: #cbd5e1;
+  line-height: 1.6;
+  transition: all 0.3s ease;
+}
+
+.about-problem-item:hover {
+  background: rgba(26, 31, 58, 0.6);
+  border-color: rgba(239, 68, 68, 0.4);
+  transform: translateX(4px);
+}
+
+.problem-icon-small {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 8px;
+  color: #ef4444;
+}
+
+.about-problem-item strong {
+  color: #e8eaf0;
+  font-weight: 600;
+}
+
+/* Philosophy Box */
+.about-philosophy {
+  padding: 32px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  border-radius: 16px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.about-philosophy::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+}
+
+.philosophy-icon-large {
+  font-size: 48px;
+  margin-bottom: 16px;
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.about-philosophy h3 {
+  font-size: 22px;
+  margin-bottom: 20px;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-align: center;
+}
+
+.philosophy-quote-modal {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #e8eaf0;
+  font-style: italic;
+  margin: 0;
+  position: relative;
+}
+
+.philosophy-quote-modal::before,
+.philosophy-quote-modal::after {
+  content: '"';
+  font-size: 42px;
+  color: rgba(59, 130, 246, 0.3);
+  font-family: Georgia, serif;
+}
+
+.philosophy-quote-modal::before {
+  margin-right: 8px;
+}
+
+.philosophy-quote-modal::after {
+  margin-left: 8px;
+}
+
+/* Pillars List */
+.about-pillars {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.about-pillar-item {
+  display: flex;
+  gap: 16px;
+  padding: 20px;
+  background: rgba(26, 31, 58, 0.6);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.about-pillar-item:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(59, 130, 246, 0.2);
+}
+
+.pillar-number-small {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  color: white;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+}
+
+.pillar-content {
+  flex: 1;
+}
+
+.pillar-content h4 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #e8eaf0;
+  margin: 0 0 8px 0;
+}
+
+.pillar-content p {
+  font-size: 15px;
+  color: #94a3b8;
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* Vision Box */
+.about-vision {
+  padding: 32px;
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 16px;
+  text-align: center;
+}
+
+.about-vision h3 {
+  font-size: 22px;
+  margin-bottom: 16px;
+  color: #10b981;
+  text-align: center;
+}
+
+.about-vision p {
+  font-size: 17px;
+  line-height: 1.8;
+  color: #cbd5e1;
+}
+
+.about-vision strong {
+  color: #10b981;
+  font-weight: 600;
+}
+
+/* About Actions */
+.about-actions {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(59, 130, 246, 0.2);
+  display: flex;
+  justify-content: center;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .about-content {
+    max-height: 90vh;
+    padding: 32px 24px;
+  }
+
+  .about-icon {
+    width: 64px;
+    height: 64px;
+  }
+
+  .about-header h2 {
+    font-size: 26px;
+  }
+
+  .about-intro {
+    font-size: 16px;
+    padding: 20px;
+  }
+
+  .about-section h3 {
+    font-size: 18px;
+  }
+
+  .about-section p {
+    font-size: 15px;
+  }
+
+  .about-philosophy {
+    padding: 24px 20px;
+  }
+
+  .philosophy-quote-modal {
+    font-size: 18px;
+  }
+
+  .philosophy-quote-modal::before,
+  .philosophy-quote-modal::after {
+    font-size: 32px;
+  }
+
+  .about-pillar-item {
+    padding: 16px;
+  }
+
+  .pillar-number-small {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+
+  .pillar-content h4 {
+    font-size: 16px;
+  }
+
+  .pillar-content p {
+    font-size: 14px;
+  }
+
+  .about-vision {
+    padding: 24px 20px;
+  }
+
+  .about-vision h3 {
+    font-size: 20px;
+  }
+
+  .about-vision p {
+    font-size: 15px;
+  }
+
+  .btn-understand {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .about-content {
+    padding: 24px 20px;
+  }
+
+  .about-header {
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+  }
+
+  .about-body {
+    gap: 24px;
+  }
+
+  .about-section {
+    gap: 12px;
+  }
+
+  .about-problem-item {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  .problem-icon-small {
+    width: 28px;
+    height: 28px;
+  }
+
+  .about-pillar-item {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+}

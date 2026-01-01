@@ -3,6 +3,7 @@ import { useState } from 'react'
 export default function LandingPage({ onLogin }) {
   const [showAuth, setShowAuth] = useState(false)
   const [showTerms, setShowTerms] = useState(false)
+  const [showAbout, setShowAbout] = useState(false)
   const [isLogin, setIsLogin] = useState(true)
   const [formData, setFormData] = useState({
     email: '',
@@ -242,135 +243,6 @@ export default function LandingPage({ onLogin }) {
         </div>
       </section>
 
-      {/* About Us Section */}
-      <section className="about-us" id="about">
-        <div className="container">
-          <div className="section-header">
-            <h2>Về chúng tôi</h2>
-            <p>Sứ mệnh và triết lý của AI Advisor</p>
-          </div>
-
-          <div className="about-content">
-            <div className="about-story">
-              <div className="story-intro">
-                <p className="lead-text">
-                  Chúng tôi là một nhóm những người đã trực tiếp trải qua nhiều chu kỳ thị trường, chứng kiến cùng một thực tế lặp đi lặp lại: <strong>đa số nhà đầu tư cá nhân không thua vì thiếu thông tin, mà thua vì thiếu kỷ luật, thiếu hệ thống và không có "lan can bảo vệ" cho hành vi của chính mình.</strong>
-                </p>
-              </div>
-
-              <div className="problem-section">
-                <h3>Thực trạng thị trường</h3>
-                <p>
-                  Thị trường luôn đầy ắp dữ liệu, tin tức, khuyến nghị. Nhưng trong những thời điểm quan trọng nhất – khi cần ra quyết định mua, bán, giữ hay đứng ngoài – nhà đầu tư thường:
-                </p>
-                
-                <div className="problem-list">
-                  <div className="problem-item">
-                    <div className="problem-icon">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="12" y1="8" x2="12" y2="12"/>
-                        <line x1="12" y1="16" x2="12.01" y2="16"/>
-                      </svg>
-                    </div>
-                    <div className="problem-text">
-                      <strong>Bị cảm xúc chi phối</strong>
-                      <p>FOMO, hoảng loạn, tiếc nuối làm lu mờ lý trí</p>
-                    </div>
-                  </div>
-
-                  <div className="problem-item">
-                    <div className="problem-icon">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="12" y1="8" x2="12" y2="12"/>
-                        <line x1="12" y1="16" x2="12.01" y2="16"/>
-                      </svg>
-                    </div>
-                    <div className="problem-text">
-                      <strong>Thiếu quy trình nhất quán</strong>
-                      <p>Không có hệ thống ra quyết định rõ ràng</p>
-                    </div>
-                  </div>
-
-                  <div className="problem-item">
-                    <div className="problem-icon">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="12" y1="8" x2="12" y2="12"/>
-                        <line x1="12" y1="16" x2="12.01" y2="16"/>
-                      </svg>
-                    </div>
-                    <div className="problem-text">
-                      <strong>Cảnh báo rủi ro muộn</strong>
-                      <p>Không có cơ chế cảnh báo đủ sớm</p>
-                    </div>
-                  </div>
-
-                  <div className="problem-item">
-                    <div className="problem-icon">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="12" y1="8" x2="12" y2="12"/>
-                        <line x1="12" y1="16" x2="12.01" y2="16"/>
-                      </svg>
-                    </div>
-                    <div className="problem-text">
-                      <strong>Thiếu "phanh an toàn"</strong>
-                      <p>Không có ai nhắc dừng lại khi hành vi lệch kế hoạch</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="solution-section">
-                <div className="philosophy-box">
-                  <div className="philosophy-icon">💡</div>
-                  <h3>Triết lý cốt lõi</h3>
-                  <p className="philosophy-quote">
-                    "Không thay nhà đầu tư quyết định – mà giúp nhà đầu tư ra quyết định tỉnh táo hơn."
-                  </p>
-                </div>
-
-                <h3>3 Trụ cột hệ thống</h3>
-                <div className="pillars-grid">
-                  <div className="pillar-card">
-                    <div className="pillar-number">1</div>
-                    <h4>Hỗ trợ quyết định</h4>
-                    <p>Cung cấp tín hiệu, kịch bản và bối cảnh thị trường theo logic nhất quán</p>
-                  </div>
-
-                  <div className="pillar-card">
-                    <div className="pillar-number">2</div>
-                    <h4>Bảo vệ rủi ro</h4>
-                    <p>Cảnh báo khi xác suất bất lợi tăng cao, khi danh mục hoặc hành vi vượt ngưỡng an toàn</p>
-                  </div>
-
-                  <div className="pillar-card">
-                    <div className="pillar-number">3</div>
-                    <h4>Kỷ luật hóa hành vi</h4>
-                    <p>Giúp nhà đầu tư tuân thủ kế hoạch đã chọn, thay vì phản ứng bốc đồng theo thị trường</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="vision-section">
-                <h3>Tầm nhìn dài hạn</h3>
-                <p className="vision-text">
-                  Xây dựng một trợ lý tài chính AI cá nhân, đóng vai trò như <strong>"bản đồ định hướng"</strong> cho nhà đầu tư – không dẫn đường tắt, không hứa lợi nhuận, nhưng <strong>giúp giảm sai lầm nghiêm trọng và tăng xác suất tồn tại bền vững trên thị trường.</strong>
-                </p>
-              </div>
-            </div>
-
-            <div className="about-cta">
-              <button className="btn-primary-large" onClick={() => setShowAuth(true)}>
-                Trải nghiệm ngay
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Showcase Recommendations */}
       <section className="showcase" id="showcase">
         <div className="container">
@@ -515,6 +387,157 @@ export default function LandingPage({ onLogin }) {
         </div>
       )}
 
+      {/* About Us Modal */}
+      {showAbout && (
+        <div className="about-modal">
+          <div className="modal-overlay" onClick={() => setShowAbout(false)}></div>
+          <div className="modal-content about-content">
+            <button className="modal-close" onClick={() => setShowAbout(false)}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+
+            <div className="about-header">
+              <div className="about-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+              </div>
+              <h2>Về chúng tôi</h2>
+              <p>Sứ mệnh và triết lý của AI Advisor</p>
+            </div>
+
+            <div className="about-body">
+              <div className="about-section">
+                <p className="about-intro">
+                  Chúng tôi là một nhóm những người đã trực tiếp trải qua nhiều chu kỳ thị trường, chứng kiến cùng một thực tế lặp đi lặp lại: <strong>đa số nhà đầu tư cá nhân không thua vì thiếu thông tin, mà thua vì thiếu kỷ luật, thiếu hệ thống và không có "lan can bảo vệ" cho hành vi của chính mình.</strong>
+                </p>
+              </div>
+
+              <div className="about-section">
+                <h3>Thực trạng thị trường</h3>
+                <p>
+                  Thị trường luôn đầy ắp dữ liệu, tin tức, khuyến nghị. Nhưng trong những thời điểm quan trọng nhất – khi cần ra quyết định mua, bán, giữ hay đứng ngoài – nhà đầu tư thường:
+                </p>
+                
+                <div className="about-problems">
+                  <div className="about-problem-item">
+                    <div className="problem-icon-small">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <strong>Bị cảm xúc chi phối</strong> (FOMO, hoảng loạn, tiếc nuối)
+                    </div>
+                  </div>
+
+                  <div className="about-problem-item">
+                    <div className="problem-icon-small">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <strong>Không có một quy trình ra quyết định nhất quán</strong>
+                    </div>
+                  </div>
+
+                  <div className="about-problem-item">
+                    <div className="problem-icon-small">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <strong>Không có cơ chế cảnh báo rủi ro đủ sớm</strong>
+                    </div>
+                  </div>
+
+                  <div className="about-problem-item">
+                    <div className="problem-icon-small">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <strong>Không có ai hoặc công cụ nào "nhắc họ dừng lại"</strong> khi hành vi bắt đầu lệch khỏi kế hoạch ban đầu
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="about-section">
+                <div className="about-philosophy">
+                  <div className="philosophy-icon-large">💡</div>
+                  <h3>Triết lý cốt lõi</h3>
+                  <p className="philosophy-quote-modal">
+                    "Không thay nhà đầu tư quyết định – mà giúp nhà đầu tư ra quyết định tỉnh táo hơn."
+                  </p>
+                </div>
+              </div>
+
+              <div className="about-section">
+                <h3>Hệ thống được thiết kế xoay quanh 3 trụ cột:</h3>
+                <div className="about-pillars">
+                  <div className="about-pillar-item">
+                    <div className="pillar-number-small">1</div>
+                    <div className="pillar-content">
+                      <h4>Hỗ trợ quyết định</h4>
+                      <p>Cung cấp tín hiệu, kịch bản và bối cảnh thị trường theo logic nhất quán</p>
+                    </div>
+                  </div>
+
+                  <div className="about-pillar-item">
+                    <div className="pillar-number-small">2</div>
+                    <div className="pillar-content">
+                      <h4>Bảo vệ rủi ro</h4>
+                      <p>Cảnh báo khi xác suất bất lợi tăng cao, khi danh mục hoặc hành vi vượt ngưỡng an toàn</p>
+                    </div>
+                  </div>
+
+                  <div className="about-pillar-item">
+                    <div className="pillar-number-small">3</div>
+                    <div className="pillar-content">
+                      <h4>Kỷ luật hóa hành vi</h4>
+                      <p>Giúp nhà đầu tư tuân thủ kế hoạch đã chọn, thay vì phản ứng bốc đồng theo thị trường</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="about-section">
+                <div className="about-vision">
+                  <h3>Tầm nhìn dài hạn</h3>
+                  <p>
+                    Xây dựng một trợ lý tài chính AI cá nhân, đóng vai trò như <strong>"bản đồ định hướng"</strong> cho nhà đầu tư – không dẫn đường tắt, không hứa lợi nhuận, nhưng <strong>giúp giảm sai lầm nghiêm trọng và tăng xác suất tồn tại bền vững trên thị trường.</strong>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="about-actions">
+              <button className="btn-understand" onClick={() => { setShowAbout(false); setShowAuth(true); }}>
+                Trải nghiệm ngay
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Terms & Disclaimer Modal */}
       {showTerms && (
         <div className="terms-modal">
@@ -619,7 +642,7 @@ export default function LandingPage({ onLogin }) {
 
               <div className="footer-column">
                 <h4>Công ty</h4>
-                <a href="#" onClick={(e) => { e.preventDefault(); scrollToSection('about'); }}>Về chúng tôi</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setShowAbout(true); }}>Về chúng tôi</a>
                 <a href="#">Blog</a>
                 <a href="#">Liên hệ</a>
               </div>
