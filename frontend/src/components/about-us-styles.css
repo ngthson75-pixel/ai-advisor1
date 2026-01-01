@@ -1,0 +1,370 @@
+/* About Us Section - Add to App.css */
+
+/* About Us Section */
+.about-us {
+  padding: 100px 0;
+  background: rgba(10, 14, 39, 0.6);
+  position: relative;
+}
+
+.about-us::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent);
+}
+
+.about-content {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.about-story {
+  display: flex;
+  flex-direction: column;
+  gap: 60px;
+}
+
+/* Story Intro */
+.story-intro {
+  text-align: center;
+}
+
+.lead-text {
+  font-size: 20px;
+  line-height: 1.8;
+  color: #cbd5e1;
+  margin: 0;
+}
+
+.lead-text strong {
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+/* Problem Section */
+.problem-section h3,
+.solution-section h3,
+.vision-section h3 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #e8eaf0;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.problem-section > p {
+  font-size: 17px;
+  line-height: 1.7;
+  color: #94a3b8;
+  margin-bottom: 40px;
+  text-align: center;
+}
+
+.problem-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+.problem-item {
+  display: flex;
+  gap: 16px;
+  padding: 24px;
+  background: rgba(26, 31, 58, 0.4);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-left: 3px solid #ef4444;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.problem-item:hover {
+  background: rgba(26, 31, 58, 0.6);
+  border-color: rgba(239, 68, 68, 0.4);
+  transform: translateX(8px);
+}
+
+.problem-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 12px;
+  color: #ef4444;
+}
+
+.problem-text {
+  flex: 1;
+}
+
+.problem-text strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: #e8eaf0;
+  margin-bottom: 8px;
+}
+
+.problem-text p {
+  font-size: 14px;
+  color: #94a3b8;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Solution Section */
+.solution-section {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+/* Philosophy Box */
+.philosophy-box {
+  padding: 40px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  border-radius: 16px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.philosophy-box::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+}
+
+.philosophy-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+.philosophy-box h3 {
+  font-size: 24px;
+  margin-bottom: 20px;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.philosophy-quote {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #e8eaf0;
+  font-style: italic;
+  margin: 0;
+  position: relative;
+}
+
+.philosophy-quote::before,
+.philosophy-quote::after {
+  content: '"';
+  font-size: 48px;
+  color: rgba(59, 130, 246, 0.3);
+  font-family: Georgia, serif;
+}
+
+.philosophy-quote::before {
+  margin-right: 8px;
+}
+
+.philosophy-quote::after {
+  margin-left: 8px;
+}
+
+/* Pillars Grid */
+.pillars-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-top: 32px;
+}
+
+.pillar-card {
+  padding: 32px 24px;
+  background: rgba(26, 31, 58, 0.6);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 16px;
+  text-align: center;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.pillar-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
+
+.pillar-card:hover {
+  transform: translateY(-8px);
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 20px 50px rgba(59, 130, 246, 0.3);
+}
+
+.pillar-card:hover::before {
+  transform: scaleX(1);
+}
+
+.pillar-number {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 20px;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  color: white;
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
+}
+
+.pillar-card h4 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #e8eaf0;
+  margin-bottom: 12px;
+}
+
+.pillar-card p {
+  font-size: 15px;
+  color: #94a3b8;
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* Vision Section */
+.vision-section {
+  text-align: center;
+  padding: 48px;
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 16px;
+}
+
+.vision-text {
+  font-size: 18px;
+  line-height: 1.8;
+  color: #cbd5e1;
+  margin: 0;
+}
+
+.vision-text strong {
+  color: #10b981;
+  font-weight: 600;
+}
+
+/* About CTA */
+.about-cta {
+  text-align: center;
+  margin-top: 48px;
+  padding-top: 48px;
+  border-top: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .pillars-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .problem-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .about-us {
+    padding: 60px 0;
+  }
+
+  .about-story {
+    gap: 40px;
+  }
+
+  .lead-text {
+    font-size: 17px;
+  }
+
+  .problem-section h3,
+  .solution-section h3,
+  .vision-section h3 {
+    font-size: 24px;
+  }
+
+  .philosophy-quote {
+    font-size: 18px;
+  }
+
+  .philosophy-quote::before,
+  .philosophy-quote::after {
+    font-size: 32px;
+  }
+
+  .pillar-card {
+    padding: 24px 20px;
+  }
+
+  .vision-section {
+    padding: 32px 24px;
+  }
+
+  .vision-text {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .about-content {
+    padding: 0 4px;
+  }
+
+  .problem-item {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .problem-icon {
+    margin: 0 auto;
+  }
+
+  .philosophy-box {
+    padding: 24px 20px;
+  }
+}
