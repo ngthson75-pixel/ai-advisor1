@@ -1,6 +1,5 @@
 """
-AI Advisor Backend API - With Gemini Integration
-Enhanced Portfolio Manager with chat history
+AI Advisor Backend API - With Gemini Integration + Migration Endpoint
 """
 
 from flask import Flask, request, jsonify
@@ -17,7 +16,7 @@ try:
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
-    print("⚠️ Warning: google-generativeai not installed. Install with: pip install google-generativeai")
+    print("⚠️ Warning: google-generativeai not installed")
 
 app = Flask(__name__)
 CORS(app)
@@ -35,7 +34,72 @@ if GEMINI_AVAILABLE and GEMINI_API_KEY:
     logger.info("✓ Gemini AI initialized")
 else:
     model = None
-    logger.warning("⚠️ Gemini API key not found. Set GEMINI_API_KEY environment variable.")
+    logger.warning("⚠️ Gemini API key not found")
+
+# ============================================================================
+# MIGRATION ENDPOINT
+# ============================================================================
+
+@app.route('/api/migrate', methods=['POST'])
+def run_migration():
+    """Run database migration - creates new tables"""
+    try:
+        logger.info("Starting migration...")
+        
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Create portfolios table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS portfolios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                ticker TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                avg_price REAL NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, ticker)
+            )
+        ''')
+        
+        # Create chat_history table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                message TEXT NOT NULL,
+                response TEXT NOT NULL,
+                portfolio_context TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create indexes
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_portfolio_user 
+            ON portfolios(user_id)
+        ''')
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_chat_user 
+            ON chat_history(user_id, created_at DESC)
+        ''')
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info("✓ Migration completed successfully")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Migration completed',
+            'tables_created': ['portfolios', 'chat_history']
+        })
+        
+    except Exception as e:
+        logger.error(f"Migration error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ============================================================================
 # PORTFOLIO ENDPOINTS
@@ -95,7 +159,7 @@ def add_to_portfolio():
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
-        # Check if stock exists in portfolio
+        # Check if stock exists
         cursor.execute('''
             SELECT quantity, avg_price FROM portfolios
             WHERE user_id = ? AND ticker = ?
@@ -104,7 +168,7 @@ def add_to_portfolio():
         existing = cursor.fetchone()
         
         if existing:
-            # Update existing position (average price)
+            # Update existing
             old_qty = existing[0]
             old_price = existing[1]
             
@@ -117,7 +181,7 @@ def add_to_portfolio():
                 WHERE user_id = ? AND ticker = ?
             ''', (new_qty, new_avg_price, datetime.now(), user_id, ticker))
         else:
-            # Insert new position
+            # Insert new
             cursor.execute('''
                 INSERT INTO portfolios (user_id, ticker, quantity, avg_price)
                 VALUES (?, ?, ?, ?)
@@ -161,7 +225,7 @@ def remove_from_portfolio(ticker):
 
 @app.route('/api/chat', methods=['POST'])
 def chat_with_ai():
-    """Chat with Gemini AI about portfolio"""
+    """Chat with Gemini AI"""
     try:
         data = request.json
         user_id = data.get('user_id', 1)
@@ -170,7 +234,7 @@ def chat_with_ai():
         if not message:
             return jsonify({'success': False, 'error': 'Message required'}), 400
         
-        # Get user's portfolio for context
+        # Get portfolio
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
@@ -182,47 +246,41 @@ def chat_with_ai():
         
         portfolio_data = cursor.fetchall()
         
-        # Build portfolio context
+        # Build context
         portfolio_context = ""
         if portfolio_data:
-            portfolio_context = "\n\nPortfolio hiện tại của khách hàng:\n"
+            portfolio_context = "\n\nPortfolio hiện tại:\n"
             for ticker, qty, price in portfolio_data:
-                portfolio_context += f"- {ticker}: {qty} cổ phiếu @ {price:,.0f} VND\n"
+                portfolio_context += f"- {ticker}: {qty} CP @ {price:,.0f} VND\n"
         
         # Generate AI response
         if model:
-            # Build context-aware prompt
             system_prompt = f"""Bạn là AI Advisor chuyên nghiệp về đầu tư chứng khoán Việt Nam.
-Khách hàng đang hỏi về danh mục đầu tư của họ.
 {portfolio_context}
 
 Nhiệm vụ:
-- Trả lời câu hỏi một cách chuyên nghiệp, chi tiết
+- Trả lời chuyên nghiệp, chi tiết
 - Phân tích danh mục nếu được hỏi
-- Đưa ra lời khuyên đầu tư thông minh
-- Giải thích rõ ràng, dễ hiểu
-- Luôn nhắc nhở về rủi ro
+- Đưa ra lời khuyên thông minh
+- Giải thích rõ ràng
+- Nhắc nhở về rủi ro
 
-Câu hỏi của khách hàng: {message}
+Câu hỏi: {message}
 """
             
             response = model.generate_content(system_prompt)
             ai_response = response.text
         else:
-            # Fallback response
             ai_response = f"""Xin chào! Tôi là AI Advisor.
 
-Danh mục hiện tại của bạn:
-{portfolio_context if portfolio_context else "Chưa có cổ phiếu nào"}
+{portfolio_context if portfolio_context else "Chưa có cổ phiếu"}
 
-Để tôi có thể tư vấn tốt hơn, vui lòng cung cấp API key cho Gemini AI.
+Câu hỏi: "{message}"
 
-Câu hỏi của bạn: "{message}"
-
-(Chức năng AI đang trong chế độ demo. Cấu hình GEMINI_API_KEY để sử dụng đầy đủ.)
+(Demo mode - Cấu hình GEMINI_API_KEY để dùng đầy đủ)
 """
         
-        # Save chat history
+        # Save chat
         cursor.execute('''
             INSERT INTO chat_history (user_id, message, response, portfolio_context)
             VALUES (?, ?, ?, ?)
@@ -242,7 +300,7 @@ Câu hỏi của bạn: "{message}"
         return jsonify({
             'success': False,
             'error': str(e),
-            'response': 'Xin lỗi, đã có lỗi xảy ra. Vui lòng thử lại.'
+            'response': 'Xin lỗi, đã có lỗi xảy ra.'
         }), 500
 
 @app.route('/api/chat/history', methods=['GET'])
@@ -267,7 +325,7 @@ def get_chat_history():
         conn.close()
         
         history = []
-        for row in reversed(rows):  # Reverse to show oldest first
+        for row in reversed(rows):
             history.append({
                 'message': row[0],
                 'response': row[1],
@@ -307,7 +365,7 @@ def clear_chat_history():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ============================================================================
-# SIGNALS ENDPOINTS (existing)
+# SIGNALS ENDPOINTS
 # ============================================================================
 
 @app.route('/api/signals', methods=['GET'])
@@ -386,7 +444,7 @@ def trigger_scan():
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
+    """Health check"""
     return jsonify({
         'status': 'healthy',
         'gemini': model is not None,
