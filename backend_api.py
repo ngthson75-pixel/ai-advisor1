@@ -1,5 +1,5 @@
 """
-AI Advisor Backend API - With Gemini Integration + Migration Endpoint
+AI Advisor Backend API - Complete with Full Migration
 """
 
 from flask import Flask, request, jsonify
@@ -37,19 +37,41 @@ else:
     logger.warning("⚠️ Gemini API key not found")
 
 # ============================================================================
-# MIGRATION ENDPOINT
+# MIGRATION ENDPOINT - COMPLETE
 # ============================================================================
 
 @app.route('/api/migrate', methods=['POST'])
 def run_migration():
-    """Run database migration - creates new tables"""
+    """Run complete database migration - creates all tables"""
     try:
-        logger.info("Starting migration...")
+        logger.info("Starting complete migration...")
         
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
-        # Create portfolios table
+        # 1. Create signals table
+        logger.info("Creating signals table...")
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS signals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticker TEXT NOT NULL,
+                strategy TEXT NOT NULL,
+                entry_price REAL NOT NULL,
+                stop_loss REAL NOT NULL,
+                take_profit REAL NOT NULL,
+                risk_reward REAL,
+                strength REAL,
+                is_priority INTEGER DEFAULT 0,
+                stock_type TEXT,
+                rsi REAL,
+                date TEXT,
+                action TEXT DEFAULT 'BUY',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 2. Create portfolios table
+        logger.info("Creating portfolios table...")
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS portfolios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,7 +85,8 @@ def run_migration():
             )
         ''')
         
-        # Create chat_history table
+        # 3. Create chat_history table
+        logger.info("Creating chat_history table...")
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS chat_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,7 +98,14 @@ def run_migration():
             )
         ''')
         
-        # Create indexes
+        # 4. Create indexes
+        logger.info("Creating indexes...")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_signals_date 
+            ON signals(date DESC)
+        ''')
+        
         cursor.execute('''
             CREATE INDEX IF NOT EXISTS idx_portfolio_user 
             ON portfolios(user_id)
@@ -89,12 +119,12 @@ def run_migration():
         conn.commit()
         conn.close()
         
-        logger.info("✓ Migration completed successfully")
+        logger.info("✓ Complete migration successful")
         
         return jsonify({
             'success': True,
-            'message': 'Migration completed',
-            'tables_created': ['portfolios', 'chat_history']
+            'message': 'Complete migration successful',
+            'tables_created': ['signals', 'portfolios', 'chat_history']
         })
         
     except Exception as e:
