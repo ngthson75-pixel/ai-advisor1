@@ -25,6 +25,92 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 DB_PATH = 'signals.db'
+# ============================================================================
+# AUTO-INITIALIZE DATABASE ON STARTUP
+# ============================================================================
+
+def init_database_on_startup():
+    """Initialize database tables on application startup"""
+    try:
+        logger.info("Checking database tables...")
+        
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Check if tables exist
+        cursor.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name IN ('signals', 'portfolios', 'chat_history')
+        """)
+        
+        existing_tables = set(row[0] for row in cursor.fetchall())
+        
+        if len(existing_tables) < 3:
+            logger.info(f"Missing tables. Found: {existing_tables}. Creating all tables...")
+            
+            # Create signals table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS signals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticker TEXT NOT NULL,
+                    strategy TEXT NOT NULL,
+                    entry_price REAL NOT NULL,
+                    stop_loss REAL NOT NULL,
+                    take_profit REAL NOT NULL,
+                    risk_reward REAL,
+                    strength REAL,
+                    is_priority INTEGER DEFAULT 0,
+                    stock_type TEXT,
+                    rsi REAL,
+                    date TEXT,
+                    action TEXT DEFAULT 'BUY',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Create portfolios table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS portfolios (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    ticker TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    avg_price REAL NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id, ticker)
+                )
+            ''')
+            
+            # Create chat_history table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS chat_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    message TEXT NOT NULL,
+                    response TEXT NOT NULL,
+                    portfolio_context TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Create indexes
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_signals_date ON signals(date DESC)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_portfolio_user ON portfolios(user_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_chat_user ON chat_history(user_id, created_at DESC)')
+            
+            conn.commit()
+            logger.info("✓ All tables created successfully")
+        else:
+            logger.info(f"✓ All tables exist: {existing_tables}")
+        
+        conn.close()
+        
+    except Exception as e:
+        logger.error(f"Database initialization error: {str(e)}")
+
+# Initialize database on startup
+init_database_on_startup()
 
 # Initialize Gemini
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
