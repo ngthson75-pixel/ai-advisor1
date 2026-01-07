@@ -1,42 +1,32 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Trash2, Plus, TrendingUp, DollarSign, BarChart3, Sparkles } from 'lucide-react';
 
-const PortfolioManager = () => {
-  // Portfolio state
+const AIPortfolioManager = ({ user }) => {
   const [portfolio, setPortfolio] = useState([]);
   const [newStock, setNewStock] = useState({ ticker: '', quantity: '', price: '' });
-  
-  // Chat state
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [hasGemini, setHasGemini] = useState(false);
   
   const chatEndRef = useRef(null);
-  const userId = 1; // TODO: Get from auth context
+  const userId = user?.id || 1;
   
   const API_BASE = process.env.REACT_APP_API_URL || 'https://ai-advisor1-backend.onrender.com/api';
 
-  // Load portfolio on mount
   useEffect(() => {
     loadPortfolio();
     loadChatHistory();
   }, []);
 
-  // Auto-scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  // ============================================================================
-  // PORTFOLIO FUNCTIONS
-  // ============================================================================
 
   const loadPortfolio = async () => {
     try {
       const response = await fetch(`${API_BASE}/portfolio?user_id=${userId}`);
       const data = await response.json();
-      
       if (data.success) {
         setPortfolio(data.portfolio);
       }
@@ -64,7 +54,6 @@ const PortfolioManager = () => {
       });
 
       const data = await response.json();
-      
       if (data.success) {
         setNewStock({ ticker: '', quantity: '', price: '' });
         loadPortfolio();
@@ -76,7 +65,7 @@ const PortfolioManager = () => {
   };
 
   const removeStock = async (ticker) => {
-    if (!confirm(`Xóa ${ticker} khỏi danh mục?`)) return;
+    if (!window.confirm(`Xóa ${ticker} khỏi danh mục?`)) return;
 
     try {
       const response = await fetch(`${API_BASE}/portfolio/${ticker}?user_id=${userId}`, {
@@ -84,7 +73,6 @@ const PortfolioManager = () => {
       });
 
       const data = await response.json();
-      
       if (data.success) {
         loadPortfolio();
       }
@@ -92,10 +80,6 @@ const PortfolioManager = () => {
       console.error('Error removing stock:', error);
     }
   };
-
-  // ============================================================================
-  // CHAT FUNCTIONS
-  // ============================================================================
 
   const loadChatHistory = async () => {
     try {
@@ -139,14 +123,14 @@ const PortfolioManager = () => {
         setHasGemini(data.hasGemini);
       } else {
         setMessages(prev => [...prev, { 
-          text: 'Xin lỗi, đã có lỗi xảy ra. Vui lòng thử lại.', 
+          text: 'Xin lỗi, đã có lỗi xảy ra.', 
           sender: 'ai' 
         }]);
       }
     } catch (error) {
       console.error('Error sending message:', error);
       setMessages(prev => [...prev, { 
-        text: 'Lỗi kết nối. Vui lòng kiểm tra mạng và thử lại.', 
+        text: 'Lỗi kết nối.', 
         sender: 'ai' 
       }]);
     } finally {
@@ -155,7 +139,7 @@ const PortfolioManager = () => {
   };
 
   const clearHistory = async () => {
-    if (!confirm('Xóa toàn bộ lịch sử chat?')) return;
+    if (!window.confirm('Xóa toàn bộ lịch sử chat?')) return;
 
     try {
       const response = await fetch(`${API_BASE}/chat/history?user_id=${userId}`, {
@@ -163,7 +147,6 @@ const PortfolioManager = () => {
       });
 
       const data = await response.json();
-      
       if (data.success) {
         setMessages([]);
       }
@@ -172,35 +155,16 @@ const PortfolioManager = () => {
     }
   };
 
-  // ============================================================================
-  // CALCULATIONS
-  // ============================================================================
-
-  const calculatePortfolioStats = () => {
-    const totalValue = portfolio.reduce((sum, stock) => 
-      sum + (stock.quantity * stock.avgPrice), 0
-    );
-    
-    return {
-      totalValue,
-      stockCount: portfolio.length,
-      totalShares: portfolio.reduce((sum, stock) => sum + stock.quantity, 0)
-    };
+  const stats = {
+    totalValue: portfolio.reduce((sum, s) => sum + (s.quantity * s.avgPrice), 0),
+    stockCount: portfolio.length,
+    totalShares: portfolio.reduce((sum, s) => sum + s.quantity, 0)
   };
-
-  const stats = calculatePortfolioStats();
-
-  // ============================================================================
-  // RENDER
-  // ============================================================================
 
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* LEFT: PORTFOLIO */}
         <div className="space-y-6">
-          {/* Header */}
           <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl p-6 text-white">
             <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
               <BarChart3 className="w-6 h-6" />
@@ -209,7 +173,6 @@ const PortfolioManager = () => {
             <p className="opacity-90">Quản lý danh mục của bạn</p>
           </div>
 
-          {/* Stats Cards */}
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-white rounded-lg p-4 shadow">
               <div className="flex items-center gap-2 text-gray-600 text-sm mb-1">
@@ -242,7 +205,6 @@ const PortfolioManager = () => {
             </div>
           </div>
 
-          {/* Add Stock Form */}
           <div className="bg-white rounded-lg p-6 shadow">
             <h3 className="font-semibold mb-4 flex items-center gap-2">
               <Plus className="w-5 h-5" />
@@ -255,7 +217,7 @@ const PortfolioManager = () => {
                 placeholder="Mã CP (VD: VCB)"
                 value={newStock.ticker}
                 onChange={(e) => setNewStock({...newStock, ticker: e.target.value.toUpperCase()})}
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
               />
               
               <div className="grid grid-cols-2 gap-3">
@@ -264,7 +226,7 @@ const PortfolioManager = () => {
                   placeholder="Số lượng"
                   value={newStock.quantity}
                   onChange={(e) => setNewStock({...newStock, quantity: e.target.value})}
-                  className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
                 />
                 
                 <input
@@ -272,7 +234,7 @@ const PortfolioManager = () => {
                   placeholder="Giá (VND)"
                   value={newStock.price}
                   onChange={(e) => setNewStock({...newStock, price: e.target.value})}
-                  className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
                 />
               </div>
               
@@ -286,7 +248,6 @@ const PortfolioManager = () => {
             </div>
           </div>
 
-          {/* Portfolio List */}
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="p-4 bg-gray-50 border-b">
               <h3 className="font-semibold">Danh mục hiện tại</h3>
@@ -299,7 +260,7 @@ const PortfolioManager = () => {
                 </div>
               ) : (
                 portfolio.map((stock) => (
-                  <div key={stock.ticker} className="p-4 hover:bg-gray-50 transition-colors">
+                  <div key={stock.ticker} className="p-4 hover:bg-gray-50">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-semibold text-lg">{stock.ticker}</div>
@@ -328,9 +289,7 @@ const PortfolioManager = () => {
           </div>
         </div>
 
-        {/* RIGHT: AI CHAT */}
         <div className="space-y-6">
-          {/* Header */}
           <div className="bg-gradient-to-r from-green-600 to-teal-600 rounded-xl p-6 text-white">
             <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
               <Sparkles className="w-6 h-6" />
@@ -340,9 +299,7 @@ const PortfolioManager = () => {
             <p className="opacity-90">Tư vấn thông minh về danh mục</p>
           </div>
 
-          {/* Chat Container */}
           <div className="bg-white rounded-lg shadow flex flex-col" style={{height: '600px'}}>
-            {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.length === 0 ? (
                 <div className="h-full flex items-center justify-center text-gray-500">
@@ -386,7 +343,6 @@ const PortfolioManager = () => {
               <div ref={chatEndRef} />
             </div>
 
-            {/* Input Area */}
             <div className="border-t p-4">
               <div className="flex gap-2">
                 <input
@@ -396,7 +352,7 @@ const PortfolioManager = () => {
                   onKeyPress={(e) => e.key === 'Enter' && !isLoading && sendMessage()}
                   placeholder="Hỏi AI về danh mục..."
                   disabled={isLoading}
-                  className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:opacity-50"
+                  className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 disabled:opacity-50"
                 />
                 
                 <button
@@ -426,4 +382,4 @@ const PortfolioManager = () => {
   );
 };
 
-export default PortfolioManager;
+export default AIPortfolioManager;
