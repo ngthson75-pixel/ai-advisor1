@@ -45,7 +45,7 @@ export default function SignalsModule({ signals, loading, onRefresh }) {
     try {
       setScanning(true)
       setScanProgress('Đang khởi động quét 343 cổ phiếu...')
-
+      
       const response = await fetch(`${API_URL}/scan`, {
         method: 'POST'
       })
@@ -89,7 +89,6 @@ export default function SignalsModule({ signals, loading, onRefresh }) {
             }, 3000)
           }
         }, 300000)
-        
       } else {
         setScanProgress('❌ Không thể khởi động quét: ' + data.message)
         setTimeout(() => {
@@ -163,8 +162,8 @@ export default function SignalsModule({ signals, loading, onRefresh }) {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="filters">
+      {/* HIDDEN: Filters section - removed per user request */}
+      <div className="filters" style={{display: 'none'}}>
         <div className="filter-header">
           <h3>Bộ lọc tín hiệu</h3>
           <button onClick={onRefresh} className="refresh-btn" disabled={loading || scanning}>
@@ -233,6 +232,17 @@ export default function SignalsModule({ signals, loading, onRefresh }) {
         </div>
       </div>
 
+      {/* Simple Refresh Button - Visible */}
+      <div className="simple-refresh-bar">
+        <button onClick={onRefresh} className="refresh-btn-simple" disabled={loading || scanning}>
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M4 2v6h6M16 18v-6h-6"/>
+            <path d="M20 10a8 8 0 01-12.8 6.4M0 10a8 8 0 0112.8-6.4" stroke="currentColor" fill="none" strokeWidth="2"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+
       {/* Signals Tables */}
       {loading ? (
         <div className="loading">
@@ -248,7 +258,7 @@ export default function SignalsModule({ signals, loading, onRefresh }) {
           <h3>Chưa có tín hiệu nào</h3>
           <p>Hệ thống sẽ tự động quét 343 cổ phiếu có thanh khoản cao nhất<br/>
           và phân tích theo chiến lược Pullback & EMA Cross</p>
-          
+
           {scanning ? (
             <div className="scan-progress">
               <div className="spinner" style={{width: '32px', height: '32px', borderWidth: '3px'}}></div>
@@ -289,7 +299,7 @@ export default function SignalsModule({ signals, loading, onRefresh }) {
                   <thead>
                     <tr>
                       <th>Mã</th>
-                      <th>Tín hiệu</th>
+                      {/* REMOVED: <th>Tín hiệu</th> */}
                       <th>Score</th>
                       <th>Xác xuất</th>
                       <th>Giá mua</th>
@@ -308,9 +318,7 @@ export default function SignalsModule({ signals, loading, onRefresh }) {
                             </span>
                           )}
                         </td>
-                        <td>
-                          <span className="signal-badge buy">{signal.strategy || 'Swing T+'}</span>
-                        </td>
+                        {/* REMOVED: <td><span className="signal-badge buy">{signal.strategy}</span></td> */}
                         <td>
                           <span className="score-badge">{Math.round(signal.strength || 70)}</span>
                         </td>
@@ -351,7 +359,7 @@ export default function SignalsModule({ signals, loading, onRefresh }) {
                   <thead>
                     <tr>
                       <th>Mã</th>
-                      <th>Tín hiệu</th>
+                      {/* REMOVED: <th>Tín hiệu</th> */}
                       <th>Score</th>
                       <th>Xác xuất</th>
                       <th>Giá bán</th>
@@ -370,9 +378,7 @@ export default function SignalsModule({ signals, loading, onRefresh }) {
                             </span>
                           )}
                         </td>
-                        <td>
-                          <span className="signal-badge sell">{signal.strategy || 'Swing T+'}</span>
-                        </td>
+                        {/* REMOVED: <td><span className="signal-badge sell">{signal.strategy}</span></td> */}
                         <td>
                           <span className="score-badge">{Math.round(signal.strength || 70)}</span>
                         </td>

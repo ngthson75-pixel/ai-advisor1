@@ -3,6 +3,7 @@ import './App.css'
 import LandingPage from './components/LandingPage'
 import SignalsModule from './components/SignalsModule'
 import AIPortfolioManager from './components/AIPortfolioManager'
+import SignalHistory from './components/SignalHistory'
 
 // API Configuration
 const API_URL = import.meta.env.PROD
@@ -155,12 +156,15 @@ function App() {
       <main className="main-content">
         <div className="container">
           {activeTab === 'signals' && (
-            <SignalsModule 
-              signals={signals} 
-              loading={loading} 
-              onRefresh={fetchSignals}
-            />
-          )}
+  <>
+    <SignalHistory />
+    <SignalsModule
+      signals={signals}
+      loading={loading}
+      onRefresh={fetchSignals}
+    />
+  </>
+)}
           
           {activeTab === 'portfolio' && <AIPortfolioManager user={user} />}
         </div>
