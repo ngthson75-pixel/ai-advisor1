@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, DollarSign, PieChart, MessageSquare, Send, Plus, Trash2, BarChart3 } from 'lucide-react';
+import { TrendingUp, DollarSign, PieChart, MessageSquare, Send, Plus, Trash2, BarChart3, AlertCircle } from 'lucide-react';
 
 const API_BASE = 'https://ai-advisor1-backend.onrender.com/api';
 const USER_ID = 1;
@@ -9,7 +9,7 @@ export default function AIPortfolioManager() {
   const [chatHistory, setChatHistory] = useState([]);
   const [userMessage, setUserMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [addingStock, setAddingStock] = useState(false);
+  const [error, setError] = useState(null);
 
   // Form state
   const [newStock, setNewStock] = useState({
@@ -49,14 +49,21 @@ export default function AIPortfolioManager() {
     fetchChatHistory();
   }, []);
 
-  // Add stock
-  const handleAddStock = async () => {
+  // Add stock - FIXED with preventDefault
+  const handleAddStock = async (e) => {
+    // CRITICAL: Prevent form submit!
+    if (e) e.preventDefault();
+
     if (!newStock.ticker || !newStock.quantity || !newStock.price) {
-      alert('Vui lòng điền đầy đủ thông tin');
+      setError('Vui lòng điền đầy đủ thông tin');
+      setTimeout(() => setError(null), 3000);
       return;
     }
 
     try {
+      setLoading(true);
+      setError(null);
+
       const response = await fetch(`${API_BASE}/portfolio`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -69,15 +76,19 @@ export default function AIPortfolioManager() {
       });
 
       const data = await response.json();
+      
       if (data.success) {
         setNewStock({ ticker: '', quantity: '', price: '' });
-        setAddingStock(false);
         await fetchPortfolio();
+        setError(null);
       } else {
-        alert('Lỗi: ' + (data.error || 'Không thể thêm cổ phiếu'));
+        setError(data.error || 'Không thể thêm cổ phiếu');
       }
     } catch (err) {
-      alert('Lỗi kết nối: ' + err.message);
+      console.error('Add stock error:', err);
+      setError('Lỗi kết nối: ' + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -93,15 +104,23 @@ export default function AIPortfolioManager() {
       const data = await response.json();
       if (data.success) {
         await fetchPortfolio();
+      } else {
+        setError(data.error || 'Không thể xóa');
       }
     } catch (err) {
-      alert('Lỗi: ' + err.message);
+      setError('Lỗi: ' + err.message);
     }
   };
 
-  // Send chat message
-  const handleSendMessage = async () => {
+  // Send chat message - FIXED with preventDefault
+  const handleSendMessage = async (e) => {
+    // CRITICAL: Prevent form submit!
+    if (e) e.preventDefault();
+
     if (!userMessage.trim()) return;
+
+    const currentMessage = userMessage;
+    setUserMessage(''); // Clear input immediately
 
     try {
       setLoading(true);
@@ -110,22 +129,35 @@ export default function AIPortfolioManager() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: USER_ID,
-          message: userMessage
+          message: currentMessage
         })
       });
 
       const data = await response.json();
+      
       if (data.success) {
         setChatHistory([...chatHistory, {
-          message: userMessage,
+          message: currentMessage,
           response: data.response
         }]);
-        setUserMessage('');
+      } else {
+        setError(data.error || 'AI không phản hồi');
+        setUserMessage(currentMessage); // Restore message on error
       }
     } catch (err) {
-      alert('Lỗi: ' + err.message);
+      console.error('Chat error:', err);
+      setError('Lỗi: ' + err.message);
+      setUserMessage(currentMessage); // Restore message on error
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle Enter key
+  const handleKeyPress = (e, callback) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      callback(e);
     }
   };
 
@@ -139,6 +171,15 @@ export default function AIPortfolioManager() {
   return (
     <div className="portfolio-manager">
       <div className="container">
+        {/* Error Banner */}
+        {error && (
+          <div className="error-banner">
+            <AlertCircle size={20} />
+            <span>{error}</span>
+            <button onClick={() => setError(null)} style={{ marginLeft: 'auto' }}>✕</button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="header">
           <div>
@@ -194,35 +235,46 @@ export default function AIPortfolioManager() {
               </h2>
             </div>
 
-            <div className="add-stock-form">
+            {/* FIXED: Form with onSubmit */}
+            <form onSubmit={handleAddStock} className="add-stock-form">
               <input
                 type="text"
                 placeholder="Mã CP (VD: VCB)"
                 value={newStock.ticker}
                 onChange={(e) => setNewStock({...newStock, ticker: e.target.value})}
+                onKeyPress={(e) => handleKeyPress(e, handleAddStock)}
                 className="input"
                 style={{ flex: 1 }}
+                disabled={loading}
               />
               <input
                 type="number"
                 placeholder="Số lượng"
                 value={newStock.quantity}
                 onChange={(e) => setNewStock({...newStock, quantity: e.target.value})}
+                onKeyPress={(e) => handleKeyPress(e, handleAddStock)}
                 className="input"
                 style={{ flex: 1 }}
+                disabled={loading}
               />
               <input
                 type="number"
                 placeholder="Giá (VND)"
                 value={newStock.price}
                 onChange={(e) => setNewStock({...newStock, price: e.target.value})}
+                onKeyPress={(e) => handleKeyPress(e, handleAddStock)}
                 className="input"
                 style={{ flex: 1 }}
+                disabled={loading}
               />
-              <button onClick={handleAddStock} className="btn-primary">
-                Thêm vào danh mục
+              <button 
+                type="submit" 
+                className="btn-primary"
+                disabled={loading}
+              >
+                {loading ? 'Đang thêm...' : 'Thêm vào danh mục'}
               </button>
-            </div>
+            </form>
 
             {/* Portfolio List */}
             <div className="section-header" style={{ marginTop: '30px' }}>
@@ -300,25 +352,25 @@ export default function AIPortfolioManager() {
               )}
             </div>
 
-            {/* Chat Input */}
-            <div className="chat-input-container">
+            {/* FIXED: Chat Input Form */}
+            <form onSubmit={handleSendMessage} className="chat-input-container">
               <input
                 type="text"
                 placeholder="Hỏi AI về danh mục..."
                 value={userMessage}
                 onChange={(e) => setUserMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                onKeyPress={(e) => handleKeyPress(e, handleSendMessage)}
                 className="input"
                 disabled={loading}
               />
               <button
-                onClick={handleSendMessage}
-                disabled={loading}
+                type="submit"
+                disabled={loading || !userMessage.trim()}
                 className="btn-send"
               >
                 <Send size={18} />
               </button>
-            </div>
+            </form>
           </div>
         </div>
       </div>
@@ -333,6 +385,30 @@ export default function AIPortfolioManager() {
         .container {
           max-width: 1400px;
           margin: 0 auto;
+        }
+
+        .error-banner {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 15px 20px;
+          background: #ef444420;
+          border: 1px solid #ef4444;
+          border-radius: 8px;
+          color: #ef4444;
+          margin-bottom: 20px;
+          font-size: 14px;
+        }
+
+        .error-banner button {
+          background: none;
+          border: none;
+          color: #ef4444;
+          cursor: pointer;
+          font-size: 20px;
+          padding: 0;
+          width: 24px;
+          height: 24px;
         }
 
         .header {
@@ -438,6 +514,11 @@ export default function AIPortfolioManager() {
           border-color: #3b82f6;
         }
 
+        .input:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
         .input::placeholder {
           color: #64748b;
         }
@@ -453,8 +534,13 @@ export default function AIPortfolioManager() {
           transition: all 0.2s;
         }
 
-        .btn-primary:hover {
+        .btn-primary:hover:not(:disabled) {
           background: #2563eb;
+        }
+
+        .btn-primary:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
         }
 
         .stocks-list {
@@ -553,6 +639,7 @@ export default function AIPortfolioManager() {
           border-radius: 6px;
           color: white;
           font-size: 14px;
+          line-height: 1.6;
         }
 
         .chat-input-container {
@@ -570,7 +657,7 @@ export default function AIPortfolioManager() {
           transition: all 0.2s;
         }
 
-        .btn-send:hover {
+        .btn-send:hover:not(:disabled) {
           background: #2563eb;
         }
 
