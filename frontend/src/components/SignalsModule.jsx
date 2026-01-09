@@ -1,403 +1,327 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react';
+import { TrendingUp, AlertCircle, RefreshCw } from 'lucide-react';
 
-const API_URL = import.meta.env.PROD
-  ? 'https://ai-advisor1-backend.onrender.com/api'
-  : 'http://localhost:10000/api'
+const API_BASE = 'https://ai-advisor1-backend.onrender.com/api';
 
-export default function SignalsModule({ signals, loading, onRefresh }) {
-  const [filter, setFilter] = useState('all')
-  const [typeFilter, setTypeFilter] = useState('all')
-  const [scanning, setScanning] = useState(false)
-  const [scanProgress, setScanProgress] = useState('')
+export default function SignalsModule() {
+  const [signals, setSignals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [scanning, setScanning] = useState(false);
 
-  // Separate BUY and SELL signals
-  const buySignals = signals.filter(signal => signal.action === 'BUY' || signal.action === 'MUA' || !signal.action)
-  const sellSignals = signals.filter(signal => signal.action === 'SELL' || signal.action === 'BÁN')
-
-  // Filter signals
-  const filterSignals = (signalList) => {
-    return signalList.filter(signal => {
-      const strategyMatch = filter === 'all' || signal.strategy === filter.toUpperCase()
-      const typeMatch = typeFilter === 'all' || signal.stock_type === typeFilter
-      return strategyMatch && typeMatch
-    })
-  }
-
-  const filteredBuySignals = filterSignals(buySignals)
-  const filteredSellSignals = filterSignals(sellSignals)
-
-  // Calculate stats
-  const stats = {
-    total: signals.length,
-    buy: buySignals.length,
-    sell: sellSignals.length,
-    pullback: signals.filter(s => s.strategy === 'PULLBACK').length,
-    ema_cross: signals.filter(s => s.strategy === 'EMA_CROSS').length,
-    priority: signals.filter(s => s.is_priority).length
-  }
-
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('vi-VN').format(price)
-  }
-
-  // Trigger scan
-  const startScan = async () => {
+  const fetchSignals = async () => {
     try {
-      setScanning(true)
-      setScanProgress('Đang khởi động quét 343 cổ phiếu...')
-      
-      const response = await fetch(`${API_URL}/scan`, {
-        method: 'POST'
-      })
-      
-      const data = await response.json()
+      setLoading(true);
+      setError(null);
+      const response = await fetch(`${API_BASE}/signals`);
+      const data = await response.json();
       
       if (data.success) {
-        setScanProgress('Đang phân tích thị trường... (2-3 phút)')
-        
-        // Poll for status every 5 seconds
-        const pollInterval = setInterval(async () => {
-          try {
-            const statusRes = await fetch(`${API_URL}/scan/status`)
-            const statusData = await statusRes.json()
-            
-            if (statusData.signals_count > 0) {
-              clearInterval(pollInterval)
-              setScanProgress(`✅ Đã tìm thấy ${statusData.signals_count} tín hiệu!`)
-              setTimeout(() => {
-                setScanning(false)
-                setScanProgress('')
-                onRefresh() // Refresh signals
-              }, 1500)
-            } else {
-              setScanProgress(`Đang quét... vui lòng chờ thêm ít phút`)
-            }
-          } catch (error) {
-            console.error('Status check error:', error)
-          }
-        }, 5000)
-        
-        // Timeout after 5 minutes
-        setTimeout(() => {
-          clearInterval(pollInterval)
-          if (scanning) {
-            setScanProgress('⏱️ Quét mất nhiều thời gian. Vui lòng refresh sau 2 phút.')
-            setTimeout(() => {
-              setScanning(false)
-              setScanProgress('')
-              onRefresh()
-            }, 3000)
-          }
-        }, 300000)
+        setSignals(data.signals || []);
       } else {
-        setScanProgress('❌ Không thể khởi động quét: ' + data.message)
-        setTimeout(() => {
-          setScanning(false)
-          setScanProgress('')
-        }, 3000)
+        setError('Không thể tải tín hiệu');
       }
-    } catch (error) {
-      console.error('Scan error:', error)
-      setScanProgress('❌ Lỗi kết nối: ' + error.message)
-      setTimeout(() => {
-        setScanning(false)
-        setScanProgress('')
-      }, 3000)
+    } catch (err) {
+      setError('Lỗi kết nối: ' + err.message);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const triggerScan = async () => {
+    try {
+      setScanning(true);
+      const response = await fetch(`${API_BASE}/scan`, { method: 'POST' });
+      const data = await response.json();
+      
+      if (data.success) {
+        alert('Đã bắt đầu quét! Vui lòng đợi 2-3 phút và refresh lại.');
+        setTimeout(fetchSignals, 180000); // Auto refresh sau 3 phút
+      }
+    } catch (err) {
+      alert('Lỗi khi quét: ' + err.message);
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSignals();
+  }, []);
+
+  // Filter buy signals
+  const buySignals = signals.filter(s => s.action === 'BUY');
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '50px' }}>
+        <RefreshCw className="spin" size={40} style={{ color: '#3b82f6' }} />
+        <p style={{ marginTop: '20px', color: '#94a3b8' }}>Đang tải tín hiệu...</p>
+      </div>
+    );
   }
 
   return (
     <div className="signals-module">
-      {/* Stats Dashboard */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon total">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-              <polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
-          </div>
-          <div className="stat-content">
-            <div className="stat-value">{stats.total}</div>
-            <div className="stat-label">Tổng tín hiệu</div>
-          </div>
+      {/* Header */}
+      <div className="signals-header">
+        <div>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+            <TrendingUp size={28} style={{ color: '#3b82f6' }} />
+            Tín Hiệu Giao Dịch
+          </h2>
+          <p style={{ color: '#94a3b8', fontSize: '14px' }}>
+            {/* ✅ ẨN TEXT VỀ CHIẾN LƯỢC */}
+            Tín hiệu được tạo tự động từ hệ thống phân tích AI
+          </p>
         </div>
 
-        <div className="stat-card">
-          <div className="stat-icon pullback">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-              <polyline points="17 6 23 6 23 12"/>
-            </svg>
-          </div>
-          <div className="stat-content">
-            <div className="stat-value">{stats.buy}</div>
-            <div className="stat-label">Tín hiệu MUA</div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon ema">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <polyline points="19 12 12 19 5 12"/>
-            </svg>
-          </div>
-          <div className="stat-content">
-            <div className="stat-value">{stats.sell}</div>
-            <div className="stat-label">Tín hiệu BÁN</div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon priority">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-            </svg>
-          </div>
-          <div className="stat-content">
-            <div className="stat-value">{stats.priority}</div>
-            <div className="stat-label">Ưu tiên</div>
-          </div>
-        </div>
-      </div>
-
-      {/* HIDDEN: Filters section - removed per user request */}
-      <div className="filters" style={{display: 'none'}}>
-        <div className="filter-header">
-          <h3>Bộ lọc tín hiệu</h3>
-          <button onClick={onRefresh} className="refresh-btn" disabled={loading || scanning}>
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M4 2v6h6M16 18v-6h-6"/>
-              <path d="M20 10a8 8 0 01-12.8 6.4M0 10a8 8 0 0112.8-6.4" stroke="currentColor" fill="none" strokeWidth="2"/>
-            </svg>
-            Làm mới
-          </button>
-        </div>
-
-        <div className="filter-groups">
-          <div className="filter-group">
-            <label>Chiến lược:</label>
-            <div className="filter-buttons">
-              <button
-                className={filter === 'all' ? 'active' : ''}
-                onClick={() => setFilter('all')}
-              >
-                Tất cả ({signals.length})
-              </button>
-              <button
-                className={filter === 'pullback' ? 'active' : ''}
-                onClick={() => setFilter('pullback')}
-              >
-                PULLBACK ({stats.pullback})
-              </button>
-              <button
-                className={filter === 'ema_cross' ? 'active' : ''}
-                onClick={() => setFilter('ema_cross')}
-              >
-                EMA CROSS ({stats.ema_cross})
-              </button>
-            </div>
-          </div>
-
-          <div className="filter-group">
-            <label>Loại cổ phiếu:</label>
-            <div className="filter-buttons">
-              <button
-                className={typeFilter === 'all' ? 'active' : ''}
-                onClick={() => setTypeFilter('all')}
-              >
-                Tất cả
-              </button>
-              <button
-                className={typeFilter === 'Blue Chip' ? 'active' : ''}
-                onClick={() => setTypeFilter('Blue Chip')}
-              >
-                Blue Chip
-              </button>
-              <button
-                className={typeFilter === 'Mid Cap' ? 'active' : ''}
-                onClick={() => setTypeFilter('Mid Cap')}
-              >
-                Mid Cap
-              </button>
-              <button
-                className={typeFilter === 'Penny' ? 'active' : ''}
-                onClick={() => setTypeFilter('Penny')}
-              >
-                Penny
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Simple Refresh Button - Visible */}
-      <div className="simple-refresh-bar">
-        <button onClick={onRefresh} className="refresh-btn-simple" disabled={loading || scanning}>
-          <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M4 2v6h6M16 18v-6h-6"/>
-            <path d="M20 10a8 8 0 01-12.8 6.4M0 10a8 8 0 0112.8-6.4" stroke="currentColor" fill="none" strokeWidth="2"/>
-          </svg>
+        <button 
+          onClick={fetchSignals}
+          disabled={scanning}
+          style={{
+            padding: '10px 20px',
+            background: '#3b82f6',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <RefreshCw size={16} className={scanning ? 'spin' : ''} />
           Refresh
         </button>
       </div>
 
-      {/* Signals Tables */}
-      {loading ? (
-        <div className="loading">
-          <div className="spinner"></div>
-          <p>Đang tải tín hiệu...</p>
-        </div>
-      ) : signals.length === 0 ? (
-        <div className="empty-state-large">
-          <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 6v6l4 2"/>
-          </svg>
-          <h3>Chưa có tín hiệu nào</h3>
-          <p>Hệ thống sẽ tự động quét 343 cổ phiếu có thanh khoản cao nhất<br/>
-          và phân tích theo chiến lược Pullback & EMA Cross</p>
-
-          {scanning ? (
-            <div className="scan-progress">
-              <div className="spinner" style={{width: '32px', height: '32px', borderWidth: '3px'}}></div>
-              <p className="scan-status">{scanProgress}</p>
-            </div>
-          ) : (
-            <button onClick={startScan} className="btn-scan" disabled={scanning}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="23 4 23 10 17 10"/>
-                <polyline points="1 20 1 14 7 14"/>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-              </svg>
-              Tạo tín hiệu mới (2-3 phút)
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="signals-tables">
-          {/* BUY Signals Table */}
-          <div className="signal-table-section">
-            <div className="table-header buy">
-              <h3>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-                </svg>
-                1. Tín hiệu MUA
-              </h3>
-              <span className="table-count">{filteredBuySignals.length} tín hiệu</span>
-            </div>
-
-            {filteredBuySignals.length === 0 ? (
-              <div className="empty-state-small">
-                <p>Không có tín hiệu mua</p>
-              </div>
-            ) : (
-              <div className="table-responsive">
-                <table className="signals-table">
-                  <thead>
-                    <tr>
-                      <th>Mã</th>
-                      {/* REMOVED: <th>Tín hiệu</th> */}
-                      <th>Score</th>
-                      <th>Xác xuất</th>
-                      <th>Giá mua</th>
-                      <th>Ngày</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredBuySignals.map((signal, index) => (
-                      <tr key={signal.id || index} className={signal.is_priority ? 'priority-row' : ''}>
-                        <td className="ticker-cell">
-                          {signal.is_priority && <span className="priority-star">⭐</span>}
-                          <strong>{signal.ticker}</strong>
-                          {signal.stock_type && (
-                            <span className={`stock-badge ${signal.stock_type?.toLowerCase().replace(' ', '-')}`}>
-                              {signal.stock_type}
-                            </span>
-                          )}
-                        </td>
-                        {/* REMOVED: <td><span className="signal-badge buy">{signal.strategy}</span></td> */}
-                        <td>
-                          <span className="score-badge">{Math.round(signal.strength || 70)}</span>
-                        </td>
-                        <td>
-                          <span className="probability">{Math.round(signal.strength || 70)}%</span>
-                        </td>
-                        <td className="price-cell">
-                          <strong>{formatPrice(signal.entry_price)}</strong>
-                        </td>
-                        <td className="date-cell">{signal.date || new Date().toISOString().split('T')[0]}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* SELL Signals Table */}
-          <div className="signal-table-section">
-            <div className="table-header sell">
-              <h3>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="1 18 10.5 8.5 15.5 13.5 23 6"/>
-                </svg>
-                2. Tín hiệu BÁN
-              </h3>
-              <span className="table-count">{filteredSellSignals.length} tín hiệu</span>
-            </div>
-
-            {filteredSellSignals.length === 0 ? (
-              <div className="empty-state-small">
-                <p>Không có tín hiệu bán</p>
-              </div>
-            ) : (
-              <div className="table-responsive">
-                <table className="signals-table">
-                  <thead>
-                    <tr>
-                      <th>Mã</th>
-                      {/* REMOVED: <th>Tín hiệu</th> */}
-                      <th>Score</th>
-                      <th>Xác xuất</th>
-                      <th>Giá bán</th>
-                      <th>Ngày</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredSellSignals.map((signal, index) => (
-                      <tr key={signal.id || index} className={signal.is_priority ? 'priority-row' : ''}>
-                        <td className="ticker-cell">
-                          {signal.is_priority && <span className="priority-star">⭐</span>}
-                          <strong>{signal.ticker}</strong>
-                          {signal.stock_type && (
-                            <span className={`stock-badge ${signal.stock_type?.toLowerCase().replace(' ', '-')}`}>
-                              {signal.stock_type}
-                            </span>
-                          )}
-                        </td>
-                        {/* REMOVED: <td><span className="signal-badge sell">{signal.strategy}</span></td> */}
-                        <td>
-                          <span className="score-badge">{Math.round(signal.strength || 70)}</span>
-                        </td>
-                        <td>
-                          <span className="probability">{Math.round(signal.strength || 70)}%</span>
-                        </td>
-                        <td className="price-cell">
-                          <strong>{formatPrice(signal.take_profit || signal.entry_price)}</strong>
-                        </td>
-                        <td className="date-cell">{signal.date || new Date().toISOString().split('T')[0]}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+      {/* Error */}
+      {error && (
+        <div style={{
+          padding: '15px',
+          background: '#fee',
+          border: '1px solid #fcc',
+          borderRadius: '8px',
+          marginBottom: '20px',
+          color: '#c33'
+        }}>
+          <AlertCircle size={20} style={{ marginRight: '10px' }} />
+          {error}
         </div>
       )}
+
+      {/* Stats */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '20px',
+        marginBottom: '30px'
+      }}>
+        <div className="stat-card">
+          <div className="stat-value" style={{ color: '#22c55e' }}>
+            {buySignals.length}
+          </div>
+          <div className="stat-label">Tín hiệu MUA</div>
+        </div>
+        
+        <div className="stat-card">
+          <div className="stat-value" style={{ color: '#3b82f6' }}>
+            {buySignals.filter(s => (s.strength || 0) >= 70).length}
+          </div>
+          <div className="stat-label">Tín hiệu mạnh</div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-value" style={{ color: '#f59e0b' }}>
+            {signals.length}
+          </div>
+          <div className="stat-label">Tổng tín hiệu</div>
+        </div>
+      </div>
+
+      {/* Signals Table */}
+      {buySignals.length === 0 ? (
+        <div style={{
+          textAlign: 'center',
+          padding: '60px 20px',
+          background: '#1e293b',
+          borderRadius: '12px',
+          border: '1px dashed #334155'
+        }}>
+          <AlertCircle size={48} style={{ color: '#64748b', marginBottom: '15px' }} />
+          <h3 style={{ color: '#94a3b8', marginBottom: '10px' }}>
+            Chưa có tín hiệu nào
+          </h3>
+          <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '20px' }}>
+            Hệ thống sẽ tự động quét và cập nhật tín hiệu mới
+          </p>
+          <button
+            onClick={triggerScan}
+            disabled={scanning}
+            style={{
+              padding: '12px 24px',
+              background: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: scanning ? 'not-allowed' : 'pointer',
+              opacity: scanning ? 0.6 : 1
+            }}
+          >
+            {scanning ? 'Đang quét...' : 'Quét ngay'}
+          </button>
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table className="signals-table">
+            <thead>
+              <tr>
+                <th>Mã CK</th>
+                <th>Giá vào</th>
+                <th>Stop Loss</th>
+                <th>Take Profit</th>
+                <th>Score</th>
+                <th>Loại</th>
+                <th>Ngày</th>
+              </tr>
+            </thead>
+            <tbody>
+              {buySignals.map((signal, idx) => (
+                <tr key={idx}>
+                  <td>
+                    <strong style={{ color: '#3b82f6', fontSize: '16px' }}>
+                      {signal.ticker}
+                    </strong>
+                  </td>
+                  <td>{signal.entry_price?.toLocaleString()}</td>
+                  <td style={{ color: '#ef4444' }}>
+                    {signal.stop_loss?.toLocaleString()}
+                  </td>
+                  <td style={{ color: '#22c55e' }}>
+                    {signal.take_profit?.toLocaleString()}
+                  </td>
+                  <td>
+                    <span style={{
+                      padding: '4px 12px',
+                      background: (signal.strength || 0) >= 70 ? '#22c55e' : '#f59e0b',
+                      color: 'white',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontWeight: 'bold'
+                    }}>
+                      {(signal.strength || 0).toFixed(0)}
+                    </span>
+                  </td>
+                  <td>
+                    <span style={{
+                      padding: '4px 8px',
+                      background: '#1e293b',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      color: '#94a3b8'
+                    }}>
+                      {signal.stock_type || 'N/A'}
+                    </span>
+                  </td>
+                  <td style={{ color: '#94a3b8', fontSize: '13px' }}>
+                    {signal.date ? new Date(signal.date).toLocaleDateString('vi-VN') : 'N/A'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <style jsx>{`
+        .signals-module {
+          padding: 20px;
+          max-width: 1400px;
+          margin: 0 auto;
+        }
+
+        .signals-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 30px;
+          flex-wrap: wrap;
+          gap: 20px;
+        }
+
+        .stat-card {
+          background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+          padding: 20px;
+          border-radius: 12px;
+          border: 1px solid #334155;
+        }
+
+        .stat-value {
+          font-size: 32px;
+          font-weight: bold;
+          margin-bottom: 5px;
+        }
+
+        .stat-label {
+          color: #94a3b8;
+          font-size: 14px;
+        }
+
+        .signals-table {
+          width: 100%;
+          border-collapse: collapse;
+          background: #1e293b;
+          border-radius: 12px;
+          overflow: hidden;
+        }
+
+        .signals-table th {
+          background: #0f172a;
+          padding: 15px;
+          text-align: left;
+          color: #94a3b8;
+          font-weight: 600;
+          font-size: 13px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .signals-table td {
+          padding: 15px;
+          border-top: 1px solid #334155;
+          color: #e2e8f0;
+        }
+
+        .signals-table tbody tr:hover {
+          background: #334155;
+          cursor: pointer;
+        }
+
+        .spin {
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+          .signals-header {
+            flex-direction: column;
+          }
+
+          .signals-table {
+            font-size: 12px;
+          }
+
+          .signals-table th,
+          .signals-table td {
+            padding: 10px 8px;
+          }
+        }
+      `}</style>
     </div>
-  )
+  );
 }

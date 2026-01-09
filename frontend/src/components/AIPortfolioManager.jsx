@@ -1,41 +1,56 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Send, Trash2, Plus, TrendingUp, DollarSign, BarChart3, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { TrendingUp, DollarSign, PieChart, MessageSquare, Send, Plus, Trash2, BarChart3 } from 'lucide-react';
 
-const AIPortfolioManager = ({ user }) => {
+const API_BASE = 'https://ai-advisor1-backend.onrender.com/api';
+const USER_ID = 1;
+
+export default function AIPortfolioManager() {
   const [portfolio, setPortfolio] = useState([]);
-  const [newStock, setNewStock] = useState({ ticker: '', quantity: '', price: '' });
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasGemini, setHasGemini] = useState(false);
-  
-  const chatEndRef = useRef(null);
-  const userId = user?.id || 1;
-  
-  const API_BASE = process.env.REACT_APP_API_URL || 'https://ai-advisor1-backend.onrender.com/api';
+  const [chatHistory, setChatHistory] = useState([]);
+  const [userMessage, setUserMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [addingStock, setAddingStock] = useState(false);
 
-  useEffect(() => {
-    loadPortfolio();
-    loadChatHistory();
-  }, []);
+  // Form state
+  const [newStock, setNewStock] = useState({
+    ticker: '',
+    quantity: '',
+    price: ''
+  });
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const loadPortfolio = async () => {
+  // Fetch portfolio
+  const fetchPortfolio = async () => {
     try {
-      const response = await fetch(`${API_BASE}/portfolio?user_id=${userId}`);
+      const response = await fetch(`${API_BASE}/portfolio?user_id=${USER_ID}`);
       const data = await response.json();
       if (data.success) {
-        setPortfolio(data.portfolio);
+        setPortfolio(data.portfolio || []);
       }
-    } catch (error) {
-      console.error('Error loading portfolio:', error);
+    } catch (err) {
+      console.error('Error fetching portfolio:', err);
     }
   };
 
-  const addStock = async () => {
+  // Fetch chat history
+  const fetchChatHistory = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/chat/history?user_id=${USER_ID}`);
+      const data = await response.json();
+      if (data.success) {
+        setChatHistory(data.history || []);
+      }
+    } catch (err) {
+      console.error('Error fetching chat:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchPortfolio();
+    fetchChatHistory();
+  }, []);
+
+  // Add stock
+  const handleAddStock = async () => {
     if (!newStock.ticker || !newStock.quantity || !newStock.price) {
       alert('Vui lòng điền đầy đủ thông tin');
       return;
@@ -46,7 +61,7 @@ const AIPortfolioManager = ({ user }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: userId,
+          user_id: USER_ID,
           ticker: newStock.ticker.toUpperCase(),
           quantity: parseInt(newStock.quantity),
           price: parseFloat(newStock.price)
@@ -56,330 +71,540 @@ const AIPortfolioManager = ({ user }) => {
       const data = await response.json();
       if (data.success) {
         setNewStock({ ticker: '', quantity: '', price: '' });
-        loadPortfolio();
+        setAddingStock(false);
+        await fetchPortfolio();
+      } else {
+        alert('Lỗi: ' + (data.error || 'Không thể thêm cổ phiếu'));
       }
-    } catch (error) {
-      console.error('Error adding stock:', error);
-      alert('Lỗi khi thêm cổ phiếu');
+    } catch (err) {
+      alert('Lỗi kết nối: ' + err.message);
     }
   };
 
-  const removeStock = async (ticker) => {
-    if (!window.confirm(`Xóa ${ticker} khỏi danh mục?`)) return;
+  // Delete stock
+  const handleDeleteStock = async (ticker) => {
+    if (!confirm(`Xóa ${ticker} khỏi danh mục?`)) return;
 
     try {
-      const response = await fetch(`${API_BASE}/portfolio/${ticker}?user_id=${userId}`, {
+      const response = await fetch(`${API_BASE}/portfolio/${ticker}?user_id=${USER_ID}`, {
         method: 'DELETE'
       });
 
       const data = await response.json();
       if (data.success) {
-        loadPortfolio();
+        await fetchPortfolio();
       }
-    } catch (error) {
-      console.error('Error removing stock:', error);
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
     }
   };
 
-  const loadChatHistory = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/chat/history?user_id=${userId}`);
-      const data = await response.json();
-      
-      if (data.success && data.history.length > 0) {
-        const formattedHistory = data.history.flatMap(item => [
-          { text: item.message, sender: 'user' },
-          { text: item.response, sender: 'ai' }
-        ]);
-        setMessages(formattedHistory);
-      }
-    } catch (error) {
-      console.error('Error loading chat history:', error);
-    }
-  };
-
-  const sendMessage = async () => {
-    if (!input.trim()) return;
-
-    const userMessage = input;
-    setInput('');
-    setMessages(prev => [...prev, { text: userMessage, sender: 'user' }]);
-    setIsLoading(true);
+  // Send chat message
+  const handleSendMessage = async () => {
+    if (!userMessage.trim()) return;
 
     try {
+      setLoading(true);
       const response = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: userId,
+          user_id: USER_ID,
           message: userMessage
         })
       });
 
       const data = await response.json();
-      
       if (data.success) {
-        setMessages(prev => [...prev, { text: data.response, sender: 'ai' }]);
-        setHasGemini(data.hasGemini);
-      } else {
-        setMessages(prev => [...prev, { 
-          text: 'Xin lỗi, đã có lỗi xảy ra.', 
-          sender: 'ai' 
+        setChatHistory([...chatHistory, {
+          message: userMessage,
+          response: data.response
         }]);
+        setUserMessage('');
       }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setMessages(prev => [...prev, { 
-        text: 'Lỗi kết nối.', 
-        sender: 'ai' 
-      }]);
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const clearHistory = async () => {
-    if (!window.confirm('Xóa toàn bộ lịch sử chat?')) return;
+  // Calculate total value
+  const totalValue = portfolio.reduce((sum, stock) => 
+    sum + (stock.quantity * stock.avg_price), 0
+  );
 
-    try {
-      const response = await fetch(`${API_BASE}/chat/history?user_id=${userId}`, {
-        method: 'DELETE'
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setMessages([]);
-      }
-    } catch (error) {
-      console.error('Error clearing history:', error);
-    }
-  };
-
-  const stats = {
-    totalValue: portfolio.reduce((sum, s) => sum + (s.quantity * s.avgPrice), 0),
-    stockCount: portfolio.length,
-    totalShares: portfolio.reduce((sum, s) => sum + s.quantity, 0)
-  };
+  const totalStocks = portfolio.reduce((sum, stock) => sum + stock.quantity, 0);
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl p-6 text-white">
-            <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-              <BarChart3 className="w-6 h-6" />
+    <div className="portfolio-manager">
+      <div className="container">
+        {/* Header */}
+        <div className="header">
+          <div>
+            <h1 className="title">
+              <BarChart3 size={32} />
               Danh Mục Đầu Tư
-            </h2>
-            <p className="opacity-90">Quản lý danh mục của bạn</p>
+            </h1>
+            <p className="subtitle">Quản lý danh mục của bạn</p>
           </div>
+        </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-white rounded-lg p-4 shadow">
-              <div className="flex items-center gap-2 text-gray-600 text-sm mb-1">
-                <DollarSign className="w-4 h-4" />
-                Tổng giá trị
-              </div>
-              <div className="text-2xl font-bold text-gray-900">
-                {stats.totalValue.toLocaleString('vi-VN')}
-              </div>
+        {/* Stats Cards */}
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: '#22c55e20' }}>
+              <DollarSign size={24} style={{ color: '#22c55e' }} />
             </div>
-            
-            <div className="bg-white rounded-lg p-4 shadow">
-              <div className="flex items-center gap-2 text-gray-600 text-sm mb-1">
-                <TrendingUp className="w-4 h-4" />
-                Số mã
-              </div>
-              <div className="text-2xl font-bold text-gray-900">
-                {stats.stockCount}
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-4 shadow">
-              <div className="flex items-center gap-2 text-gray-600 text-sm mb-1">
-                <BarChart3 className="w-4 h-4" />
-                Tổng CP
-              </div>
-              <div className="text-2xl font-bold text-gray-900">
-                {stats.totalShares}
-              </div>
+            <div>
+              <div className="stat-label">Tổng giá trị</div>
+              <div className="stat-value">{totalValue.toLocaleString()} VND</div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg p-6 shadow">
-            <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              Thêm Cổ Phiếu
-            </h3>
-            
-            <div className="space-y-3">
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: '#3b82f620' }}>
+              <TrendingUp size={24} style={{ color: '#3b82f6' }} />
+            </div>
+            <div>
+              <div className="stat-label">Số mã</div>
+              <div className="stat-value">{portfolio.length}</div>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: '#f59e0b20' }}>
+              <PieChart size={24} style={{ color: '#f59e0b' }} />
+            </div>
+            <div>
+              <div className="stat-label">Tổng CP</div>
+              <div className="stat-value">{totalStocks}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Grid */}
+        <div className="main-grid">
+          {/* Portfolio Section */}
+          <div className="section">
+            <div className="section-header">
+              <h2 className="section-title">
+                <Plus size={20} />
+                Thêm Cổ Phiếu
+              </h2>
+            </div>
+
+            <div className="add-stock-form">
               <input
                 type="text"
                 placeholder="Mã CP (VD: VCB)"
                 value={newStock.ticker}
-                onChange={(e) => setNewStock({...newStock, ticker: e.target.value.toUpperCase()})}
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                onChange={(e) => setNewStock({...newStock, ticker: e.target.value})}
+                className="input"
+                style={{ flex: 1 }}
               />
-              
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="number"
-                  placeholder="Số lượng"
-                  value={newStock.quantity}
-                  onChange={(e) => setNewStock({...newStock, quantity: e.target.value})}
-                  className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
-                />
-                
-                <input
-                  type="number"
-                  placeholder="Giá (VND)"
-                  value={newStock.price}
-                  onChange={(e) => setNewStock({...newStock, price: e.target.value})}
-                  className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-              
-              <button
-                onClick={addStock}
-                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-2 rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
-              >
-                <Plus className="w-5 h-5" />
+              <input
+                type="number"
+                placeholder="Số lượng"
+                value={newStock.quantity}
+                onChange={(e) => setNewStock({...newStock, quantity: e.target.value})}
+                className="input"
+                style={{ flex: 1 }}
+              />
+              <input
+                type="number"
+                placeholder="Giá (VND)"
+                value={newStock.price}
+                onChange={(e) => setNewStock({...newStock, price: e.target.value})}
+                className="input"
+                style={{ flex: 1 }}
+              />
+              <button onClick={handleAddStock} className="btn-primary">
                 Thêm vào danh mục
               </button>
             </div>
-          </div>
 
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="p-4 bg-gray-50 border-b">
-              <h3 className="font-semibold">Danh mục hiện tại</h3>
-            </div>
-            
-            <div className="divide-y max-h-96 overflow-y-auto">
-              {portfolio.length === 0 ? (
-                <div className="p-8 text-center text-gray-500">
-                  Chưa có cổ phiếu nào
-                </div>
-              ) : (
-                portfolio.map((stock) => (
-                  <div key={stock.ticker} className="p-4 hover:bg-gray-50">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-semibold text-lg">{stock.ticker}</div>
-                        <div className="text-sm text-gray-600">
-                          {stock.quantity} CP @ {stock.avgPrice.toLocaleString('vi-VN')} VND
-                        </div>
-                      </div>
-                      
-                      <div className="text-right">
-                        <div className="font-semibold text-purple-600">
-                          {(stock.quantity * stock.avgPrice).toLocaleString('vi-VN')} VND
-                        </div>
-                        <button
-                          onClick={() => removeStock(stock.ticker)}
-                          className="mt-1 text-red-500 hover:text-red-700 text-sm flex items-center gap-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Xóa
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-green-600 to-teal-600 rounded-xl p-6 text-white">
-            <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-              <Sparkles className="w-6 h-6" />
-              AI Advisor
-              {hasGemini && <span className="text-xs bg-white/20 px-2 py-1 rounded">Powered by Gemini</span>}
-            </h2>
-            <p className="opacity-90">Tư vấn thông minh về danh mục</p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow flex flex-col" style={{height: '600px'}}>
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-gray-500">
-                  <div className="text-center">
-                    <Sparkles className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                    <p>Hỏi AI Advisor về danh mục của bạn</p>
-                    <p className="text-sm mt-2">VD: "Phân tích danh mục của tôi"</p>
-                  </div>
-                </div>
-              ) : (
-                messages.map((msg, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-[80%] rounded-lg p-3 ${
-                        msg.sender === 'user'
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-gray-100 text-gray-900'
-                      }`}
-                    >
-                      <div className="whitespace-pre-wrap">{msg.text}</div>
-                    </div>
-                  </div>
-                ))
-              )}
-              
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-100 rounded-lg p-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              <div ref={chatEndRef} />
+            {/* Portfolio List */}
+            <div className="section-header" style={{ marginTop: '30px' }}>
+              <h2 className="section-title">Danh mục hiện tại</h2>
             </div>
 
-            <div className="border-t p-4">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && !isLoading && sendMessage()}
-                  placeholder="Hỏi AI về danh mục..."
-                  disabled={isLoading}
-                  className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 disabled:opacity-50"
-                />
-                
-                <button
-                  onClick={sendMessage}
-                  disabled={isLoading || !input.trim()}
-                  className="bg-gradient-to-r from-green-600 to-teal-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  <Send className="w-5 h-5" />
-                  Gửi
-                </button>
+            {portfolio.length === 0 ? (
+              <div className="empty-state">
+                <PieChart size={48} style={{ color: '#64748b', marginBottom: '10px' }} />
+                <p>Chưa có cổ phiếu nào</p>
               </div>
-              
-              {messages.length > 0 && (
-                <button
-                  onClick={clearHistory}
-                  className="mt-2 text-sm text-red-500 hover:text-red-700 flex items-center gap-1"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Xóa lịch sử chat
-                </button>
+            ) : (
+              <div className="stocks-list">
+                {portfolio.map((stock, idx) => (
+                  <div key={idx} className="stock-item">
+                    <div className="stock-info">
+                      <div className="stock-ticker">{stock.ticker}</div>
+                      <div className="stock-details">
+                        {stock.quantity} CP × {stock.avg_price.toLocaleString()} VND
+                      </div>
+                    </div>
+                    <div className="stock-actions">
+                      <div className="stock-value">
+                        {(stock.quantity * stock.avg_price).toLocaleString()} VND
+                      </div>
+                      <button
+                        onClick={() => handleDeleteStock(stock.ticker)}
+                        className="btn-delete"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* AI Chat Section */}
+          <div className="section">
+            <div className="section-header">
+              <h2 className="section-title">
+                <MessageSquare size={20} />
+                AI Advisor
+              </h2>
+            </div>
+
+            <div className="chat-subtitle">
+              Tư vấn thông minh về danh mục
+            </div>
+
+            {/* Chat History */}
+            <div className="chat-history">
+              {chatHistory.length === 0 ? (
+                <div className="empty-state">
+                  <MessageSquare size={48} style={{ color: '#64748b' }} />
+                  <p style={{ marginTop: '10px' }}>
+                    Hỏi AI Advisor về danh mục của bạn
+                  </p>
+                  <p style={{ fontSize: '13px', color: '#64748b', marginTop: '5px' }}>
+                    VD: "Phân tích danh mục của tôi"
+                  </p>
+                </div>
+              ) : (
+                chatHistory.map((chat, idx) => (
+                  <div key={idx} className="chat-messages">
+                    <div className="user-message">
+                      <strong>Bạn:</strong> {chat.message}
+                    </div>
+                    <div className="ai-message">
+                      <strong>AI:</strong> {chat.response}
+                    </div>
+                  </div>
+                ))
               )}
+            </div>
+
+            {/* Chat Input */}
+            <div className="chat-input-container">
+              <input
+                type="text"
+                placeholder="Hỏi AI về danh mục..."
+                value={userMessage}
+                onChange={(e) => setUserMessage(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                className="input"
+                disabled={loading}
+              />
+              <button
+                onClick={handleSendMessage}
+                disabled={loading}
+                className="btn-send"
+              >
+                <Send size={18} />
+              </button>
             </div>
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        .portfolio-manager {
+          min-height: 100vh;
+          background: #0f172a;
+          padding: 20px;
+        }
+
+        .container {
+          max-width: 1400px;
+          margin: 0 auto;
+        }
+
+        .header {
+          margin-bottom: 30px;
+        }
+
+        .title {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          color: white;
+          font-size: 28px;
+          margin-bottom: 8px;
+        }
+
+        .subtitle {
+          color: #94a3b8;
+          font-size: 15px;
+        }
+
+        .stats-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+          gap: 20px;
+          margin-bottom: 30px;
+        }
+
+        .stat-card {
+          background: #1e293b;
+          border: 1px solid #334155;
+          border-radius: 12px;
+          padding: 20px;
+          display: flex;
+          align-items: center;
+          gap: 15px;
+        }
+
+        .stat-icon {
+          width: 48px;
+          height: 48px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .stat-label {
+          color: #94a3b8;
+          font-size: 13px;
+          margin-bottom: 5px;
+        }
+
+        .stat-value {
+          color: white;
+          font-size: 22px;
+          font-weight: bold;
+        }
+
+        .main-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+        }
+
+        .section {
+          background: #1e293b;
+          border: 1px solid #334155;
+          border-radius: 12px;
+          padding: 25px;
+        }
+
+        .section-header {
+          margin-bottom: 20px;
+        }
+
+        .section-title {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          color: white;
+          font-size: 18px;
+          font-weight: 600;
+        }
+
+        .add-stock-form {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .input {
+          padding: 12px 16px;
+          background: #0f172a;
+          border: 1px solid #334155;
+          border-radius: 8px;
+          color: white;
+          font-size: 14px;
+          transition: all 0.2s;
+        }
+
+        .input:focus {
+          outline: none;
+          border-color: #3b82f6;
+        }
+
+        .input::placeholder {
+          color: #64748b;
+        }
+
+        .btn-primary {
+          padding: 12px 24px;
+          background: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .btn-primary:hover {
+          background: #2563eb;
+        }
+
+        .stocks-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .stock-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 15px;
+          background: #0f172a;
+          border: 1px solid #334155;
+          border-radius: 8px;
+        }
+
+        .stock-info {
+          flex: 1;
+        }
+
+        .stock-ticker {
+          color: #3b82f6;
+          font-weight: bold;
+          font-size: 16px;
+          margin-bottom: 4px;
+        }
+
+        .stock-details {
+          color: #94a3b8;
+          font-size: 13px;
+        }
+
+        .stock-actions {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+        }
+
+        .stock-value {
+          color: #22c55e;
+          font-weight: 600;
+          font-size: 15px;
+        }
+
+        .btn-delete {
+          padding: 8px;
+          background: #ef444420;
+          border: 1px solid #ef4444;
+          border-radius: 6px;
+          color: #ef4444;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .btn-delete:hover {
+          background: #ef4444;
+          color: white;
+        }
+
+        .chat-subtitle {
+          color: #94a3b8;
+          font-size: 14px;
+          margin-bottom: 20px;
+        }
+
+        .chat-history {
+          height: 400px;
+          overflow-y: auto;
+          padding: 15px;
+          background: #0f172a;
+          border: 1px solid #334155;
+          border-radius: 8px;
+          margin-bottom: 15px;
+        }
+
+        .chat-messages {
+          margin-bottom: 20px;
+        }
+
+        .user-message {
+          padding: 12px;
+          background: #3b82f620;
+          border-left: 3px solid #3b82f6;
+          border-radius: 6px;
+          margin-bottom: 10px;
+          color: white;
+          font-size: 14px;
+        }
+
+        .ai-message {
+          padding: 12px;
+          background: #22c55e20;
+          border-left: 3px solid #22c55e;
+          border-radius: 6px;
+          color: white;
+          font-size: 14px;
+        }
+
+        .chat-input-container {
+          display: flex;
+          gap: 10px;
+        }
+
+        .btn-send {
+          padding: 12px 16px;
+          background: #3b82f6;
+          border: none;
+          border-radius: 8px;
+          color: white;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .btn-send:hover {
+          background: #2563eb;
+        }
+
+        .btn-send:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .empty-state {
+          text-align: center;
+          padding: 60px 20px;
+          color: #64748b;
+        }
+
+        @media (max-width: 1024px) {
+          .main-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .add-stock-form {
+            flex-direction: column;
+          }
+
+          .input {
+            width: 100%;
+          }
+
+          .stats-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
     </div>
   );
-};
-
-export default AIPortfolioManager;
+}
