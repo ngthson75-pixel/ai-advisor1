@@ -18,13 +18,21 @@ export default function AIPortfolioManager() {
     price: ''
   });
 
-  // Fetch portfolio
+  // Fetch portfolio with validation
   const fetchPortfolio = async () => {
     try {
       const response = await fetch(`${API_BASE}/portfolio?user_id=${USER_ID}`);
       const data = await response.json();
+      
       if (data.success) {
-        setPortfolio(data.portfolio || []);
+        // ✅ VALIDATE data before setting
+        const validPortfolio = (data.portfolio || []).filter(stock => 
+          stock && 
+          typeof stock.ticker === 'string' &&
+          typeof stock.quantity === 'number' &&
+          typeof stock.avg_price === 'number'
+        );
+        setPortfolio(validPortfolio);
       }
     } catch (err) {
       console.error('Error fetching portfolio:', err);
@@ -49,11 +57,8 @@ export default function AIPortfolioManager() {
     fetchChatHistory();
   }, []);
 
-  // Add stock - FIXED with preventDefault
-  const handleAddStock = async (e) => {
-    // CRITICAL: Prevent form submit!
-    if (e) e.preventDefault();
-
+  // Add stock with validation
+  const handleAddStock = async () => {
     if (!newStock.ticker || !newStock.quantity || !newStock.price) {
       setError('Vui lòng điền đầy đủ thông tin');
       setTimeout(() => setError(null), 3000);
@@ -80,15 +85,22 @@ export default function AIPortfolioManager() {
       if (data.success) {
         setNewStock({ ticker: '', quantity: '', price: '' });
         await fetchPortfolio();
-        setError(null);
       } else {
         setError(data.error || 'Không thể thêm cổ phiếu');
       }
     } catch (err) {
-      console.error('Add stock error:', err);
-      setError('Lỗi kết nối: ' + err.message);
+      setError('Lỗi: ' + err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle key down
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      handleAddStock();
     }
   };
 
@@ -112,15 +124,12 @@ export default function AIPortfolioManager() {
     }
   };
 
-  // Send chat message - FIXED with preventDefault
-  const handleSendMessage = async (e) => {
-    // CRITICAL: Prevent form submit!
-    if (e) e.preventDefault();
-
+  // Send chat message
+  const handleSendMessage = async () => {
     if (!userMessage.trim()) return;
 
     const currentMessage = userMessage;
-    setUserMessage(''); // Clear input immediately
+    setUserMessage('');
 
     try {
       setLoading(true);
@@ -142,31 +151,35 @@ export default function AIPortfolioManager() {
         }]);
       } else {
         setError(data.error || 'AI không phản hồi');
-        setUserMessage(currentMessage); // Restore message on error
+        setUserMessage(currentMessage);
       }
     } catch (err) {
-      console.error('Chat error:', err);
       setError('Lỗi: ' + err.message);
-      setUserMessage(currentMessage); // Restore message on error
+      setUserMessage(currentMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle Enter key
-  const handleKeyPress = (e, callback) => {
+  // Handle chat key down
+  const handleChatKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      callback(e);
+      e.stopPropagation();
+      handleSendMessage();
     }
   };
 
-  // Calculate total value
-  const totalValue = portfolio.reduce((sum, stock) => 
-    sum + (stock.quantity * stock.avg_price), 0
-  );
+  // ✅ SAFE CALCULATION with fallbacks
+  const totalValue = portfolio.reduce((sum, stock) => {
+    const quantity = stock?.quantity || 0;
+    const price = stock?.avg_price || 0;
+    return sum + (quantity * price);
+  }, 0);
 
-  const totalStocks = portfolio.reduce((sum, stock) => sum + stock.quantity, 0);
+  const totalStocks = portfolio.reduce((sum, stock) => 
+    sum + (stock?.quantity || 0), 0
+  );
 
   return (
     <div className="portfolio-manager">
@@ -176,7 +189,7 @@ export default function AIPortfolioManager() {
           <div className="error-banner">
             <AlertCircle size={20} />
             <span>{error}</span>
-            <button onClick={() => setError(null)} style={{ marginLeft: 'auto' }}>✕</button>
+            <button onClick={() => setError(null)}>✕</button>
           </div>
         )}
 
@@ -199,7 +212,7 @@ export default function AIPortfolioManager() {
             </div>
             <div>
               <div className="stat-label">Tổng giá trị</div>
-              <div className="stat-value">{totalValue.toLocaleString()} VND</div>
+              <div className="stat-value">{(totalValue || 0).toLocaleString()} VND</div>
             </div>
           </div>
 
@@ -235,14 +248,14 @@ export default function AIPortfolioManager() {
               </h2>
             </div>
 
-            {/* FIXED: Form with onSubmit */}
-            <form onSubmit={handleAddStock} className="add-stock-form">
+            {/* Add Stock Form */}
+            <div className="add-stock-form">
               <input
                 type="text"
                 placeholder="Mã CP (VD: VCB)"
                 value={newStock.ticker}
                 onChange={(e) => setNewStock({...newStock, ticker: e.target.value})}
-                onKeyPress={(e) => handleKeyPress(e, handleAddStock)}
+                onKeyDown={handleKeyDown}
                 className="input"
                 style={{ flex: 1 }}
                 disabled={loading}
@@ -252,7 +265,7 @@ export default function AIPortfolioManager() {
                 placeholder="Số lượng"
                 value={newStock.quantity}
                 onChange={(e) => setNewStock({...newStock, quantity: e.target.value})}
-                onKeyPress={(e) => handleKeyPress(e, handleAddStock)}
+                onKeyDown={handleKeyDown}
                 className="input"
                 style={{ flex: 1 }}
                 disabled={loading}
@@ -262,19 +275,19 @@ export default function AIPortfolioManager() {
                 placeholder="Giá (VND)"
                 value={newStock.price}
                 onChange={(e) => setNewStock({...newStock, price: e.target.value})}
-                onKeyPress={(e) => handleKeyPress(e, handleAddStock)}
+                onKeyDown={handleKeyDown}
                 className="input"
                 style={{ flex: 1 }}
                 disabled={loading}
               />
               <button 
-                type="submit" 
+                onClick={handleAddStock}
                 className="btn-primary"
                 disabled={loading}
               >
                 {loading ? 'Đang thêm...' : 'Thêm vào danh mục'}
               </button>
-            </form>
+            </div>
 
             {/* Portfolio List */}
             <div className="section-header" style={{ marginTop: '30px' }}>
@@ -288,27 +301,35 @@ export default function AIPortfolioManager() {
               </div>
             ) : (
               <div className="stocks-list">
-                {portfolio.map((stock, idx) => (
-                  <div key={idx} className="stock-item">
-                    <div className="stock-info">
-                      <div className="stock-ticker">{stock.ticker}</div>
-                      <div className="stock-details">
-                        {stock.quantity} CP × {stock.avg_price.toLocaleString()} VND
+                {portfolio.map((stock, idx) => {
+                  // ✅ SAFE ACCESS with optional chaining
+                  const ticker = stock?.ticker || 'N/A';
+                  const quantity = stock?.quantity || 0;
+                  const avgPrice = stock?.avg_price || 0;
+                  const totalStockValue = quantity * avgPrice;
+
+                  return (
+                    <div key={idx} className="stock-item">
+                      <div className="stock-info">
+                        <div className="stock-ticker">{ticker}</div>
+                        <div className="stock-details">
+                          {quantity} CP × {avgPrice.toLocaleString()} VND
+                        </div>
+                      </div>
+                      <div className="stock-actions">
+                        <div className="stock-value">
+                          {totalStockValue.toLocaleString()} VND
+                        </div>
+                        <button
+                          onClick={() => handleDeleteStock(ticker)}
+                          className="btn-delete"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </div>
-                    <div className="stock-actions">
-                      <div className="stock-value">
-                        {(stock.quantity * stock.avg_price).toLocaleString()} VND
-                      </div>
-                      <button
-                        onClick={() => handleDeleteStock(stock.ticker)}
-                        className="btn-delete"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -352,25 +373,25 @@ export default function AIPortfolioManager() {
               )}
             </div>
 
-            {/* FIXED: Chat Input Form */}
-            <form onSubmit={handleSendMessage} className="chat-input-container">
+            {/* Chat Input */}
+            <div className="chat-input-container">
               <input
                 type="text"
                 placeholder="Hỏi AI về danh mục..."
                 value={userMessage}
                 onChange={(e) => setUserMessage(e.target.value)}
-                onKeyPress={(e) => handleKeyPress(e, handleSendMessage)}
+                onKeyDown={handleChatKeyDown}
                 className="input"
                 disabled={loading}
               />
               <button
-                type="submit"
+                onClick={handleSendMessage}
                 disabled={loading || !userMessage.trim()}
                 className="btn-send"
               >
                 <Send size={18} />
               </button>
-            </form>
+            </div>
           </div>
         </div>
       </div>
