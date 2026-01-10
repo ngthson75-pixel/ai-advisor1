@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI ADVISOR - BACKEND API (FIXED GEMINI MODEL)
-Complete backend with portfolio, chat, and signals
+AI ADVISOR - BACKEND API (PRODUCTION READY)
+Fixed for Render deployment with proper database path
 """
 
 from flask import Flask, request, jsonify
@@ -22,15 +22,21 @@ CORS(app)
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    # ✅ FIX: Use new model
+    # ✅ Use new model (gemini-pro is deprecated)
     gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+    print("✅ Gemini API configured with gemini-1.5-flash")
 else:
     print("⚠️ WARNING: GEMINI_API_KEY not set")
     gemini_model = None
 
-# Database setup
+# Database setup - FIXED for Render
 Base = declarative_base()
-engine = create_engine('sqlite:///ai_advisor.db')
+
+# ✅ Use /tmp directory on Render (ephemeral but works)
+DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:////tmp/ai_advisor.db')
+print(f"📊 Database: {DATABASE_URL}")
+
+engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 
 
@@ -79,10 +85,6 @@ class ChatHistory(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
-# Create tables
-Base.metadata.create_all(engine)
-
-
 # ========================================================================
 # HELPER FUNCTIONS
 # ========================================================================
@@ -94,9 +96,9 @@ def get_portfolio_context(user_id):
         portfolios = session.query(Portfolio).filter_by(user_id=user_id).all()
         
         if not portfolios:
-            return "Portfolio: Empty"
+            return "Portfolio: Empty (no stocks added yet)"
         
-        context = "Portfolio:\n"
+        context = "Current Portfolio:\n"
         total_value = 0
         
         for p in portfolios:
@@ -104,12 +106,12 @@ def get_portfolio_context(user_id):
             total_value += value
             context += f"- {p.ticker}: {p.quantity} shares @ {p.avg_price:,.0f} VND = {value:,.0f} VND\n"
         
-        context += f"\nTotal value: {total_value:,.0f} VND"
+        context += f"\nTotal Portfolio Value: {total_value:,.0f} VND"
         return context
         
     except Exception as e:
         print(f"Error getting portfolio context: {e}")
-        return "Portfolio: Error loading"
+        return "Portfolio: Error loading data"
     finally:
         session.close()
 
@@ -117,31 +119,56 @@ def get_portfolio_context(user_id):
 def chat_with_gemini(message, portfolio_context):
     """Chat with Gemini AI"""
     if not gemini_model:
-        return "AI service not available. Please contact admin."
+        return "Xin lỗi, dịch vụ AI chưa được cấu hình. Vui lòng liên hệ admin."
     
     try:
-        prompt = f"""You are an AI investment advisor for Vietnamese stock market.
+        prompt = f"""Bạn là AI tư vấn đầu tư chứng khoán Việt Nam.
 
-User's Portfolio:
+Danh mục của người dùng:
 {portfolio_context}
 
-User's Question: {message}
+Câu hỏi: {message}
 
-Provide helpful investment advice in Vietnamese. Be concise and practical.
-If portfolio is empty, suggest general investment principles.
+Hãy đưa ra lời khuyên đầu tư hữu ích bằng tiếng Việt. Ngắn gọn và thực tế.
+Nếu danh mục trống, gợi ý các nguyên tắc đầu tư cơ bản.
 """
         
         response = gemini_model.generate_content(prompt)
         return response.text
         
     except Exception as e:
-        print(f"Gemini error: {e}")
-        return f"Xin lỗi, AI không thể trả lời lúc này. Lỗi: {str(e)}"
+        error_msg = str(e)
+        print(f"Gemini error: {error_msg}")
+        
+        # Handle specific errors
+        if "429" in error_msg:
+            return "Xin lỗi, AI đang quá tải. Vui lòng thử lại sau 1 phút."
+        elif "quota" in error_msg.lower():
+            return "Xin lỗi, đã hết quota API. Vui lòng thử lại sau."
+        else:
+            return f"Xin lỗi, AI không thể trả lời lúc này. Vui lòng thử lại."
 
 
 # ========================================================================
 # API ROUTES
 # ========================================================================
+
+@app.route('/', methods=['GET'])
+def index():
+    """Root endpoint"""
+    return jsonify({
+        'service': 'AI Advisor Backend API',
+        'version': '1.0',
+        'status': 'running',
+        'endpoints': {
+            'health': '/health',
+            'signals': '/api/signals',
+            'portfolio': '/api/portfolio',
+            'chat': '/api/chat',
+            'migrate': '/api/migrate'
+        }
+    })
+
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -149,6 +176,7 @@ def health():
     return jsonify({
         'status': 'healthy',
         'gemini': gemini_model is not None,
+        'database': 'sqlite',
         'timestamp': datetime.now().isoformat()
     })
 
@@ -165,7 +193,7 @@ def get_signals():
             signals_data.append({
                 'id': s.id,
                 'ticker': s.ticker,
-                'code': s.ticker,  # Alias for compatibility
+                'code': s.ticker,
                 'strategy': s.strategy,
                 'entry_price': s.entry_price,
                 'stop_loss': s.stop_loss,
@@ -174,7 +202,7 @@ def get_signals():
                 'strength': s.strength or 0,
                 'stock_type': s.stock_type,
                 'rsi': s.rsi,
-                'date': s.date or s.created_at.strftime('%Y-%m-%d'),
+                'date': s.date or s.created_at.strftime('%Y-%m-%d') if s.created_at else None,
                 'action': s.action,
                 'created_at': s.created_at.isoformat() if s.created_at else None
             })
@@ -186,6 +214,7 @@ def get_signals():
         })
         
     except Exception as e:
+        print(f"Error in get_signals: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         session.close()
@@ -217,6 +246,7 @@ def get_portfolio():
         })
         
     except Exception as e:
+        print(f"Error in get_portfolio: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         session.close()
@@ -228,14 +258,14 @@ def add_portfolio():
     data = request.json
     
     user_id = data.get('user_id', 1)
-    ticker = data.get('ticker', '').upper()
-    quantity = data.get('quantity', 0)
-    price = data.get('price', 0)
+    ticker = data.get('ticker', '').upper().strip()
+    quantity = int(data.get('quantity', 0))
+    price = float(data.get('price', 0))
     
     if not ticker or quantity <= 0 or price <= 0:
         return jsonify({
             'success': False,
-            'error': 'Invalid input data'
+            'error': 'Invalid input: ticker, quantity, and price are required'
         }), 400
     
     session = Session()
@@ -247,13 +277,12 @@ def add_portfolio():
         ).first()
         
         if existing:
-            # Update existing
+            # Update existing - calculate new average
             new_total_quantity = existing.quantity + quantity
             new_total_value = (existing.quantity * existing.avg_price) + (quantity * price)
             existing.quantity = new_total_quantity
             existing.avg_price = new_total_value / new_total_quantity
             existing.updated_at = datetime.now()
-            message = f"Updated {ticker}"
         else:
             # Add new
             portfolio = Portfolio(
@@ -263,7 +292,6 @@ def add_portfolio():
                 avg_price=price
             )
             session.add(portfolio)
-            message = f"Added {ticker}"
         
         session.commit()
         
@@ -274,6 +302,7 @@ def add_portfolio():
         
     except Exception as e:
         session.rollback()
+        print(f"Error in add_portfolio: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         session.close()
@@ -307,6 +336,7 @@ def delete_portfolio(ticker):
         
     except Exception as e:
         session.rollback()
+        print(f"Error in delete_portfolio: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         session.close()
@@ -351,6 +381,7 @@ def chat():
         
     except Exception as e:
         session.rollback()
+        print(f"Error in chat: {e}")
         return jsonify({
             'success': False,
             'error': str(e),
@@ -392,6 +423,7 @@ def get_chat_history():
         })
         
     except Exception as e:
+        print(f"Error in get_chat_history: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         session.close()
@@ -414,6 +446,7 @@ def clear_chat_history():
         
     except Exception as e:
         session.rollback()
+        print(f"Error in clear_chat_history: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         session.close()
@@ -424,6 +457,7 @@ def migrate():
     """Run database migration"""
     try:
         Base.metadata.create_all(engine)
+        print("✅ Database tables created successfully")
         
         return jsonify({
             'success': True,
@@ -432,7 +466,21 @@ def migrate():
         })
         
     except Exception as e:
+        print(f"Error in migrate: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ========================================================================
+# STARTUP
+# ========================================================================
+
+# Create tables on startup
+try:
+    print("\n🚀 Starting AI Advisor Backend API...")
+    Base.metadata.create_all(engine)
+    print("✅ Database initialized")
+except Exception as e:
+    print(f"⚠️ Database initialization warning: {e}")
 
 
 # ========================================================================
@@ -440,11 +488,13 @@ def migrate():
 # ========================================================================
 
 if __name__ == '__main__':
-    print("\n" + "="*70)
+    port = int(os.getenv('PORT', 10000))
+    print(f"\n{'='*70}")
     print("🚀 AI ADVISOR BACKEND API")
-    print("="*70)
-    print(f"Gemini API: {'✅ Configured' if gemini_model else '❌ Not configured'}")
-    print(f"Database: ai_advisor.db")
-    print("="*70 + "\n")
+    print(f"{'='*70}")
+    print(f"Gemini: {'✅ Configured' if gemini_model else '❌ Not configured'}")
+    print(f"Database: {DATABASE_URL}")
+    print(f"Port: {port}")
+    print(f"{'='*70}\n")
     
-    app.run(debug=True, host='0.0.0.0', port=10000)
+    app.run(debug=False, host='0.0.0.0', port=port)
