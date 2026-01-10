@@ -1,0 +1,359 @@
+{
+  "updated_at": "2026-01-10T13:03:57.729464",
+  "total_tickers": 50,
+  "success_count": 50,
+  "error_count": 0,
+  "errors": [],
+  "prices": {
+    "VCB": {
+      "price": 68.0,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 32481400
+    },
+    "VHM": {
+      "price": 140.0,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 9789300
+    },
+    "VIC": {
+      "price": 176.0,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 5389600
+    },
+    "VNM": {
+      "price": 61.0,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 4184100
+    },
+    "GAS": {
+      "price": 97.1,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 4592600
+    },
+    "MSN": {
+      "price": 76.5,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 5786600
+    },
+    "VPB": {
+      "price": 28.25,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 37610200
+    },
+    "HPG": {
+      "price": 26.2,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 35089300
+    },
+    "TCB": {
+      "price": 36.65,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 28290500
+    },
+    "MWG": {
+      "price": 86.0,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 6472200
+    },
+    "BID": {
+      "price": 46.05,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 22918600
+    },
+    "CTG": {
+      "price": 40.75,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 38922900
+    },
+    "FPT": {
+      "price": 97.4,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 10048700
+    },
+    "PLX": {
+      "price": 43.0,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 8135100
+    },
+    "POW": {
+      "price": 14.4,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 24392800
+    },
+    "SSI": {
+      "price": 30.35,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 29015400
+    },
+    "STB": {
+      "price": 51.8,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 21551500
+    },
+    "VRE": {
+      "price": 35.0,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 15581100
+    },
+    "NVL": {
+      "price": 12.55,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 22081700
+    },
+    "PDR": {
+      "price": 17.25,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 34769500
+    },
+    "MBB": {
+      "price": 27.3,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 66065300
+    },
+    "HDB": {
+      "price": 27.9,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 29852300
+    },
+    "ACB": {
+      "price": 24.55,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 16460000
+    },
+    "VJC": {
+      "price": 198.7,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 2533600
+    },
+    "GVR": {
+      "price": 31.6,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 9394000
+    },
+    "SAB": {
+      "price": 48.95,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 2041500
+    },
+    "VHC": {
+      "price": 57.1,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 609200
+    },
+    "TPB": {
+      "price": 17.6,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 23633700
+    },
+    "KDH": {
+      "price": 28.6,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 14633500
+    },
+    "BCM": {
+      "price": 71.0,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 2148100
+    },
+    "DGC": {
+      "price": 62.7,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 4030000
+    },
+    "DIG": {
+      "price": 16.0,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 30057000
+    },
+    "DPM": {
+      "price": 23.75,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 6041200
+    },
+    "FRT": {
+      "price": 143.5,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 552500
+    },
+    "GMD": {
+      "price": 62.0,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 820800
+    },
+    "HCM": {
+      "price": 22.6,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 9068900
+    },
+    "HNG": {
+      "price": 6.1,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 5093600
+    },
+    "HPX": {
+      "price": 4.59,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 2168200
+    },
+    "KBC": {
+      "price": 36.0,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 9412500
+    },
+    "LPB": {
+      "price": 41.2,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 2099000
+    },
+    "OCB": {
+      "price": 11.8,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 2872100
+    },
+    "PNJ": {
+      "price": 103.0,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 727400
+    },
+    "REE": {
+      "price": 61.0,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 781600
+    },
+    "SHB": {
+      "price": 16.5,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 68480400
+    },
+    "SSB": {
+      "price": 17.35,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 2096900
+    },
+    "TCH": {
+      "price": 15.95,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 18430400
+    },
+    "VCG": {
+      "price": 21.45,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 9229200
+    },
+    "VCI": {
+      "price": 33.55,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 7731100
+    },
+    "VIB": {
+      "price": 17.95,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 10177300
+    },
+    "VND": {
+      "price": 19.3,
+      "date": "2026-01-09",
+      "change": 0.0,
+      "change_percent": 0.0,
+      "volume": 13044800
+    }
+  }
+}

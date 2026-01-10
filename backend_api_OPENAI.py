@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI ADVISOR - BACKEND API v2.0
-Added: Cash position & EOD prices for P&L calculation
+AI ADVISOR - BACKEND API (OpenAI Version)
+Simple, fast deployment with GPT-4o-mini
 """
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
 import os
-import json
 from openai import OpenAI
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
@@ -35,9 +34,6 @@ print(f"📊 Database: {DATABASE_URL}")
 
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
-
-# EOD prices file
-PRICES_FILE = 'latest_prices.json'
 
 
 # ========================================================================
@@ -74,16 +70,6 @@ class Portfolio(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
-class CashPosition(Base):
-    """NEW: Track user cash position"""
-    __tablename__ = 'cash_positions'
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, nullable=False, unique=True)
-    cash_amount = Column(Float, nullable=False, default=0)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-
-
 class ChatHistory(Base):
     __tablename__ = 'chat_history'
     
@@ -99,94 +85,24 @@ class ChatHistory(Base):
 # HELPER FUNCTIONS
 # ========================================================================
 
-def load_latest_prices():
-    """Load latest EOD prices from file"""
-    try:
-        if not os.path.exists(PRICES_FILE):
-            print(f"⚠️ {PRICES_FILE} not found")
-            return {}
-        
-        with open(PRICES_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        return data.get('prices', {})
-        
-    except Exception as e:
-        print(f"Error loading prices: {e}")
-        return {}
-
-
-def get_current_price(ticker):
-    """Get current price for a ticker"""
-    prices = load_latest_prices()
-    
-    if ticker in prices:
-        return prices[ticker].get('price', 0)
-    
-    return 0
-
-
 def get_portfolio_context(user_id):
-    """Get user portfolio for AI context with P&L"""
+    """Get user portfolio for AI context"""
     session = Session()
     try:
-        # Get stocks
         portfolios = session.query(Portfolio).filter_by(user_id=user_id).all()
         
-        # Get cash
-        cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
-        cash_amount = cash_pos.cash_amount if cash_pos else 0
+        if not portfolios:
+            return "Danh mục đầu tư: Trống (chưa có cổ phiếu nào)"
         
-        # Load latest prices
-        prices = load_latest_prices()
+        context = "Danh mục đầu tư hiện tại:\n"
+        total_value = 0
         
-        if not portfolios and cash_amount == 0:
-            return "Danh mục đầu tư: Trống (chưa có cổ phiếu và tiền mặt)"
+        for p in portfolios:
+            value = p.quantity * p.avg_price
+            total_value += value
+            context += f"- {p.ticker}: {p.quantity} cổ phiếu @ {p.avg_price:,.0f} VND = {value:,.0f} VND\n"
         
-        context = "Danh mục đầu tư hiện tại:\n\n"
-        
-        # Stocks
-        if portfolios:
-            context += "CỔ PHIẾU:\n"
-            total_cost = 0
-            total_value = 0
-            
-            for p in portfolios:
-                cost = p.quantity * p.avg_price
-                total_cost += cost
-                
-                # Get current price
-                current_price = prices.get(p.ticker, {}).get('price', p.avg_price)
-                current_value = p.quantity * current_price
-                total_value += current_value
-                
-                # Calculate P&L
-                pl_amount = current_value - cost
-                pl_pct = (pl_amount / cost * 100) if cost > 0 else 0
-                
-                context += f"- {p.ticker}: {p.quantity} CP @ {p.avg_price:,.0f} VND\n"
-                context += f"  Giá hiện tại: {current_price:,.0f} VND\n"
-                context += f"  Giá trị: {current_value:,.0f} VND ({pl_pct:+.1f}%)\n"
-            
-            context += f"\nTổng vốn cổ phiếu: {total_cost:,.0f} VND\n"
-            context += f"Giá trị hiện tại: {total_value:,.0f} VND\n"
-            context += f"Lãi/Lỗ: {total_value - total_cost:+,.0f} VND ({(total_value - total_cost)/total_cost*100:+.1f}%)\n"
-        else:
-            total_value = 0
-        
-        # Cash
-        if cash_amount > 0:
-            context += f"\nTIỀN MẶT: {cash_amount:,.0f} VND\n"
-        
-        # Total
-        total_assets = total_value + cash_amount
-        if total_assets > 0:
-            stock_ratio = (total_value / total_assets * 100) if total_assets > 0 else 0
-            cash_ratio = (cash_amount / total_assets * 100) if total_assets > 0 else 0
-            
-            context += f"\nTỔNG TÀI SẢN: {total_assets:,.0f} VND\n"
-            context += f"Phân bổ: {stock_ratio:.1f}% cổ phiếu / {cash_ratio:.1f}% tiền mặt\n"
-        
+        context += f"\nTổng giá trị danh mục: {total_value:,.0f} VND"
         return context
         
     except Exception as e:
@@ -199,24 +115,20 @@ def get_portfolio_context(user_id):
 def chat_with_gpt(message, portfolio_context):
     """Chat with GPT-4o-mini"""
     if not openai_client:
-        return "Xin lỗi, dịch vụ AI chưa được cấu hình."
+        return "Xin lỗi, dịch vụ AI chưa được cấu hình. Vui lòng liên hệ admin."
     
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o-mini",  # Cheapest GPT-4 model
             messages=[
                 {
-                    "role": "system",
+                    "role": "system", 
                     "content": f"""Bạn là AI tư vấn đầu tư chứng khoán Việt Nam.
-
+                    
 {portfolio_context}
 
-Hãy đưa ra lời khuyên về:
-- Phân tích danh mục hiện tại (lãi/lỗ, rủi ro)
-- Phân bổ tài sản (cổ phiếu vs tiền mặt)
-- Chiến lược đầu tư phù hợp
-
-Trả lời ngắn gọn, thực tế, bằng tiếng Việt."""
+Hãy đưa ra lời khuyên đầu tư hữu ích, ngắn gọn và thực tế.
+Nếu danh mục trống, gợi ý các nguyên tắc đầu tư cơ bản."""
                 },
                 {
                     "role": "user",
@@ -230,8 +142,17 @@ Trả lời ngắn gọn, thực tế, bằng tiếng Việt."""
         return response.choices[0].message.content
         
     except Exception as e:
-        print(f"OpenAI error: {e}")
-        return "Xin lỗi, AI không thể trả lời lúc này."
+        error_msg = str(e)
+        print(f"OpenAI error: {error_msg}")
+        
+        if "rate_limit" in error_msg.lower():
+            return "Xin lỗi, AI đang quá tải. Vui lòng thử lại sau 1 phút."
+        elif "quota" in error_msg.lower():
+            return "Xin lỗi, đã hết quota API. Vui lòng nạp thêm credit."
+        elif "invalid" in error_msg.lower():
+            return "Xin lỗi, API key không hợp lệ. Vui lòng kiểm tra cấu hình."
+        else:
+            return "Xin lỗi, AI không thể trả lời lúc này. Vui lòng thử lại."
 
 
 # ========================================================================
@@ -240,68 +161,24 @@ Trả lời ngắn gọn, thực tế, bằng tiếng Việt."""
 
 @app.route('/', methods=['GET'])
 def index():
+    """Root endpoint"""
     return jsonify({
         'service': 'AI Advisor Backend API',
-        'version': '2.0 (with Cash & P&L)',
-        'status': 'running'
+        'version': '1.0 (OpenAI)',
+        'status': 'running',
+        'ai': 'GPT-4o-mini' if openai_client else 'Not configured'
     })
 
 
 @app.route('/health', methods=['GET'])
 def health():
-    prices = load_latest_prices()
+    """Health check"""
     return jsonify({
         'status': 'healthy',
         'openai': openai_client is not None,
         'database': 'sqlite',
-        'prices_loaded': len(prices),
         'timestamp': datetime.now().isoformat()
     })
-
-
-@app.route('/api/prices/latest', methods=['GET'])
-def get_latest_prices():
-    """Get latest EOD prices"""
-    try:
-        if not os.path.exists(PRICES_FILE):
-            return jsonify({
-                'success': False,
-                'error': 'Prices file not found'
-            }), 404
-        
-        with open(PRICES_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        return jsonify({
-            'success': True,
-            'updated_at': data.get('updated_at'),
-            'prices': data.get('prices', {})
-        })
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/prices/<ticker>', methods=['GET'])
-def get_ticker_price(ticker):
-    """Get price for specific ticker"""
-    try:
-        prices = load_latest_prices()
-        
-        if ticker.upper() not in prices:
-            return jsonify({
-                'success': False,
-                'error': f'Price not found for {ticker}'
-            }), 404
-        
-        return jsonify({
-            'success': True,
-            'ticker': ticker.upper(),
-            'data': prices[ticker.upper()]
-        })
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/signals', methods=['GET'])
@@ -344,47 +221,27 @@ def get_signals():
 
 @app.route('/api/portfolio', methods=['GET'])
 def get_portfolio():
-    """Get user portfolio with current prices and P&L"""
+    """Get user portfolio"""
     user_id = request.args.get('user_id', 1, type=int)
     
     session = Session()
     try:
-        # Get stocks
         portfolios = session.query(Portfolio).filter_by(user_id=user_id).all()
-        
-        # Get cash
-        cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
-        cash_amount = cash_pos.cash_amount if cash_pos else 0
-        
-        # Load prices
-        prices = load_latest_prices()
         
         portfolio_data = []
         for p in portfolios:
-            current_price = prices.get(p.ticker, {}).get('price', 0)
-            cost = p.quantity * p.avg_price
-            current_value = p.quantity * current_price if current_price > 0 else cost
-            pl_amount = current_value - cost
-            pl_pct = (pl_amount / cost * 100) if cost > 0 else 0
-            
             portfolio_data.append({
                 'id': p.id,
                 'ticker': p.ticker,
                 'quantity': p.quantity,
                 'avg_price': p.avg_price,
-                'current_price': current_price,
-                'cost': cost,
-                'current_value': current_value,
-                'pl_amount': pl_amount,
-                'pl_pct': pl_pct,
                 'created_at': p.created_at.isoformat() if p.created_at else None,
                 'updated_at': p.updated_at.isoformat() if p.updated_at else None
             })
         
         return jsonify({
             'success': True,
-            'portfolio': portfolio_data,
-            'cash': cash_amount
+            'portfolio': portfolio_data
         })
         
     except Exception as e:
@@ -404,7 +261,10 @@ def add_portfolio():
     price = float(data.get('price', 0))
     
     if not ticker or quantity <= 0 or price <= 0:
-        return jsonify({'success': False, 'error': 'Invalid input'}), 400
+        return jsonify({
+            'success': False,
+            'error': 'Invalid input'
+        }), 400
     
     session = Session()
     try:
@@ -456,58 +316,6 @@ def delete_portfolio(ticker):
         session.delete(portfolio)
         session.commit()
         return jsonify({'success': True, 'message': f'Deleted {ticker}'})
-        
-    except Exception as e:
-        session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        session.close()
-
-
-@app.route('/api/cash', methods=['GET'])
-def get_cash():
-    """Get cash position"""
-    user_id = request.args.get('user_id', 1, type=int)
-    
-    session = Session()
-    try:
-        cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
-        
-        return jsonify({
-            'success': True,
-            'cash': cash_pos.cash_amount if cash_pos else 0
-        })
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        session.close()
-
-
-@app.route('/api/cash', methods=['POST'])
-def update_cash():
-    """Update cash position"""
-    data = request.json
-    
-    user_id = data.get('user_id', 1)
-    cash_amount = float(data.get('cash', 0))
-    
-    if cash_amount < 0:
-        return jsonify({'success': False, 'error': 'Cash cannot be negative'}), 400
-    
-    session = Session()
-    try:
-        cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
-        
-        if cash_pos:
-            cash_pos.cash_amount = cash_amount
-            cash_pos.updated_at = datetime.now()
-        else:
-            cash_pos = CashPosition(user_id=user_id, cash_amount=cash_amount)
-            session.add(cash_pos)
-        
-        session.commit()
-        return jsonify({'success': True, 'message': 'Cash updated', 'cash': cash_amount})
         
     except Exception as e:
         session.rollback()
@@ -594,7 +402,7 @@ def migrate():
         return jsonify({
             'success': True,
             'message': 'Migration successful',
-            'tables': ['signals', 'portfolios', 'cash_positions', 'chat_history']
+            'tables': ['signals', 'portfolios', 'chat_history']
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -605,14 +413,9 @@ def migrate():
 # ========================================================================
 
 try:
-    print("\n🚀 Starting AI Advisor Backend v2.0...")
+    print("\n🚀 Starting AI Advisor Backend...")
     Base.metadata.create_all(engine)
     print("✅ Database initialized")
-    
-    # Load prices
-    prices = load_latest_prices()
-    print(f"💰 Loaded {len(prices)} stock prices")
-    
 except Exception as e:
     print(f"⚠️ Warning: {e}")
 
@@ -624,7 +427,7 @@ except Exception as e:
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 10000))
     print(f"\n{'='*70}")
-    print("🚀 AI ADVISOR BACKEND v2.0")
+    print("🚀 AI ADVISOR BACKEND (OpenAI)")
     print(f"{'='*70}")
     print(f"AI: {'✅ GPT-4o-mini' if openai_client else '❌ Not configured'}")
     print(f"Database: {DATABASE_URL}")
