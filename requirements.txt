@@ -1,23 +1,17 @@
 # AI ADVISOR BACKEND - MINIMAL REQUIREMENTS
-# Optimized for fast Render deployment
+# Fixed for Python 3.13 compatibility
 
 # Flask web framework
 Flask==3.0.0
 Flask-CORS==4.0.0
 gunicorn==21.2.0
 
-# Database
-SQLAlchemy==2.0.23
+# Database - UPGRADED for Python 3.13 compatibility
+SQLAlchemy==2.0.35
 
-# OpenAI (lighter than Google libraries)
+# OpenAI
 openai==1.55.3
 
 # Basic utilities
 python-dotenv==1.0.0
 requests==2.32.3
-
-# Removed heavy packages:
-# - pandas (not needed for API)
-# - vnstock (not needed if not scanning)
-# - matplotlib, seaborn (not needed)
-# - numpy (not needed without pandas)
