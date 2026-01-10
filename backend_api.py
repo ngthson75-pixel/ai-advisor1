@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI ADVISOR - BACKEND API (PRODUCTION READY)
-Fixed for Render deployment with proper database path
+AI ADVISOR - BACKEND API (OpenAI Version)
+Simple, fast deployment with GPT-4o-mini
 """
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
 import os
-import google.generativeai as genai
+from openai import OpenAI
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -18,21 +18,17 @@ from sqlalchemy.orm import sessionmaker
 app = Flask(__name__)
 CORS(app)
 
-# Configure Gemini
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    # ✅ Use new model (gemini-pro is deprecated)
-    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-    print("✅ Gemini API configured with gemini-1.5-flash")
+# Configure OpenAI
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+if OPENAI_API_KEY:
+    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    print("✅ OpenAI API configured")
 else:
-    print("⚠️ WARNING: GEMINI_API_KEY not set")
-    gemini_model = None
+    print("⚠️ WARNING: OPENAI_API_KEY not set")
+    openai_client = None
 
-# Database setup - FIXED for Render
+# Database setup
 Base = declarative_base()
-
-# ✅ Use /tmp directory on Render (ephemeral but works)
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:////tmp/ai_advisor.db')
 print(f"📊 Database: {DATABASE_URL}")
 
@@ -96,57 +92,67 @@ def get_portfolio_context(user_id):
         portfolios = session.query(Portfolio).filter_by(user_id=user_id).all()
         
         if not portfolios:
-            return "Portfolio: Empty (no stocks added yet)"
+            return "Danh mục đầu tư: Trống (chưa có cổ phiếu nào)"
         
-        context = "Current Portfolio:\n"
+        context = "Danh mục đầu tư hiện tại:\n"
         total_value = 0
         
         for p in portfolios:
             value = p.quantity * p.avg_price
             total_value += value
-            context += f"- {p.ticker}: {p.quantity} shares @ {p.avg_price:,.0f} VND = {value:,.0f} VND\n"
+            context += f"- {p.ticker}: {p.quantity} cổ phiếu @ {p.avg_price:,.0f} VND = {value:,.0f} VND\n"
         
-        context += f"\nTotal Portfolio Value: {total_value:,.0f} VND"
+        context += f"\nTổng giá trị danh mục: {total_value:,.0f} VND"
         return context
         
     except Exception as e:
-        print(f"Error getting portfolio context: {e}")
-        return "Portfolio: Error loading data"
+        print(f"Error getting portfolio: {e}")
+        return "Danh mục: Lỗi khi tải dữ liệu"
     finally:
         session.close()
 
 
-def chat_with_gemini(message, portfolio_context):
-    """Chat with Gemini AI"""
-    if not gemini_model:
+def chat_with_gpt(message, portfolio_context):
+    """Chat with GPT-4o-mini"""
+    if not openai_client:
         return "Xin lỗi, dịch vụ AI chưa được cấu hình. Vui lòng liên hệ admin."
     
     try:
-        prompt = f"""Bạn là AI tư vấn đầu tư chứng khoán Việt Nam.
-
-Danh mục của người dùng:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",  # Cheapest GPT-4 model
+            messages=[
+                {
+                    "role": "system", 
+                    "content": f"""Bạn là AI tư vấn đầu tư chứng khoán Việt Nam.
+                    
 {portfolio_context}
 
-Câu hỏi: {message}
-
-Hãy đưa ra lời khuyên đầu tư hữu ích bằng tiếng Việt. Ngắn gọn và thực tế.
-Nếu danh mục trống, gợi ý các nguyên tắc đầu tư cơ bản.
-"""
+Hãy đưa ra lời khuyên đầu tư hữu ích, ngắn gọn và thực tế.
+Nếu danh mục trống, gợi ý các nguyên tắc đầu tư cơ bản."""
+                },
+                {
+                    "role": "user",
+                    "content": message
+                }
+            ],
+            max_tokens=500,
+            temperature=0.7
+        )
         
-        response = gemini_model.generate_content(prompt)
-        return response.text
+        return response.choices[0].message.content
         
     except Exception as e:
         error_msg = str(e)
-        print(f"Gemini error: {error_msg}")
+        print(f"OpenAI error: {error_msg}")
         
-        # Handle specific errors
-        if "429" in error_msg:
+        if "rate_limit" in error_msg.lower():
             return "Xin lỗi, AI đang quá tải. Vui lòng thử lại sau 1 phút."
         elif "quota" in error_msg.lower():
-            return "Xin lỗi, đã hết quota API. Vui lòng thử lại sau."
+            return "Xin lỗi, đã hết quota API. Vui lòng nạp thêm credit."
+        elif "invalid" in error_msg.lower():
+            return "Xin lỗi, API key không hợp lệ. Vui lòng kiểm tra cấu hình."
         else:
-            return f"Xin lỗi, AI không thể trả lời lúc này. Vui lòng thử lại."
+            return "Xin lỗi, AI không thể trả lời lúc này. Vui lòng thử lại."
 
 
 # ========================================================================
@@ -158,15 +164,9 @@ def index():
     """Root endpoint"""
     return jsonify({
         'service': 'AI Advisor Backend API',
-        'version': '1.0',
+        'version': '1.0 (OpenAI)',
         'status': 'running',
-        'endpoints': {
-            'health': '/health',
-            'signals': '/api/signals',
-            'portfolio': '/api/portfolio',
-            'chat': '/api/chat',
-            'migrate': '/api/migrate'
-        }
+        'ai': 'GPT-4o-mini' if openai_client else 'Not configured'
     })
 
 
@@ -175,7 +175,7 @@ def health():
     """Health check"""
     return jsonify({
         'status': 'healthy',
-        'gemini': gemini_model is not None,
+        'openai': openai_client is not None,
         'database': 'sqlite',
         'timestamp': datetime.now().isoformat()
     })
@@ -202,7 +202,7 @@ def get_signals():
                 'strength': s.strength or 0,
                 'stock_type': s.stock_type,
                 'rsi': s.rsi,
-                'date': s.date or s.created_at.strftime('%Y-%m-%d') if s.created_at else None,
+                'date': s.date or (s.created_at.strftime('%Y-%m-%d') if s.created_at else None),
                 'action': s.action,
                 'created_at': s.created_at.isoformat() if s.created_at else None
             })
@@ -214,7 +214,6 @@ def get_signals():
         })
         
     except Exception as e:
-        print(f"Error in get_signals: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         session.close()
@@ -246,7 +245,6 @@ def get_portfolio():
         })
         
     except Exception as e:
-        print(f"Error in get_portfolio: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         session.close()
@@ -265,26 +263,23 @@ def add_portfolio():
     if not ticker or quantity <= 0 or price <= 0:
         return jsonify({
             'success': False,
-            'error': 'Invalid input: ticker, quantity, and price are required'
+            'error': 'Invalid input'
         }), 400
     
     session = Session()
     try:
-        # Check if exists
         existing = session.query(Portfolio).filter_by(
             user_id=user_id,
             ticker=ticker
         ).first()
         
         if existing:
-            # Update existing - calculate new average
             new_total_quantity = existing.quantity + quantity
             new_total_value = (existing.quantity * existing.avg_price) + (quantity * price)
             existing.quantity = new_total_quantity
             existing.avg_price = new_total_value / new_total_quantity
             existing.updated_at = datetime.now()
         else:
-            # Add new
             portfolio = Portfolio(
                 user_id=user_id,
                 ticker=ticker,
@@ -294,15 +289,10 @@ def add_portfolio():
             session.add(portfolio)
         
         session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Portfolio updated'
-        })
+        return jsonify({'success': True, 'message': 'Portfolio updated'})
         
     except Exception as e:
         session.rollback()
-        print(f"Error in add_portfolio: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         session.close()
@@ -321,22 +311,14 @@ def delete_portfolio(ticker):
         ).first()
         
         if not portfolio:
-            return jsonify({
-                'success': False,
-                'error': 'Stock not found in portfolio'
-            }), 404
+            return jsonify({'success': False, 'error': 'Not found'}), 404
         
         session.delete(portfolio)
         session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': f'Deleted {ticker}'
-        })
+        return jsonify({'success': True, 'message': f'Deleted {ticker}'})
         
     except Exception as e:
         session.rollback()
-        print(f"Error in delete_portfolio: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         session.close()
@@ -351,20 +333,13 @@ def chat():
     message = data.get('message', '').strip()
     
     if not message:
-        return jsonify({
-            'success': False,
-            'error': 'Message is required'
-        }), 400
+        return jsonify({'success': False, 'error': 'Message required'}), 400
     
     session = Session()
     try:
-        # Get portfolio context
         portfolio_context = get_portfolio_context(user_id)
+        ai_response = chat_with_gpt(message, portfolio_context)
         
-        # Get AI response
-        ai_response = chat_with_gemini(message, portfolio_context)
-        
-        # Save to history
         chat_entry = ChatHistory(
             user_id=user_id,
             message=message,
@@ -374,14 +349,10 @@ def chat():
         session.add(chat_entry)
         session.commit()
         
-        return jsonify({
-            'success': True,
-            'response': ai_response
-        })
+        return jsonify({'success': True, 'response': ai_response})
         
     except Exception as e:
         session.rollback()
-        print(f"Error in chat: {e}")
         return jsonify({
             'success': False,
             'error': str(e),
@@ -414,39 +385,10 @@ def get_chat_history():
                 'created_at': h.created_at.isoformat() if h.created_at else None
             })
         
-        # Reverse to show oldest first
         history_data.reverse()
-        
-        return jsonify({
-            'success': True,
-            'history': history_data
-        })
+        return jsonify({'success': True, 'history': history_data})
         
     except Exception as e:
-        print(f"Error in get_chat_history: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        session.close()
-
-
-@app.route('/api/chat/history', methods=['DELETE'])
-def clear_chat_history():
-    """Clear chat history"""
-    user_id = request.args.get('user_id', 1, type=int)
-    
-    session = Session()
-    try:
-        session.query(ChatHistory).filter_by(user_id=user_id).delete()
-        session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Chat history cleared'
-        })
-        
-    except Exception as e:
-        session.rollback()
-        print(f"Error in clear_chat_history: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         session.close()
@@ -457,16 +399,12 @@ def migrate():
     """Run database migration"""
     try:
         Base.metadata.create_all(engine)
-        print("✅ Database tables created successfully")
-        
         return jsonify({
             'success': True,
-            'message': 'Complete migration successful',
-            'tables_created': ['signals', 'portfolios', 'chat_history']
+            'message': 'Migration successful',
+            'tables': ['signals', 'portfolios', 'chat_history']
         })
-        
     except Exception as e:
-        print(f"Error in migrate: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -474,13 +412,12 @@ def migrate():
 # STARTUP
 # ========================================================================
 
-# Create tables on startup
 try:
-    print("\n🚀 Starting AI Advisor Backend API...")
+    print("\n🚀 Starting AI Advisor Backend...")
     Base.metadata.create_all(engine)
     print("✅ Database initialized")
 except Exception as e:
-    print(f"⚠️ Database initialization warning: {e}")
+    print(f"⚠️ Warning: {e}")
 
 
 # ========================================================================
@@ -490,9 +427,9 @@ except Exception as e:
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 10000))
     print(f"\n{'='*70}")
-    print("🚀 AI ADVISOR BACKEND API")
+    print("🚀 AI ADVISOR BACKEND (OpenAI)")
     print(f"{'='*70}")
-    print(f"Gemini: {'✅ Configured' if gemini_model else '❌ Not configured'}")
+    print(f"AI: {'✅ GPT-4o-mini' if openai_client else '❌ Not configured'}")
     print(f"Database: {DATABASE_URL}")
     print(f"Port: {port}")
     print(f"{'='*70}\n")
