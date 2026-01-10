@@ -184,3 +184,14 @@ function App() {
 }
 
 export default App
+import SignalHistory from './components/SignalHistory';
+
+// Trong component:
+<div className="homepage">
+  <LandingPage />
+  
+  {/* ADD THIS: */}
+  <SignalHistory />
+  
+  {/* Rest of content */}
+</div>
