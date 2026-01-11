@@ -1,358 +1,584 @@
 {
-  "timestamp": "2026-01-11T20:38:58.833717",
-  "total_tickers": 70,
-  "success_count": 70,
+  "date": "2026-01-11",
+  "timestamp": "2026-01-11T21:07:01.534397",
+  "total_tickers": 115,
+  "success_count": 115,
   "fail_count": 0,
   "prices": {
-    "DHG": {
-      "price": 102.9,
-      "change_percent": 0.0,
-      "volume": 15900
-    },
-    "KBC": {
-      "price": 36.0,
-      "change_percent": 1.1235955056179736,
-      "volume": 9412500
-    },
-    "VC3": {
-      "price": 27.0,
-      "change_percent": 0.7462686567164152,
-      "volume": 1159400
-    },
-    "HVN": {
-      "price": 26.85,
-      "change_percent": 1.1299435028248614,
-      "volume": 1654500
-    },
-    "GAS": {
-      "price": 97.1,
-      "change_percent": 6.004366812227074,
-      "volume": 4592600
-    },
-    "MSB": {
-      "price": 12.5,
-      "change_percent": -1.185770750988145,
-      "volume": 7926600
-    },
-    "TNG": {
-      "price": 19.2,
-      "change_percent": 4.347826086956526,
-      "volume": 2463100
-    },
-    "SHB": {
-      "price": 16.5,
-      "change_percent": -0.6024096385542254,
-      "volume": 68480400
-    },
-    "VJC": {
-      "price": 198.7,
-      "change_percent": -2.1182266009852273,
-      "volume": 2533600
-    },
-    "DCM": {
-      "price": 34.65,
-      "change_percent": 0.0,
-      "volume": 2942900
-    },
-    "EVE": {
-      "price": 10.25,
-      "change_percent": 0.0,
-      "volume": 15800
-    },
-    "NRC": {
-      "price": 5.9,
-      "change_percent": 0.0,
-      "volume": 550900
-    },
-    "BVH": {
-      "price": 67.5,
-      "change_percent": 1.9637462235649505,
-      "volume": 1864400
-    },
-    "VNM": {
-      "price": 61.0,
-      "change_percent": -1.929260450160776,
-      "volume": 4184100
-    },
-    "PNJ": {
-      "price": 103.0,
-      "change_percent": 0.0,
-      "volume": 727400
-    },
-    "EIB": {
-      "price": 21.3,
-      "change_percent": -2.517162471395884,
-      "volume": 7257700
-    },
-    "VHM": {
-      "price": 140.0,
-      "change_percent": 0.6470165348670063,
-      "volume": 9789300
-    },
-    "REE": {
-      "price": 61.0,
-      "change_percent": -1.1345218800648342,
-      "volume": 781600
-    },
-    "STB": {
-      "price": 51.8,
-      "change_percent": -3.1775700934579496,
-      "volume": 21551500
-    },
-    "MBB": {
-      "price": 27.3,
-      "change_percent": 2.631578947368418,
-      "volume": 66065300
-    },
-    "TDH": {
-      "price": 4.2,
-      "change_percent": 0.0,
-      "volume": 107900
-    },
-    "HDB": {
-      "price": 27.9,
-      "change_percent": -3.1250000000000075,
-      "volume": 29852300
-    },
-    "DIG": {
-      "price": 16.0,
-      "change_percent": -5.88235294117647,
-      "volume": 30057000
-    },
-    "PLX": {
-      "price": 43.0,
-      "change_percent": 3.614457831325301,
-      "volume": 8135100
-    },
-    "SSI": {
-      "price": 30.35,
-      "change_percent": -0.6546644844517162,
-      "volume": 29015400
-    },
-    "PDR": {
-      "price": 17.25,
-      "change_percent": -6.756756756756757,
-      "volume": 34769500
-    },
-    "TPB": {
-      "price": 17.6,
-      "change_percent": -0.2832861189801539,
-      "volume": 23633700
-    },
-    "SAB": {
-      "price": 48.95,
-      "change_percent": 1.3457556935817925,
-      "volume": 2041500
-    },
-    "PVB": {
-      "price": 35.0,
-      "change_percent": -2.7777777777777777,
-      "volume": 430200
-    },
-    "THD": {
-      "price": 30.3,
-      "change_percent": -0.3289473684210456,
-      "volume": 5600
-    },
-    "DGC": {
-      "price": 62.7,
-      "change_percent": -0.1592356687897999,
-      "volume": 4030000
-    },
-    "MSN": {
-      "price": 76.5,
-      "change_percent": -2.29885057471264,
-      "volume": 5786600
-    },
-    "BID": {
-      "price": 46.05,
-      "change_percent": 6.96864111498258,
-      "volume": 22918600
-    },
-    "AAA": {
-      "price": 7.76,
-      "change_percent": -0.8939974457215872,
-      "volume": 1333700
-    },
-    "NVL": {
-      "price": 12.55,
-      "change_percent": -5.639097744360902,
-      "volume": 22081700
-    },
-    "TCM": {
-      "price": 27.1,
-      "change_percent": 2.2641509433962317,
-      "volume": 2328300
-    },
-    "ACB": {
-      "price": 24.55,
-      "change_percent": 0.0,
-      "volume": 16460000
-    },
-    "TCB": {
-      "price": 36.65,
-      "change_percent": 1.8055555555555516,
-      "volume": 28290500
-    },
-    "GEX": {
-      "price": 39.25,
-      "change_percent": -6.547619047619048,
-      "volume": 15147400
-    },
-    "VGC": {
-      "price": 44.8,
-      "change_percent": 2.98850574712643,
-      "volume": 2142400
-    },
-    "HAG": {
-      "price": 16.6,
-      "change_percent": -3.4883720930232434,
-      "volume": 15694100
-    },
-    "PVD": {
-      "price": 29.5,
-      "change_percent": -2.960526315789469,
-      "volume": 7788200
-    },
-    "CTG": {
-      "price": 40.75,
-      "change_percent": 6.67539267015706,
-      "volume": 38922900
-    },
-    "VPB": {
-      "price": 28.25,
-      "change_percent": -3.418803418803419,
-      "volume": 37610200
-    },
-    "VCI": {
-      "price": 33.55,
-      "change_percent": -1.3235294117647143,
-      "volume": 7731100
-    },
-    "POW": {
-      "price": 14.4,
-      "change_percent": 2.85714285714286,
-      "volume": 24392800
-    },
-    "VIB": {
-      "price": 17.95,
-      "change_percent": -0.27777777777778173,
-      "volume": 10177300
-    },
-    "FPT": {
-      "price": 97.4,
-      "change_percent": 0.9326424870466379,
-      "volume": 10048700
-    },
-    "HSG": {
-      "price": 15.6,
-      "change_percent": -0.9523809523809548,
-      "volume": 2336100
-    },
-    "VCB": {
-      "price": 68.0,
-      "change_percent": 6.750392464678175,
-      "volume": 32481400
-    },
-    "PAN": {
-      "price": 26.7,
-      "change_percent": -0.5586592178771029,
-      "volume": 1512100
-    },
-    "VRE": {
-      "price": 35.0,
-      "change_percent": -2.506963788300832,
-      "volume": 15581100
-    },
-    "HUT": {
-      "price": 15.5,
-      "change_percent": -2.5157232704402537,
-      "volume": 2109800
-    },
-    "GVR": {
-      "price": 31.6,
-      "change_percent": 5.158069883527457,
-      "volume": 9394000
-    },
-    "PVC": {
-      "price": 12.8,
-      "change_percent": 0.7874015748031609,
-      "volume": 2806200
-    },
-    "BSR": {
-      "price": 19.7,
-      "change_percent": 5.9139784946236436,
-      "volume": 38812900
-    },
-    "HPG": {
-      "price": 26.2,
-      "change_percent": -0.7575757575757549,
-      "volume": 35089300
-    },
-    "DBC": {
-      "price": 26.0,
-      "change_percent": -2.0715630885122436,
-      "volume": 8728200
-    },
-    "OCB": {
-      "price": 11.8,
-      "change_percent": -1.2552301255230007,
-      "volume": 2872100
-    },
-    "PVI": {
-      "price": 93.5,
-      "change_percent": -2.604166666666667,
-      "volume": 78700
-    },
-    "MWG": {
-      "price": 86.0,
-      "change_percent": -1.7142857142857144,
-      "volume": 6472200
-    },
-    "GMD": {
-      "price": 62.0,
-      "change_percent": -1.5873015873015872,
-      "volume": 820800
-    },
-    "NT2": {
-      "price": 24.4,
-      "change_percent": -2.2044088176352736,
-      "volume": 1791200
-    },
-    "VIC": {
-      "price": 176.0,
-      "change_percent": -0.33975084937712025,
-      "volume": 5389600
-    },
-    "LPB": {
-      "price": 41.2,
-      "change_percent": -1.904761904761898,
-      "volume": 2099000
+    "DPM": {
+      "price": 23750.0,
+      "change_percent": 1.0638297872340425,
+      "volume": 6041200
     },
     "PVS": {
-      "price": 36.7,
+      "price": 36700.0,
       "change_percent": -1.3440860215053763,
       "volume": 6352000
     },
-    "SHS": {
-      "price": 18.8,
-      "change_percent": -4.568527918781719,
-      "volume": 18677300
+    "MSN": {
+      "price": 76500.0,
+      "change_percent": -2.29885057471264,
+      "volume": 5786600
+    },
+    "BVB": {
+      "price": 13100.0,
+      "change_percent": -1.5037593984962485,
+      "volume": 1631300
+    },
+    "VPB": {
+      "price": 28250.0,
+      "change_percent": -3.418803418803419,
+      "volume": 37610200
+    },
+    "PAN": {
+      "price": 26700.0,
+      "change_percent": -0.5586592178771029,
+      "volume": 1512100
+    },
+    "IDC": {
+      "price": 39000.0,
+      "change_percent": 2.9023746701847,
+      "volume": 4379400
+    },
+    "BST": {
+      "price": 10000.0,
+      "change_percent": 5.263157894736842,
+      "volume": 3000
+    },
+    "GAS": {
+      "price": 97100.0,
+      "change_percent": 6.004366812227074,
+      "volume": 4592600
+    },
+    "PVB": {
+      "price": 35000.0,
+      "change_percent": -2.7777777777777777,
+      "volume": 430200
+    },
+    "DTT": {
+      "price": 16000.0,
+      "change_percent": -1.2345679012345634,
+      "volume": 1000
+    },
+    "VHM": {
+      "price": 140000.0,
+      "change_percent": 0.6470165348670063,
+      "volume": 9789300
+    },
+    "VAB": {
+      "price": 10300.0,
+      "change_percent": 0.0,
+      "volume": 450200
+    },
+    "PVI": {
+      "price": 93500.0,
+      "change_percent": -2.604166666666667,
+      "volume": 78700
     },
     "VCS": {
-      "price": 43.3,
+      "price": 43300.0,
       "change_percent": -0.2304147465437821,
       "volume": 44300
     },
+    "SGB": {
+      "price": 12400.0,
+      "change_percent": 0.0,
+      "volume": 3000
+    },
+    "HDG": {
+      "price": 26300.0,
+      "change_percent": 0.0,
+      "volume": 5291300
+    },
+    "FPT": {
+      "price": 97400.0,
+      "change_percent": 0.9326424870466379,
+      "volume": 10048700
+    },
+    "STB": {
+      "price": 51800.0,
+      "change_percent": -3.1775700934579496,
+      "volume": 21551500
+    },
+    "DXG": {
+      "price": 15500.0,
+      "change_percent": -6.0606060606060606,
+      "volume": 33186300
+    },
+    "NKG": {
+      "price": 14800.0,
+      "change_percent": -1.0033444816053416,
+      "volume": 4497600
+    },
+    "VRE": {
+      "price": 35000.0,
+      "change_percent": -2.506963788300832,
+      "volume": 15581100
+    },
+    "EIB": {
+      "price": 21300.0,
+      "change_percent": -2.517162471395884,
+      "volume": 7257700
+    },
+    "BID": {
+      "price": 46050.0,
+      "change_percent": 6.96864111498258,
+      "volume": 22918600
+    },
+    "QBS": {
+      "price": 600.0,
+      "change_percent": 0.0,
+      "volume": 402700
+    },
+    "DXS": {
+      "price": 8160.0,
+      "change_percent": -6.955530216647657,
+      "volume": 4351600
+    },
+    "SD2": {
+      "price": 4100.0,
+      "change_percent": 10.810810810810796,
+      "volume": 100
+    },
+    "SD5": {
+      "price": 9200.0,
+      "change_percent": 1.098901098901095,
+      "volume": 6600
+    },
+    "GMD": {
+      "price": 62000.0,
+      "change_percent": -1.5873015873015872,
+      "volume": 820800
+    },
+    "DGC": {
+      "price": 62700.0,
+      "change_percent": -0.1592356687897999,
+      "volume": 4030000
+    },
+    "GVR": {
+      "price": 31600.0,
+      "change_percent": 5.158069883527457,
+      "volume": 9394000
+    },
+    "HT1": {
+      "price": 16500.0,
+      "change_percent": 4.430379746835438,
+      "volume": 1314400
+    },
+    "HTP": {
+      "price": 1300.0,
+      "change_percent": 0.0,
+      "volume": 392300
+    },
+    "SSI": {
+      "price": 30350.0,
+      "change_percent": -0.6546644844517162,
+      "volume": 29015400
+    },
+    "NAB": {
+      "price": 14650.0,
+      "change_percent": 0.3424657534246624,
+      "volume": 1573300
+    },
+    "L10": {
+      "price": 25450.0,
+      "change_percent": 1.7999999999999972,
+      "volume": 200
+    },
+    "NT2": {
+      "price": 24400.0,
+      "change_percent": -2.2044088176352736,
+      "volume": 1791200
+    },
+    "ABB": {
+      "price": 15800.0,
+      "change_percent": 0.0,
+      "volume": 8869800
+    },
+    "VCI": {
+      "price": 33550.0,
+      "change_percent": -1.3235294117647143,
+      "volume": 7731100
+    },
+    "OCB": {
+      "price": 11800.0,
+      "change_percent": -1.2552301255230007,
+      "volume": 2872100
+    },
+    "VIG": {
+      "price": 5700.0,
+      "change_percent": 0.0,
+      "volume": 215100
+    },
+    "HHS": {
+      "price": 11200.0,
+      "change_percent": -6.666666666666672,
+      "volume": 8035600
+    },
+    "PVT": {
+      "price": 20300.0,
+      "change_percent": -2.168674698795177,
+      "volume": 6804500
+    },
+    "SD9": {
+      "price": 11400.0,
+      "change_percent": 0.8849557522123862,
+      "volume": 11600
+    },
+    "SHB": {
+      "price": 16500.0,
+      "change_percent": -0.6024096385542254,
+      "volume": 68480400
+    },
+    "KHP": {
+      "price": 12400.0,
+      "change_percent": -0.7999999999999973,
+      "volume": 10200
+    },
+    "SDN": {
+      "price": 26000.0,
+      "change_percent": 0.0,
+      "volume": 100
+    },
+    "BVH": {
+      "price": 67500.0,
+      "change_percent": 1.9637462235649505,
+      "volume": 1864400
+    },
+    "HPG": {
+      "price": 26200.0,
+      "change_percent": -0.7575757575757549,
+      "volume": 35089300
+    },
+    "VJC": {
+      "price": 198700.0,
+      "change_percent": -2.1182266009852273,
+      "volume": 2533600
+    },
+    "BAB": {
+      "price": 12700.0,
+      "change_percent": 0.0,
+      "volume": 15400
+    },
+    "POM": {
+      "price": 6000.0,
+      "change_percent": 9.090909090909092,
+      "volume": 3041500
+    },
+    "VCB": {
+      "price": 68000.0,
+      "change_percent": 6.750392464678175,
+      "volume": 32481400
+    },
+    "SJD": {
+      "price": 14000.0,
+      "change_percent": -0.3558718861210015,
+      "volume": 31300
+    },
+    "POW": {
+      "price": 14400.0,
+      "change_percent": 2.85714285714286,
+      "volume": 24392800
+    },
+    "SCR": {
+      "price": 7210.0,
+      "change_percent": -3.480589022757695,
+      "volume": 4687000
+    },
+    "PGB": {
+      "price": 12600.0,
+      "change_percent": -0.7874015748031469,
+      "volume": 5100
+    },
+    "TCB": {
+      "price": 36650.0,
+      "change_percent": 1.8055555555555516,
+      "volume": 28290500
+    },
+    "DBC": {
+      "price": 26000.0,
+      "change_percent": -2.0715630885122436,
+      "volume": 8728200
+    },
+    "NLG": {
+      "price": 29150.0,
+      "change_percent": -5.967741935483875,
+      "volume": 5587600
+    },
+    "SEA": {
+      "price": 39900.0,
+      "change_percent": 2.307692307692304,
+      "volume": 18900
+    },
+    "ACB": {
+      "price": 24550.0,
+      "change_percent": 0.0,
+      "volume": 16460000
+    },
+    "VNM": {
+      "price": 61000.0,
+      "change_percent": -1.929260450160776,
+      "volume": 4184100
+    },
+    "HUT": {
+      "price": 15500.0,
+      "change_percent": -2.5157232704402537,
+      "volume": 2109800
+    },
+    "LHC": {
+      "price": 113500.0,
+      "change_percent": 1.3392857142857142,
+      "volume": 3600
+    },
+    "AAA": {
+      "price": 7760.0,
+      "change_percent": -0.8939974457215872,
+      "volume": 1333700
+    },
     "PVX": {
-      "price": 1.9,
+      "price": 1900.0,
       "change_percent": 11.764705882352938,
       "volume": 7734600
     },
+    "PLX": {
+      "price": 43000.0,
+      "change_percent": 3.614457831325301,
+      "volume": 8135100
+    },
+    "HSG": {
+      "price": 15600.0,
+      "change_percent": -0.9523809523809548,
+      "volume": 2336100
+    },
+    "REE": {
+      "price": 61000.0,
+      "change_percent": -1.1345218800648342,
+      "volume": 781600
+    },
+    "VBB": {
+      "price": 10400.0,
+      "change_percent": 0.0,
+      "volume": 43900
+    },
+    "PC1": {
+      "price": 23750.0,
+      "change_percent": -2.862985685071572,
+      "volume": 6590000
+    },
+    "BSR": {
+      "price": 19700.0,
+      "change_percent": 5.9139784946236436,
+      "volume": 38812900
+    },
+    "LPB": {
+      "price": 41200.0,
+      "change_percent": -1.904761904761898,
+      "volume": 2099000
+    },
+    "VC3": {
+      "price": 27000.0,
+      "change_percent": 0.7462686567164152,
+      "volume": 1159400
+    },
+    "PDR": {
+      "price": 17250.0,
+      "change_percent": -6.756756756756757,
+      "volume": 34769500
+    },
+    "TNG": {
+      "price": 19200.0,
+      "change_percent": 4.347826086956526,
+      "volume": 2463100
+    },
+    "PNJ": {
+      "price": 103000.0,
+      "change_percent": 0.0,
+      "volume": 727400
+    },
+    "VTO": {
+      "price": 11650.0,
+      "change_percent": -0.4273504273504183,
+      "volume": 109100
+    },
+    "TCM": {
+      "price": 27100.0,
+      "change_percent": 2.2641509433962317,
+      "volume": 2328300
+    },
+    "DTL": {
+      "price": 13050.0,
+      "change_percent": -1.8796992481203008,
+      "volume": 2700
+    },
+    "SAB": {
+      "price": 48950.0,
+      "change_percent": 1.3457556935817925,
+      "volume": 2041500
+    },
+    "KSB": {
+      "price": 16050.0,
+      "change_percent": -5.029585798816556,
+      "volume": 1342600
+    },
+    "PVG": {
+      "price": 7300.0,
+      "change_percent": 1.388888888888884,
+      "volume": 588500
+    },
+    "TPB": {
+      "price": 17600.0,
+      "change_percent": -0.2832861189801539,
+      "volume": 23633700
+    },
+    "TDH": {
+      "price": 4200.0,
+      "change_percent": 0.0,
+      "volume": 107900
+    },
+    "HAG": {
+      "price": 16600.0,
+      "change_percent": -3.4883720930232434,
+      "volume": 15694100
+    },
+    "HVN": {
+      "price": 26850.0,
+      "change_percent": 1.1299435028248614,
+      "volume": 1654500
+    },
+    "CTG": {
+      "price": 40750.0,
+      "change_percent": 6.67539267015706,
+      "volume": 38922900
+    },
+    "DIG": {
+      "price": 16000.0,
+      "change_percent": -5.88235294117647,
+      "volume": 30057000
+    },
+    "PVC": {
+      "price": 12800.0,
+      "change_percent": 0.7874015748031609,
+      "volume": 2806200
+    },
+    "PLP": {
+      "price": 5600.0,
+      "change_percent": -4.761904761904766,
+      "volume": 258700
+    },
+    "HDB": {
+      "price": 27900.0,
+      "change_percent": -3.1250000000000075,
+      "volume": 29852300
+    },
     "CEO": {
-      "price": 18.4,
+      "price": 18400.0,
       "change_percent": -8.910891089108915,
       "volume": 37674700
+    },
+    "MSB": {
+      "price": 12500.0,
+      "change_percent": -1.185770750988145,
+      "volume": 7926600
+    },
+    "HDC": {
+      "price": 20650.0,
+      "change_percent": -5.275229357798175,
+      "volume": 6737000
+    },
+    "MWG": {
+      "price": 86000.0,
+      "change_percent": -1.7142857142857144,
+      "volume": 6472200
+    },
+    "NVL": {
+      "price": 12550.0,
+      "change_percent": -5.639097744360902,
+      "volume": 22081700
+    },
+    "VGC": {
+      "price": 44800.0,
+      "change_percent": 2.98850574712643,
+      "volume": 2142400
+    },
+    "KDH": {
+      "price": 28600.0,
+      "change_percent": -6.229508196721307,
+      "volume": 14633500
+    },
+    "THD": {
+      "price": 30300.0,
+      "change_percent": -0.3289473684210456,
+      "volume": 5600
+    },
+    "KLB": {
+      "price": 16800.0,
+      "change_percent": -0.5917159763313483,
+      "volume": 713400
+    },
+    "VIC": {
+      "price": 176000.0,
+      "change_percent": -0.33975084937712025,
+      "volume": 5389600
+    },
+    "SZC": {
+      "price": 30300.0,
+      "change_percent": 1.5075376884422085,
+      "volume": 967200
+    },
+    "DCM": {
+      "price": 34650.0,
+      "change_percent": 0.0,
+      "volume": 2942900
+    },
+    "CSC": {
+      "price": 16600.0,
+      "change_percent": -4.597701149425271,
+      "volume": 48300
+    },
+    "PVD": {
+      "price": 29500.0,
+      "change_percent": -2.960526315789469,
+      "volume": 7788200
+    },
+    "MBS": {
+      "price": 26200.0,
+      "change_percent": 0.0,
+      "volume": 4767500
+    },
+    "GEX": {
+      "price": 39250.0,
+      "change_percent": -6.547619047619048,
+      "volume": 15147400
+    },
+    "TTB": {
+      "price": 1800.0,
+      "change_percent": 0.0,
+      "volume": 0
+    },
+    "VIB": {
+      "price": 17950.0,
+      "change_percent": -0.27777777777778173,
+      "volume": 10177300
+    },
+    "MBB": {
+      "price": 27300.0,
+      "change_percent": 2.631578947368418,
+      "volume": 66065300
+    },
+    "EVE": {
+      "price": 10250.0,
+      "change_percent": 0.0,
+      "volume": 15800
+    },
+    "KBC": {
+      "price": 36000.0,
+      "change_percent": 1.1235955056179736,
+      "volume": 9412500
+    },
+    "DHG": {
+      "price": 102900.0,
+      "change_percent": 0.0,
+      "volume": 15900
     }
   }
 }
