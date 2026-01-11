@@ -184,13 +184,3 @@ function App() {
 }
 
 export default App
-
-// Trong component:
-<div className="homepage">
-  <LandingPage />
-  
-  {/* ADD THIS: */}
-  <SignalHistory />
-  
-  {/* Rest of content */}
-</div>
