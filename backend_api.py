@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI ADVISOR - COMPLETE BACKEND v3.0
-ALL FEATURES: Signals, EOD Prices, Cash, P&L, Chat AI
+AI ADVISOR - BACKEND v3.2
+AUTO-REFRESH EOD PRICES - 5-day TTL
 """
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import json
 from openai import OpenAI
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+import subprocess
+import threading
 
 # Initialize Flask
 app = Flask(__name__)
@@ -34,24 +36,18 @@ DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:////tmp/ai_advisor.db')
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 
-# EOD prices file
-PRICES_FILE = 'latest_prices.json'
+# EOD file settings
+EOD_FILE = 'latest_prices_all.json'
+EOD_FILE_TTL_DAYS = 5  # Auto-delete after 5 days
+EOD_DOWNLOAD_SCRIPT = 'download_all_eod_prices.py'
 
-# Mock EOD prices (fallback if file doesn't exist)
-MOCK_PRICES = {
-    'VCB': {'price': 90000, 'change_percent': 1.5},
-    'VHM': {'price': 58000, 'change_percent': -0.8},
-    'VIC': {'price': 42000, 'change_percent': 0.5},
-    'TCB': {'price': 26500, 'change_percent': 2.1},
-    'HPG': {'price': 28000, 'change_percent': 1.2},
-    'MBB': {'price': 27500, 'change_percent': -0.3},
-    'FPT': {'price': 145000, 'change_percent': 0.8},
-    'VNM': {'price': 87000, 'change_percent': 0.2}
-}
+# Global prices cache
+PRICES_CACHE = {}
+CACHE_LOADED = False
 
 
 # ========================================================================
-# DATABASE MODELS
+# DATABASE MODELS (same as before)
 # ========================================================================
 
 class Signal(Base):
@@ -105,40 +101,124 @@ class ChatHistory(Base):
 
 
 # ========================================================================
-# HELPER FUNCTIONS
+# EOD FILE MANAGEMENT
 # ========================================================================
 
-def load_latest_prices():
-    """Load EOD prices from file or use mock"""
-    try:
-        if os.path.exists(PRICES_FILE):
-            with open(PRICES_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            return data.get('prices', {})
-    except Exception as e:
-        print(f"Error loading prices: {e}")
+def check_eod_file_age():
+    """Check if EOD file exists and its age"""
+    if not os.path.exists(EOD_FILE):
+        return None, 999  # File doesn't exist
     
-    # Fallback to mock prices
-    return MOCK_PRICES
+    file_time = datetime.fromtimestamp(os.path.getmtime(EOD_FILE))
+    age_days = (datetime.now() - file_time).days
+    
+    return file_time, age_days
+
+
+def load_eod_prices():
+    """Load EOD prices from file"""
+    global PRICES_CACHE, CACHE_LOADED
+    
+    if not os.path.exists(EOD_FILE):
+        print(f"⚠️ EOD file not found: {EOD_FILE}")
+        PRICES_CACHE = {}
+        CACHE_LOADED = True
+        return False
+    
+    try:
+        with open(EOD_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        PRICES_CACHE = data.get('prices', {})
+        file_time, age_days = check_eod_file_age()
+        
+        print(f"✅ Loaded {len(PRICES_CACHE)} prices from EOD file")
+        print(f"📅 File age: {age_days} days (TTL: {EOD_FILE_TTL_DAYS} days)")
+        
+        CACHE_LOADED = True
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error loading EOD file: {e}")
+        PRICES_CACHE = {}
+        CACHE_LOADED = True
+        return False
+
+
+def delete_old_eod_file():
+    """Delete EOD file if older than TTL"""
+    file_time, age_days = check_eod_file_age()
+    
+    if age_days > EOD_FILE_TTL_DAYS:
+        try:
+            os.remove(EOD_FILE)
+            print(f"🗑️ Deleted old EOD file (age: {age_days} days)")
+            return True
+        except Exception as e:
+            print(f"⚠️ Could not delete EOD file: {e}")
+            return False
+    
+    return False
+
+
+def trigger_eod_download_async():
+    """Trigger EOD download in background (async)"""
+    def download_worker():
+        try:
+            print("🔄 Starting EOD download in background...")
+            
+            if os.path.exists(EOD_DOWNLOAD_SCRIPT):
+                subprocess.run(['python', EOD_DOWNLOAD_SCRIPT], check=True)
+                print("✅ EOD download completed!")
+                
+                # Reload cache
+                load_eod_prices()
+            else:
+                print(f"⚠️ Download script not found: {EOD_DOWNLOAD_SCRIPT}")
+                
+        except Exception as e:
+            print(f"❌ EOD download failed: {e}")
+    
+    # Run in background thread
+    thread = threading.Thread(target=download_worker, daemon=True)
+    thread.start()
+    print("🚀 EOD download started in background")
 
 
 def get_current_price(ticker):
-    """Get current price for ticker"""
-    prices = load_latest_prices()
-    if ticker in prices:
-        return prices[ticker].get('price', 0)
-    return 0
+    """
+    Get current price for ticker
+    1. Try EOD file first (fast)
+    2. Fallback to avg_price if not found
+    """
+    global PRICES_CACHE, CACHE_LOADED
+    
+    # Load cache if not loaded yet
+    if not CACHE_LOADED:
+        load_eod_prices()
+    
+    ticker = ticker.upper().strip()
+    
+    # Check cache
+    if ticker in PRICES_CACHE:
+        price_data = PRICES_CACHE[ticker]
+        return price_data.get('price')
+    
+    # Not found in cache
+    return None
 
+
+# ========================================================================
+# PORTFOLIO CONTEXT & AI
+# ========================================================================
 
 def get_portfolio_context(user_id):
-    """Get portfolio context with P&L for AI"""
+    """Get portfolio context with P&L"""
     session = Session()
     try:
         portfolios = session.query(Portfolio).filter_by(user_id=user_id).all()
         cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
         cash = cash_pos.cash_amount if cash_pos else 0
-        
-        prices = load_latest_prices()
         
         if not portfolios and cash == 0:
             return "Danh mục: Trống"
@@ -154,7 +234,11 @@ def get_portfolio_context(user_id):
                 cost = p.quantity * p.avg_price
                 total_cost += cost
                 
-                current_price = prices.get(p.ticker, {}).get('price', p.avg_price)
+                # Get current price from EOD file
+                current_price = get_current_price(p.ticker)
+                if not current_price:
+                    current_price = p.avg_price  # Fallback
+                
                 current_value = p.quantity * current_price
                 total_value += current_value
                 
@@ -214,27 +298,80 @@ def chat_with_gpt(message, portfolio_context):
 
 @app.route('/', methods=['GET'])
 def index():
+    file_time, age_days = check_eod_file_age()
+    
     return jsonify({
-        'service': 'AI Advisor Backend v3.0',
-        'version': '3.0',
-        'features': ['signals', 'portfolio', 'cash', 'eod_prices', 'chat_ai'],
+        'service': 'AI Advisor Backend v3.2',
+        'version': '3.2 (Auto-refresh EOD)',
+        'features': ['signals', 'portfolio', 'cash', 'eod_prices', 'chat_ai', 'auto_refresh'],
+        'eod_file': {
+            'exists': os.path.exists(EOD_FILE),
+            'tickers': len(PRICES_CACHE),
+            'age_days': age_days if age_days < 999 else None,
+            'ttl_days': EOD_FILE_TTL_DAYS
+        },
         'status': 'running'
     })
 
 
 @app.route('/health', methods=['GET'])
 def health():
-    prices = load_latest_prices()
+    file_time, age_days = check_eod_file_age()
+    
     return jsonify({
         'status': 'healthy',
         'openai': openai_client is not None,
-        'prices_loaded': len(prices),
+        'eod_file_loaded': CACHE_LOADED,
+        'eod_tickers': len(PRICES_CACHE),
+        'eod_age_days': age_days if age_days < 999 else None,
         'timestamp': datetime.now().isoformat()
     })
 
 
 # ========================================================================
-# SIGNALS ENDPOINTS
+# EOD MANAGEMENT ENDPOINTS
+# ========================================================================
+
+@app.route('/api/eod/status', methods=['GET'])
+def eod_status():
+    """Get EOD file status"""
+    file_time, age_days = check_eod_file_age()
+    
+    return jsonify({
+        'success': True,
+        'file_exists': os.path.exists(EOD_FILE),
+        'tickers_count': len(PRICES_CACHE),
+        'file_age_days': age_days if age_days < 999 else None,
+        'ttl_days': EOD_FILE_TTL_DAYS,
+        'last_modified': file_time.isoformat() if file_time else None,
+        'needs_refresh': age_days > EOD_FILE_TTL_DAYS if age_days < 999 else True
+    })
+
+
+@app.route('/api/eod/refresh', methods=['POST'])
+def eod_refresh():
+    """Manually trigger EOD refresh"""
+    try:
+        # Delete old file
+        if os.path.exists(EOD_FILE):
+            os.remove(EOD_FILE)
+            print("🗑️ Deleted old EOD file")
+        
+        # Trigger download
+        trigger_eod_download_async()
+        
+        return jsonify({
+            'success': True,
+            'message': 'EOD refresh started in background',
+            'note': 'This will take 30-60 minutes'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ========================================================================
+# SIGNALS ENDPOINTS (same as before)
 # ========================================================================
 
 @app.route('/api/signals', methods=['GET'])
@@ -277,18 +414,14 @@ def get_signals():
 
 @app.route('/api/scan', methods=['POST'])
 def scan_signals():
-    """Scan for new signals (mock for now)"""
+    """Scan for new signals (mock)"""
     try:
-        # Mock signals for testing
         session = Session()
         
-        # Create sample signals
         sample_tickers = ['VCB', 'VHM', 'HPG', 'TCB']
-        prices = load_latest_prices()
-        
         created_count = 0
+        
         for ticker in sample_tickers:
-            # Check if already exists today
             today = datetime.now().strftime('%Y-%m-%d')
             existing = session.query(Signal).filter(
                 Signal.ticker == ticker,
@@ -298,10 +431,11 @@ def scan_signals():
             if existing:
                 continue
             
-            # Get price
-            price = prices.get(ticker, {}).get('price', 50000)
+            # Get price from EOD file
+            price = get_current_price(ticker)
+            if not price:
+                price = 50000  # Fallback
             
-            # Create signal
             signal = Signal(
                 ticker=ticker,
                 strategy='PULLBACK',
@@ -344,12 +478,12 @@ def scan_status():
 
 
 # ========================================================================
-# PORTFOLIO ENDPOINTS
+# PORTFOLIO ENDPOINTS (WITH EOD PRICES)
 # ========================================================================
 
 @app.route('/api/portfolio', methods=['GET'])
 def get_portfolio():
-    """Get portfolio with P&L"""
+    """Get portfolio with P&L from EOD file"""
     user_id = request.args.get('user_id', 1, type=int)
     
     session = Session()
@@ -358,11 +492,13 @@ def get_portfolio():
         cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
         cash = cash_pos.cash_amount if cash_pos else 0
         
-        prices = load_latest_prices()
-        
         portfolio_data = []
         for p in portfolios:
-            current_price = prices.get(p.ticker, {}).get('price', p.avg_price)
+            # Get price from EOD file
+            current_price = get_current_price(p.ticker)
+            if not current_price:
+                current_price = p.avg_price  # Fallback
+            
             cost = p.quantity * p.avg_price
             current_value = p.quantity * current_price
             pl_amount = current_value - cost
@@ -466,21 +602,16 @@ def delete_portfolio(ticker):
 
 
 # ========================================================================
-# CASH ENDPOINTS
+# CASH & CHAT ENDPOINTS
 # ========================================================================
 
 @app.route('/api/cash', methods=['GET'])
 def get_cash():
-    """Get cash position"""
     user_id = request.args.get('user_id', 1, type=int)
-    
     session = Session()
     try:
         cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
-        return jsonify({
-            'success': True,
-            'cash': cash_pos.cash_amount if cash_pos else 0
-        })
+        return jsonify({'success': True, 'cash': cash_pos.cash_amount if cash_pos else 0})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
@@ -489,9 +620,7 @@ def get_cash():
 
 @app.route('/api/cash', methods=['POST'])
 def update_cash():
-    """Update cash position"""
     data = request.json
-    
     user_id = data.get('user_id', 1)
     cash_amount = float(data.get('cash', 0))
     
@@ -519,54 +648,9 @@ def update_cash():
         session.close()
 
 
-# ========================================================================
-# PRICES ENDPOINTS
-# ========================================================================
-
-@app.route('/api/prices/latest', methods=['GET'])
-def get_latest_prices():
-    """Get all latest prices"""
-    try:
-        prices = load_latest_prices()
-        return jsonify({
-            'success': True,
-            'prices': prices,
-            'count': len(prices)
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/prices/<ticker>', methods=['GET'])
-def get_ticker_price(ticker):
-    """Get price for ticker"""
-    try:
-        prices = load_latest_prices()
-        
-        if ticker.upper() not in prices:
-            return jsonify({
-                'success': False,
-                'error': f'Price not found for {ticker}'
-            }), 404
-        
-        return jsonify({
-            'success': True,
-            'ticker': ticker.upper(),
-            'data': prices[ticker.upper()]
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-# ========================================================================
-# CHAT ENDPOINTS
-# ========================================================================
-
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    """Chat with AI"""
     data = request.json
-    
     user_id = data.get('user_id', 1)
     message = data.get('message', '').strip()
     
@@ -602,7 +686,6 @@ def chat():
 
 @app.route('/api/chat/history', methods=['GET'])
 def get_chat_history():
-    """Get chat history"""
     user_id = request.args.get('user_id', 1, type=int)
     limit = request.args.get('limit', 20, type=int)
     
@@ -632,13 +715,8 @@ def get_chat_history():
         session.close()
 
 
-# ========================================================================
-# MIGRATION
-# ========================================================================
-
 @app.route('/api/migrate', methods=['POST'])
 def migrate():
-    """Run migration"""
     try:
         Base.metadata.create_all(engine)
         return jsonify({
@@ -655,29 +733,35 @@ def migrate():
 # ========================================================================
 
 try:
-    print("\n🚀 Starting AI Advisor Backend v3.0...")
+    print("\n🚀 Starting AI Advisor Backend v3.2...")
     Base.metadata.create_all(engine)
     print("✅ Database initialized")
     
-    prices = load_latest_prices()
-    print(f"💰 Loaded {len(prices)} prices")
+    # Load EOD prices
+    load_eod_prices()
+    
+    # Check file age and auto-delete if needed
+    file_time, age_days = check_eod_file_age()
+    if age_days > EOD_FILE_TTL_DAYS:
+        print(f"⚠️ EOD file is {age_days} days old (TTL: {EOD_FILE_TTL_DAYS})")
+        print("🗑️ Auto-deleting old file...")
+        delete_old_eod_file()
+        print("💡 Please run download script to refresh prices")
     
 except Exception as e:
     print(f"⚠️ Warning: {e}")
 
 
-# ========================================================================
-# MAIN
-# ========================================================================
-
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 10000))
     print(f"\n{'='*70}")
-    print("🚀 AI ADVISOR BACKEND v3.0 - COMPLETE")
+    print("🚀 AI ADVISOR BACKEND v3.2 - AUTO-REFRESH EOD")
     print(f"{'='*70}")
     print(f"AI: {'✅ GPT-4o-mini' if openai_client else '❌ Not configured'}")
+    print(f"EOD File: {'✅ Loaded' if CACHE_LOADED and PRICES_CACHE else '⚠️ Not found'}")
+    print(f"Tickers: {len(PRICES_CACHE)}")
+    print(f"TTL: {EOD_FILE_TTL_DAYS} days")
     print(f"Database: {DATABASE_URL}")
-    print(f"Prices: {len(load_latest_prices())} tickers")
     print(f"Port: {port}")
     print(f"{'='*70}\n")
     
