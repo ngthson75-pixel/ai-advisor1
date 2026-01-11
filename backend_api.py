@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI ADVISOR - BACKEND v3.2
-AUTO-REFRESH EOD PRICES - 5-day TTL
+AI ADVISOR - BACKEND v3.3
+WITH STRICT AI SYSTEM PROMPT FOR INVESTMENT GUIDANCE
 """
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import json
 from openai import OpenAI
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-import subprocess
-import threading
 
 # Initialize Flask
 app = Flask(__name__)
@@ -38,16 +36,108 @@ Session = sessionmaker(bind=engine)
 
 # EOD file settings
 EOD_FILE = 'latest_prices_all.json'
-EOD_FILE_TTL_DAYS = 5  # Auto-delete after 5 days
-EOD_DOWNLOAD_SCRIPT = 'download_all_eod_prices.py'
-
-# Global prices cache
 PRICES_CACHE = {}
 CACHE_LOADED = False
 
 
 # ========================================================================
-# DATABASE MODELS (same as before)
+# AI SYSTEM PROMPT - STRICT INVESTMENT GUIDANCE RULES
+# ========================================================================
+
+AI_SYSTEM_PROMPT = """You are AI ADVISOR, a decision-support system for investors.
+
+Your primary role:
+- Support investment decision-making through structured analysis.
+- Provide insights that help users understand risk, probability, and scenarios.
+- Guide users toward disciplined, system-based investing.
+
+Product rule (critical):
+- AI ADVISOR only provides action-oriented guidance (buy/sell considerations)
+  for stocks that are included in the official "Buysell Signal" list
+  within the AI ADVISOR application.
+- For all other stocks, AI ADVISOR may analyze and explain,
+  but must NOT suggest or imply any investment action.
+
+Core principles:
+1. You do NOT provide direct buy/sell commands outside the Buysell Signal list.
+2. You do NOT promise profits or guaranteed outcomes.
+3. You do NOT encourage speculation, gambling, or impulsive behavior.
+4. You prioritize capital protection, risk management, and discipline.
+5. You clearly distinguish between:
+   - Analysis-only stocks
+   - System-approved Buysell Signal stocks
+
+Behavior rules by stock type:
+
+A. If the stock IS in the "Buysell Signal" list:
+- You may discuss:
+  - Signal status (trend, momentum, valuation context)
+  - Risk conditions and invalidation scenarios
+  - Position sizing considerations (conceptual, not numeric)
+- You must still avoid explicit trade commands or price targets.
+- You must emphasize that signals are system-based, not guarantees.
+
+B. If the stock is NOT in the "Buysell Signal" list:
+- You may:
+  - Analyze fundamentals, trends, and risks
+  - Explain why the stock may or may not fit certain strategies
+- You must:
+  - Clearly state that the stock is NOT in the Buysell Signal system
+  - Avoid any form of recommendation, suggestion, or implied action
+  - Redirect the user toward the Buysell Signal list if they seek action
+
+Mandatory phrasing for non-signal stocks:
+- Explicitly include a sentence equivalent to:
+  "This stock is currently not part of the AI ADVISOR Buysell Signal system.
+   Therefore, the following analysis is for understanding only,
+   not for action guidance."
+
+Response style:
+- Professional, disciplined, and neutral.
+- No hype, no emotional language, no persuasive tone.
+- Concise by default; expand only if explicitly requested.
+- RESPOND IN VIETNAMESE unless user writes in English.
+
+Default output structure:
+
+For Buysell Signal stocks:
+1. Signal context summary
+2. Supporting analysis
+3. Risk & invalidation conditions
+4. System-based considerations (not advice)
+
+For non-signal stocks:
+1. Analysis summary
+2. Key factors & risks
+3. Why it is outside the Buysell Signal scope
+4. What type of stock typically qualifies for the system (educational)
+
+User expectation management:
+- Clearly state that AI ADVISOR supports decision-making,
+  but final responsibility belongs to the user.
+- Emphasize that the Buysell Signal list is the only source
+  of system-approved actionable guidance.
+
+If user pushes for action on non-signal stocks:
+- Politely refuse.
+- Reframe toward analysis or suggest checking the Buysell Signal list.
+
+If user intent is unclear:
+- Ask ONE clarifying question only.
+
+Always act as a disciplined, system-driven investment advisor,
+not a trader, promoter, or discretionary stock picker.
+
+CRITICAL: Help users control FOMO (fear of missing out) and PANIC SELLING by:
+- Reminding them of their investment plan and system rules
+- Encouraging rational analysis over emotional reactions
+- Pointing out when market behavior is driven by emotion vs fundamentals
+- Supporting disciplined decision-making based on data, not fear or greed
+"""
+
+
+# ========================================================================
+# DATABASE MODELS
 # ========================================================================
 
 class Signal(Base):
@@ -104,17 +194,6 @@ class ChatHistory(Base):
 # EOD FILE MANAGEMENT
 # ========================================================================
 
-def check_eod_file_age():
-    """Check if EOD file exists and its age"""
-    if not os.path.exists(EOD_FILE):
-        return None, 999  # File doesn't exist
-    
-    file_time = datetime.fromtimestamp(os.path.getmtime(EOD_FILE))
-    age_days = (datetime.now() - file_time).days
-    
-    return file_time, age_days
-
-
 def load_eod_prices():
     """Load EOD prices from file"""
     global PRICES_CACHE, CACHE_LOADED
@@ -130,10 +209,8 @@ def load_eod_prices():
             data = json.load(f)
         
         PRICES_CACHE = data.get('prices', {})
-        file_time, age_days = check_eod_file_age()
         
         print(f"✅ Loaded {len(PRICES_CACHE)} prices from EOD file")
-        print(f"📅 File age: {age_days} days (TTL: {EOD_FILE_TTL_DAYS} days)")
         
         CACHE_LOADED = True
         return True
@@ -145,71 +222,24 @@ def load_eod_prices():
         return False
 
 
-def delete_old_eod_file():
-    """Delete EOD file if older than TTL"""
-    file_time, age_days = check_eod_file_age()
-    
-    if age_days > EOD_FILE_TTL_DAYS:
-        try:
-            os.remove(EOD_FILE)
-            print(f"🗑️ Deleted old EOD file (age: {age_days} days)")
-            return True
-        except Exception as e:
-            print(f"⚠️ Could not delete EOD file: {e}")
-            return False
-    
-    return False
-
-
-def trigger_eod_download_async():
-    """Trigger EOD download in background (async)"""
-    def download_worker():
-        try:
-            print("🔄 Starting EOD download in background...")
-            
-            if os.path.exists(EOD_DOWNLOAD_SCRIPT):
-                subprocess.run(['python', EOD_DOWNLOAD_SCRIPT], check=True)
-                print("✅ EOD download completed!")
-                
-                # Reload cache
-                load_eod_prices()
-            else:
-                print(f"⚠️ Download script not found: {EOD_DOWNLOAD_SCRIPT}")
-                
-        except Exception as e:
-            print(f"❌ EOD download failed: {e}")
-    
-    # Run in background thread
-    thread = threading.Thread(target=download_worker, daemon=True)
-    thread.start()
-    print("🚀 EOD download started in background")
-
-
 def get_current_price(ticker):
-    """
-    Get current price for ticker
-    1. Try EOD file first (fast)
-    2. Fallback to avg_price if not found
-    """
+    """Get current price for ticker from EOD file"""
     global PRICES_CACHE, CACHE_LOADED
     
-    # Load cache if not loaded yet
     if not CACHE_LOADED:
         load_eod_prices()
     
     ticker = ticker.upper().strip()
     
-    # Check cache
     if ticker in PRICES_CACHE:
         price_data = PRICES_CACHE[ticker]
         return price_data.get('price')
     
-    # Not found in cache
     return None
 
 
 # ========================================================================
-# PORTFOLIO CONTEXT & AI
+# PORTFOLIO CONTEXT & AI CHAT
 # ========================================================================
 
 def get_portfolio_context(user_id):
@@ -220,8 +250,12 @@ def get_portfolio_context(user_id):
         cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
         cash = cash_pos.cash_amount if cash_pos else 0
         
+        # Get list of stocks in Buysell Signal system
+        signals = session.query(Signal).all()
+        signal_tickers = set([s.ticker for s in signals])
+        
         if not portfolios and cash == 0:
-            return "Danh mục: Trống"
+            return "Danh mục: Trống", signal_tickers
         
         context = "DANH MỤC ĐẦU TƯ:\n\n"
         
@@ -234,10 +268,9 @@ def get_portfolio_context(user_id):
                 cost = p.quantity * p.avg_price
                 total_cost += cost
                 
-                # Get current price from EOD file
                 current_price = get_current_price(p.ticker)
                 if not current_price:
-                    current_price = p.avg_price  # Fallback
+                    current_price = p.avg_price
                 
                 current_value = p.quantity * current_price
                 total_value += current_value
@@ -245,7 +278,10 @@ def get_portfolio_context(user_id):
                 pl = current_value - cost
                 pl_pct = (pl / cost * 100) if cost > 0 else 0
                 
-                context += f"- {p.ticker}: {p.quantity} CP @ {p.avg_price:,.0f} VND\n"
+                # Mark if stock is in Buysell Signal system
+                in_signal = "✅ [IN BUYSELL SIGNAL]" if p.ticker in signal_tickers else "⚠️ [NOT IN SIGNAL LIST]"
+                
+                context += f"- {p.ticker} {in_signal}: {p.quantity} CP @ {p.avg_price:,.0f} VND\n"
                 context += f"  Giá hiện tại: {current_price:,.0f} VND\n"
                 context += f"  P&L: {pl:+,.0f} VND ({pl_pct:+.1f}%)\n"
             
@@ -262,28 +298,34 @@ def get_portfolio_context(user_id):
             context += f"\nTỔNG TÀI SẢN: {total_assets:,.0f} VND\n"
             context += f"Phân bổ: {stock_pct:.1f}% CP / {cash_pct:.1f}% TM\n"
         
-        return context
+        context += f"\n\nCỔ PHIẾU TRONG BUYSELL SIGNAL SYSTEM:\n"
+        context += ", ".join(sorted(signal_tickers)) if signal_tickers else "Chưa có signal nào"
+        
+        return context, signal_tickers
         
     except Exception as e:
         print(f"Error: {e}")
-        return "Danh mục: Lỗi"
+        return "Danh mục: Lỗi", set()
     finally:
         session.close()
 
 
-def chat_with_gpt(message, portfolio_context):
-    """Chat with OpenAI"""
+def chat_with_gpt(message, portfolio_context, signal_tickers):
+    """Chat with OpenAI using strict system prompt"""
     if not openai_client:
         return "Xin lỗi, AI chưa được cấu hình."
     
     try:
+        # Build system message with portfolio context
+        system_message = AI_SYSTEM_PROMPT + f"\n\n{portfolio_context}"
+        
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": f"Bạn là AI tư vấn đầu tư VN.\n\n{portfolio_context}\n\nTrả lời ngắn gọn, thực tế."},
+                {"role": "system", "content": system_message},
                 {"role": "user", "content": message}
             ],
-            max_tokens=500,
+            max_tokens=800,
             temperature=0.7
         )
         return response.choices[0].message.content
@@ -298,17 +340,13 @@ def chat_with_gpt(message, portfolio_context):
 
 @app.route('/', methods=['GET'])
 def index():
-    file_time, age_days = check_eod_file_age()
-    
     return jsonify({
-        'service': 'AI Advisor Backend v3.2',
-        'version': '3.2 (Auto-refresh EOD)',
-        'features': ['signals', 'portfolio', 'cash', 'eod_prices', 'chat_ai', 'auto_refresh'],
+        'service': 'AI Advisor Backend v3.3',
+        'version': '3.3 (Strict AI Prompt)',
+        'features': ['signals', 'portfolio', 'cash', 'eod_prices', 'chat_ai_strict', 'fomo_control'],
         'eod_file': {
             'exists': os.path.exists(EOD_FILE),
-            'tickers': len(PRICES_CACHE),
-            'age_days': age_days if age_days < 999 else None,
-            'ttl_days': EOD_FILE_TTL_DAYS
+            'tickers': len(PRICES_CACHE)
         },
         'status': 'running'
     })
@@ -316,62 +354,17 @@ def index():
 
 @app.route('/health', methods=['GET'])
 def health():
-    file_time, age_days = check_eod_file_age()
-    
     return jsonify({
         'status': 'healthy',
         'openai': openai_client is not None,
         'eod_file_loaded': CACHE_LOADED,
         'eod_tickers': len(PRICES_CACHE),
-        'eod_age_days': age_days if age_days < 999 else None,
         'timestamp': datetime.now().isoformat()
     })
 
 
 # ========================================================================
-# EOD MANAGEMENT ENDPOINTS
-# ========================================================================
-
-@app.route('/api/eod/status', methods=['GET'])
-def eod_status():
-    """Get EOD file status"""
-    file_time, age_days = check_eod_file_age()
-    
-    return jsonify({
-        'success': True,
-        'file_exists': os.path.exists(EOD_FILE),
-        'tickers_count': len(PRICES_CACHE),
-        'file_age_days': age_days if age_days < 999 else None,
-        'ttl_days': EOD_FILE_TTL_DAYS,
-        'last_modified': file_time.isoformat() if file_time else None,
-        'needs_refresh': age_days > EOD_FILE_TTL_DAYS if age_days < 999 else True
-    })
-
-
-@app.route('/api/eod/refresh', methods=['POST'])
-def eod_refresh():
-    """Manually trigger EOD refresh"""
-    try:
-        # Delete old file
-        if os.path.exists(EOD_FILE):
-            os.remove(EOD_FILE)
-            print("🗑️ Deleted old EOD file")
-        
-        # Trigger download
-        trigger_eod_download_async()
-        
-        return jsonify({
-            'success': True,
-            'message': 'EOD refresh started in background',
-            'note': 'This will take 30-60 minutes'
-        })
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-# ========================================================================
-# SIGNALS ENDPOINTS (same as before)
+# SIGNALS ENDPOINTS
 # ========================================================================
 
 @app.route('/api/signals', methods=['GET'])
@@ -431,10 +424,9 @@ def scan_signals():
             if existing:
                 continue
             
-            # Get price from EOD file
             price = get_current_price(ticker)
             if not price:
-                price = 50000  # Fallback
+                price = 50000
             
             signal = Signal(
                 ticker=ticker,
@@ -467,18 +459,8 @@ def scan_signals():
         session.close()
 
 
-@app.route('/api/scan/status', methods=['GET'])
-def scan_status():
-    """Get scan status"""
-    return jsonify({
-        'success': True,
-        'status': 'ready',
-        'last_scan': datetime.now().isoformat()
-    })
-
-
 # ========================================================================
-# PORTFOLIO ENDPOINTS (WITH EOD PRICES)
+# PORTFOLIO ENDPOINTS
 # ========================================================================
 
 @app.route('/api/portfolio', methods=['GET'])
@@ -494,10 +476,9 @@ def get_portfolio():
         
         portfolio_data = []
         for p in portfolios:
-            # Get price from EOD file
             current_price = get_current_price(p.ticker)
             if not current_price:
-                current_price = p.avg_price  # Fallback
+                current_price = p.avg_price
             
             cost = p.quantity * p.avg_price
             current_value = p.quantity * current_price
@@ -650,6 +631,7 @@ def update_cash():
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
+    """Chat with AI using strict system prompt"""
     data = request.json
     user_id = data.get('user_id', 1)
     message = data.get('message', '').strip()
@@ -659,8 +641,8 @@ def chat():
     
     session = Session()
     try:
-        portfolio_context = get_portfolio_context(user_id)
-        ai_response = chat_with_gpt(message, portfolio_context)
+        portfolio_context, signal_tickers = get_portfolio_context(user_id)
+        ai_response = chat_with_gpt(message, portfolio_context, signal_tickers)
         
         chat_entry = ChatHistory(
             user_id=user_id,
@@ -715,6 +697,30 @@ def get_chat_history():
         session.close()
 
 
+@app.route('/api/eod/status', methods=['GET'])
+def eod_status():
+    """Get EOD file status"""
+    from datetime import timedelta
+    
+    file_exists = os.path.exists(EOD_FILE)
+    file_age_days = None
+    last_modified = None
+    
+    if file_exists:
+        file_time = datetime.fromtimestamp(os.path.getmtime(EOD_FILE))
+        file_age_days = (datetime.now() - file_time).days
+        last_modified = file_time.isoformat()
+    
+    return jsonify({
+        'success': True,
+        'file_exists': file_exists,
+        'tickers_count': len(PRICES_CACHE),
+        'file_age_days': file_age_days,
+        'last_modified': last_modified,
+        'needs_refresh': file_age_days > 5 if file_age_days is not None else True
+    })
+
+
 @app.route('/api/migrate', methods=['POST'])
 def migrate():
     try:
@@ -733,20 +739,11 @@ def migrate():
 # ========================================================================
 
 try:
-    print("\n🚀 Starting AI Advisor Backend v3.2...")
+    print("\n🚀 Starting AI Advisor Backend v3.3...")
     Base.metadata.create_all(engine)
     print("✅ Database initialized")
     
-    # Load EOD prices
     load_eod_prices()
-    
-    # Check file age and auto-delete if needed
-    file_time, age_days = check_eod_file_age()
-    if age_days > EOD_FILE_TTL_DAYS:
-        print(f"⚠️ EOD file is {age_days} days old (TTL: {EOD_FILE_TTL_DAYS})")
-        print("🗑️ Auto-deleting old file...")
-        delete_old_eod_file()
-        print("💡 Please run download script to refresh prices")
     
 except Exception as e:
     print(f"⚠️ Warning: {e}")
@@ -755,12 +752,11 @@ except Exception as e:
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 10000))
     print(f"\n{'='*70}")
-    print("🚀 AI ADVISOR BACKEND v3.2 - AUTO-REFRESH EOD")
+    print("🚀 AI ADVISOR BACKEND v3.3 - STRICT AI PROMPT")
     print(f"{'='*70}")
-    print(f"AI: {'✅ GPT-4o-mini' if openai_client else '❌ Not configured'}")
+    print(f"AI: {'✅ GPT-4o-mini (Strict Rules)' if openai_client else '❌ Not configured'}")
     print(f"EOD File: {'✅ Loaded' if CACHE_LOADED and PRICES_CACHE else '⚠️ Not found'}")
     print(f"Tickers: {len(PRICES_CACHE)}")
-    print(f"TTL: {EOD_FILE_TTL_DAYS} days")
     print(f"Database: {DATABASE_URL}")
     print(f"Port: {port}")
     print(f"{'='*70}\n")

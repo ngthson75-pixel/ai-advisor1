@@ -1,466 +1,612 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, DollarSign, PieChart, MessageSquare, Send, Plus, Trash2, BarChart3, AlertCircle, Wallet } from 'lucide-react';
+import { TrendingUp, MessageSquare, Send, Trash2, DollarSign, PieChart } from 'lucide-react';
 
 const API_BASE = 'https://ai-advisor1-backend.onrender.com/api';
-const USER_ID = 1;
 
 export default function AIPortfolioManager() {
   const [portfolio, setPortfolio] = useState([]);
   const [cash, setCash] = useState(0);
-  const [chatHistory, setChatHistory] = useState([]);
-  const [userMessage, setUserMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  // Form state
-  const [newStock, setNewStock] = useState({
-    ticker: '',
-    quantity: '',
-    price: ''
-  });
   
+  // Form states
+  const [ticker, setTicker] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [price, setPrice] = useState('');
   const [cashInput, setCashInput] = useState('');
+  
+  // Chat states
+  const [chatHistory, setChatHistory] = useState([]);
+  const [message, setMessage] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
 
-  // Fetch portfolio with P&L
+  const userId = 1; // Default user for demo
+
+  // Fetch portfolio on mount
+  useEffect(() => {
+    fetchPortfolio();
+    fetchCash();
+    fetchChatHistory();
+  }, []);
+
   const fetchPortfolio = async () => {
     try {
-      const response = await fetch(`${API_BASE}/portfolio?user_id=${USER_ID}`);
+      const response = await fetch(`${API_BASE}/portfolio?user_id=${userId}`);
       const data = await response.json();
-      
       if (data.success) {
         setPortfolio(data.portfolio || []);
-        setCash(data.cash || 0);
       }
-    } catch (err) {
-      console.error('Error fetching portfolio:', err);
+    } catch (error) {
+      console.error('Error fetching portfolio:', error);
     }
   };
 
-  // Fetch chat history
+  const fetchCash = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/cash?user_id=${userId}`);
+      const data = await response.json();
+      if (data.success) {
+        setCash(data.cash || 0);
+        setCashInput(data.cash || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching cash:', error);
+    }
+  };
+
   const fetchChatHistory = async () => {
     try {
-      const response = await fetch(`${API_BASE}/chat/history?user_id=${USER_ID}`);
+      const response = await fetch(`${API_BASE}/chat/history?user_id=${userId}`);
       const data = await response.json();
       if (data.success) {
         setChatHistory(data.history || []);
       }
-    } catch (err) {
-      console.error('Error fetching chat:', err);
+    } catch (error) {
+      console.error('Error fetching chat history:', error);
     }
   };
 
-  useEffect(() => {
-    fetchPortfolio();
-    fetchChatHistory();
-  }, []);
-
-  // Add stock
-  const handleAddStock = async () => {
-    if (!newStock.ticker || !newStock.quantity || !newStock.price) {
-      setError('Vui lòng điền đầy đủ thông tin');
-      setTimeout(() => setError(null), 3000);
+  const addStock = async (e) => {
+    e.preventDefault();
+    if (!ticker || !quantity || !price) {
+      alert('Vui lòng điền đầy đủ thông tin');
       return;
     }
 
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-
       const response = await fetch(`${API_BASE}/portfolio`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: USER_ID,
-          ticker: newStock.ticker.toUpperCase(),
-          quantity: parseInt(newStock.quantity),
-          price: parseFloat(newStock.price)
+          user_id: userId,
+          ticker: ticker.toUpperCase(),
+          quantity: parseInt(quantity),
+          price: parseFloat(price)
         })
       });
 
       const data = await response.json();
-      
       if (data.success) {
-        setNewStock({ ticker: '', quantity: '', price: '' });
-        await fetchPortfolio();
+        setTicker('');
+        setQuantity('');
+        setPrice('');
+        fetchPortfolio();
       } else {
-        setError(data.error || 'Không thể thêm cổ phiếu');
+        alert('Lỗi: ' + (data.error || 'Không thể thêm cổ phiếu'));
       }
-    } catch (err) {
-      setError('Lỗi: ' + err.message);
+    } catch (error) {
+      console.error('Error adding stock:', error);
+      alert('Lỗi kết nối');
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle key down
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      e.stopPropagation();
-      handleAddStock();
-    }
-  };
-
-  // Delete stock
-  const handleDeleteStock = async (ticker) => {
+  const deleteStock = async (ticker) => {
     if (!confirm(`Xóa ${ticker} khỏi danh mục?`)) return;
 
     try {
-      const response = await fetch(`${API_BASE}/portfolio/${ticker}?user_id=${USER_ID}`, {
+      const response = await fetch(`${API_BASE}/portfolio/${ticker}?user_id=${userId}`, {
         method: 'DELETE'
       });
 
       const data = await response.json();
       if (data.success) {
-        await fetchPortfolio();
-      } else {
-        setError(data.error || 'Không thể xóa');
+        fetchPortfolio();
       }
-    } catch (err) {
-      setError('Lỗi: ' + err.message);
+    } catch (error) {
+      console.error('Error deleting stock:', error);
+      alert('Lỗi kết nối');
     }
   };
 
-  // Update cash
-  const handleUpdateCash = async () => {
-    const amount = parseFloat(cashInput);
+  const updateCash = async (e) => {
+    e.preventDefault();
     
-    if (isNaN(amount) || amount < 0) {
-      setError('Số tiền không hợp lệ');
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
-
+    setLoading(true);
     try {
-      setLoading(true);
       const response = await fetch(`${API_BASE}/cash`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: USER_ID,
-          cash: amount
+          user_id: userId,
+          cash: parseFloat(cashInput) || 0
         })
       });
 
       const data = await response.json();
       if (data.success) {
         setCash(data.cash);
-        setCashInput('');
-      } else {
-        setError(data.error || 'Không thể cập nhật tiền mặt');
+        alert('Đã cập nhật tiền mặt!');
       }
-    } catch (err) {
-      setError('Lỗi: ' + err.message);
+    } catch (error) {
+      console.error('Error updating cash:', error);
+      alert('Lỗi kết nối');
     } finally {
       setLoading(false);
     }
   };
 
-  // Send chat message
-  const handleSendMessage = async () => {
-    if (!userMessage.trim()) return;
+  const sendMessage = async (e) => {
+    e.preventDefault();
+    if (!message.trim()) return;
 
-    const currentMessage = userMessage;
-    setUserMessage('');
+    const userMessage = message.trim();
+    setMessage('');
+    setChatLoading(true);
+
+    // Add user message to chat
+    setChatHistory(prev => [...prev, { message: userMessage, response: '...' }]);
 
     try {
-      setLoading(true);
       const response = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: USER_ID,
-          message: currentMessage
+          user_id: userId,
+          message: userMessage
         })
       });
 
       const data = await response.json();
-      
       if (data.success) {
-        setChatHistory([...chatHistory, {
-          message: currentMessage,
-          response: data.response
-        }]);
+        // Update last message with actual response
+        setChatHistory(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            message: userMessage,
+            response: data.response
+          };
+          return updated;
+        });
       } else {
-        setError(data.error || 'AI không phản hồi');
-        setUserMessage(currentMessage);
+        setChatHistory(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            message: userMessage,
+            response: 'Xin lỗi, có lỗi xảy ra.'
+          };
+          return updated;
+        });
       }
-    } catch (err) {
-      setError('Lỗi: ' + err.message);
-      setUserMessage(currentMessage);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setChatHistory(prev => {
+        const updated = [...prev];
+        updated[updated.length - 1] = {
+          message: userMessage,
+          response: 'Lỗi kết nối.'
+        };
+        return updated;
+      });
     } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle chat key down
-  const handleChatKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      handleSendMessage();
+      setChatLoading(false);
     }
   };
 
   // Calculate totals
-  const totalCost = portfolio.reduce((sum, stock) => 
-    sum + (stock?.cost || 0), 0
-  );
-  
-  const totalValue = portfolio.reduce((sum, stock) => 
-    sum + (stock?.current_value || 0), 0
-  );
-  
-  const totalPL = totalValue - totalCost;
+  const totalStockValue = portfolio.reduce((sum, stock) => sum + (stock.current_value || 0), 0);
+  const totalCost = portfolio.reduce((sum, stock) => sum + (stock.cost || 0), 0);
+  const totalPL = totalStockValue - totalCost;
   const totalPLPct = totalCost > 0 ? (totalPL / totalCost * 100) : 0;
-  
-  const totalAssets = totalValue + cash;
-  const stockRatio = totalAssets > 0 ? (totalValue / totalAssets * 100) : 0;
-  const cashRatio = totalAssets > 0 ? (cash / totalAssets * 100) : 0;
+  const totalAssets = totalStockValue + cash;
+  const stockAllocation = totalAssets > 0 ? (totalStockValue / totalAssets * 100) : 0;
+  const cashAllocation = totalAssets > 0 ? (cash / totalAssets * 100) : 0;
 
   return (
-    <div className="portfolio-manager">
-      <div className="container">
-        {/* Error Banner */}
-        {error && (
-          <div className="error-banner">
-            <AlertCircle size={20} />
-            <span>{error}</span>
-            <button onClick={() => setError(null)}>✕</button>
-          </div>
-        )}
+    <div style={{ 
+      maxWidth: '1400px', 
+      margin: '0 auto', 
+      padding: '20px',
+      backgroundColor: '#0a0e27',
+      minHeight: '100vh'
+    }}>
+      {/* Header */}
+      <div style={{ marginBottom: '30px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+          <TrendingUp size={32} color="#3b82f6" />
+          <h1 style={{ 
+            fontSize: '28px', 
+            fontWeight: 'bold',
+            color: '#fff',
+            margin: 0
+          }}>
+            Danh Mục Đầu Tư
+          </h1>
+        </div>
+        <p style={{ 
+          fontSize: '14px', 
+          color: '#94a3b8',
+          margin: '10px 0 0 0',
+          lineHeight: '1.5'
+        }}>
+          Hãy cập nhật danh mục của quý vị vào đây và hỏi AI để AI tư vấn và hỗ trợ kiểm soát tâm lý tránh FOMO và HOẢNG SỢ.
+        </p>
+      </div>
 
-        {/* Header */}
-        <div className="header">
-          <div>
-            <h1 className="title">
-              <BarChart3 size={32} />
-              Danh Mục Đầu Tư
-            </h1>
-            <p className="subtitle">Quản lý danh mục với phân tích AI</p>
+      {/* Summary Cards */}
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '15px',
+        marginBottom: '30px'
+      }}>
+        <div style={{
+          background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+          padding: '20px',
+          borderRadius: '12px',
+          border: '1px solid #1e293b'
+        }}>
+          <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>Tổng tài sản</div>
+          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff' }}>
+            {totalAssets.toLocaleString('vi-VN')} ₫
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="stats-grid">
-          <div className="stat-card">
-            <div className="stat-icon" style={{ background: '#22c55e20' }}>
-              <DollarSign size={24} style={{ color: '#22c55e' }} />
-            </div>
-            <div>
-              <div className="stat-label">Tổng tài sản</div>
-              <div className="stat-value">{totalAssets.toLocaleString()} VND</div>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon" style={{ background: totalPL >= 0 ? '#22c55e20' : '#ef444420' }}>
-              <TrendingUp size={24} style={{ color: totalPL >= 0 ? '#22c55e' : '#ef4444' }} />
-            </div>
-            <div>
-              <div className="stat-label">Lãi/Lỗ</div>
-              <div className="stat-value" style={{ color: totalPL >= 0 ? '#22c55e' : '#ef4444' }}>
-                {totalPL >= 0 ? '+' : ''}{totalPL.toLocaleString()} VND
-                <span style={{ fontSize: '14px', marginLeft: '5px' }}>
-                  ({totalPLPct >= 0 ? '+' : ''}{totalPLPct.toFixed(2)}%)
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon" style={{ background: '#3b82f620' }}>
-              <PieChart size={24} style={{ color: '#3b82f6' }} />
-            </div>
-            <div>
-              <div className="stat-label">Phân bổ</div>
-              <div className="stat-value" style={{ fontSize: '14px' }}>
-                {stockRatio.toFixed(1)}% CP / {cashRatio.toFixed(1)}% TM
-              </div>
-            </div>
+        <div style={{
+          background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+          padding: '20px',
+          borderRadius: '12px',
+          border: '1px solid #1e293b'
+        }}>
+          <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>Giá trị CP</div>
+          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#3b82f6' }}>
+            {totalStockValue.toLocaleString('vi-VN')} ₫
           </div>
         </div>
 
-        {/* Main Grid */}
-        <div className="main-grid">
-          {/* Portfolio Section */}
-          <div className="section">
-            <div className="section-header">
-              <h2 className="section-title">
-                <Plus size={20} />
-                Thêm Cổ Phiếu
-              </h2>
-            </div>
+        <div style={{
+          background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+          padding: '20px',
+          borderRadius: '12px',
+          border: '1px solid #1e293b'
+        }}>
+          <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>Tiền mặt</div>
+          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#10b981' }}>
+            {cash.toLocaleString('vi-VN')} ₫
+          </div>
+        </div>
 
-            {/* Add Stock Form */}
-            <div className="add-stock-form">
-              <input
-                type="text"
-                placeholder="Mã CP (VD: VCB)"
-                value={newStock.ticker}
-                onChange={(e) => setNewStock({...newStock, ticker: e.target.value})}
-                onKeyDown={handleKeyDown}
-                className="input"
-                style={{ flex: 1 }}
-                disabled={loading}
-              />
+        <div style={{
+          background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+          padding: '20px',
+          borderRadius: '12px',
+          border: '1px solid #1e293b'
+        }}>
+          <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>Lãi/Lỗ</div>
+          <div style={{ 
+            fontSize: '24px', 
+            fontWeight: 'bold',
+            color: totalPL >= 0 ? '#10b981' : '#ef4444'
+          }}>
+            {totalPL >= 0 ? '+' : ''}{totalPL.toLocaleString('vi-VN')} ₫
+          </div>
+          <div style={{ 
+            fontSize: '12px',
+            color: totalPL >= 0 ? '#10b981' : '#ef4444',
+            marginTop: '4px'
+          }}>
+            {totalPL >= 0 ? '+' : ''}{totalPLPct.toFixed(2)}%
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+        {/* Left Column - Portfolio */}
+        <div>
+          {/* Add Stock Form */}
+          <div style={{
+            background: '#1e293b',
+            padding: '20px',
+            borderRadius: '12px',
+            marginBottom: '20px',
+            border: '1px solid #334155'
+          }}>
+            <h3 style={{ color: '#fff', marginBottom: '15px', fontSize: '18px' }}>Thêm Cổ Phiếu</h3>
+            <form onSubmit={addStock}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' }}>
+                <input
+                  type="text"
+                  placeholder="Mã CP (VD: VCB)"
+                  value={ticker}
+                  onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: '1px solid #475569',
+                    background: '#0f172a',
+                    color: '#fff',
+                    fontSize: '14px'
+                  }}
+                />
+                <input
+                  type="number"
+                  placeholder="Số lượng"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: '1px solid #475569',
+                    background: '#0f172a',
+                    color: '#fff',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
               <input
                 type="number"
-                placeholder="Số lượng"
-                value={newStock.quantity}
-                onChange={(e) => setNewStock({...newStock, quantity: e.target.value})}
-                onKeyDown={handleKeyDown}
-                className="input"
-                style={{ flex: 1 }}
-                disabled={loading}
+                placeholder="Giá mua (VND)"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '1px solid #475569',
+                  background: '#0f172a',
+                  color: '#fff',
+                  fontSize: '14px',
+                  marginBottom: '15px'
+                }}
               />
-              <input
-                type="number"
-                placeholder="Giá (VND)"
-                value={newStock.price}
-                onChange={(e) => setNewStock({...newStock, price: e.target.value})}
-                onKeyDown={handleKeyDown}
-                className="input"
-                style={{ flex: 1 }}
+              <button
+                type="submit"
                 disabled={loading}
-              />
-              <button 
-                onClick={handleAddStock}
-                className="btn-primary"
-                disabled={loading}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: loading ? '#475569' : '#3b82f6',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: loading ? 'not-allowed' : 'pointer'
+                }}
               >
-                {loading ? 'Đang thêm...' : 'Thêm'}
+                {loading ? 'Đang thêm...' : 'Thêm vào danh mục'}
               </button>
-            </div>
+            </form>
+          </div>
 
-            {/* Cash Section */}
-            <div className="cash-section">
-              <div className="section-header" style={{ marginTop: '20px', marginBottom: '15px' }}>
-                <h3 className="section-title" style={{ fontSize: '16px' }}>
-                  <Wallet size={18} />
-                  Tiền mặt
-                </h3>
-              </div>
-              
-              <div className="cash-display">
-                <div className="cash-amount">
-                  <span style={{ color: '#94a3b8', fontSize: '13px' }}>Số dư:</span>
-                  <span style={{ color: '#22c55e', fontSize: '20px', fontWeight: 'bold', marginLeft: '10px' }}>
-                    {cash.toLocaleString()} VND
-                  </span>
-                </div>
-                
-                <div className="cash-input-group">
-                  <input
-                    type="number"
-                    placeholder="Nhập số tiền mặt"
-                    value={cashInput}
-                    onChange={(e) => setCashInput(e.target.value)}
-                    className="input"
-                    style={{ flex: 1 }}
-                    disabled={loading}
-                  />
-                  <button
-                    onClick={handleUpdateCash}
-                    className="btn-secondary"
-                    disabled={loading}
-                  >
-                    Cập nhật
-                  </button>
-                </div>
-              </div>
+          {/* Cash Management */}
+          <div style={{
+            background: '#1e293b',
+            padding: '20px',
+            borderRadius: '12px',
+            marginBottom: '20px',
+            border: '1px solid #334155'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+              <DollarSign size={20} color="#10b981" />
+              <h3 style={{ color: '#fff', margin: 0, fontSize: '18px' }}>Tiền Mặt</h3>
             </div>
+            <form onSubmit={updateCash}>
+              <input
+                type="number"
+                placeholder="Số tiền (VND)"
+                value={cashInput}
+                onChange={(e) => setCashInput(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '1px solid #475569',
+                  background: '#0f172a',
+                  color: '#fff',
+                  fontSize: '14px',
+                  marginBottom: '15px'
+                }}
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: loading ? '#475569' : '#10b981',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: loading ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {loading ? 'Đang cập nhật...' : 'Cập nhật tiền mặt'}
+              </button>
+            </form>
+          </div>
 
-            {/* Portfolio List */}
-            <div className="section-header" style={{ marginTop: '30px' }}>
-              <h2 className="section-title">Danh mục cổ phiếu</h2>
-            </div>
-
+          {/* Portfolio Table */}
+          <div style={{
+            background: '#1e293b',
+            padding: '20px',
+            borderRadius: '12px',
+            border: '1px solid #334155'
+          }}>
+            <h3 style={{ color: '#fff', marginBottom: '15px', fontSize: '18px' }}>Danh Mục Cổ Phiếu</h3>
+            
             {portfolio.length === 0 ? (
-              <div className="empty-state">
-                <PieChart size={48} style={{ color: '#64748b', marginBottom: '10px' }} />
-                <p>Chưa có cổ phiếu nào</p>
+              <div style={{ 
+                textAlign: 'center', 
+                padding: '40px', 
+                color: '#64748b' 
+              }}>
+                Chưa có cổ phiếu nào. Thêm cổ phiếu đầu tiên!
               </div>
             ) : (
-              <div className="stocks-list">
-                {portfolio.map((stock, idx) => {
-                  const ticker = stock?.ticker || 'N/A';
-                  const quantity = stock?.quantity || 0;
-                  const avgPrice = stock?.avg_price || 0;
-                  const currentPrice = stock?.current_price || avgPrice;
-                  const plAmount = stock?.pl_amount || 0;
-                  const plPct = stock?.pl_pct || 0;
-                  const isProfit = plAmount >= 0;
-
-                  return (
-                    <div key={idx} className="stock-item">
-                      <div className="stock-info">
-                        <div className="stock-header">
-                          <div className="stock-ticker">{ticker}</div>
-                          <div className="stock-pl" style={{ color: isProfit ? '#22c55e' : '#ef4444' }}>
-                            {isProfit ? '+' : ''}{plPct.toFixed(2)}%
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #334155' }}>
+                      <th style={{ padding: '12px', textAlign: 'left', color: '#94a3b8', fontSize: '12px' }}>Mã CP</th>
+                      <th style={{ padding: '12px', textAlign: 'right', color: '#94a3b8', fontSize: '12px' }}>SL</th>
+                      <th style={{ padding: '12px', textAlign: 'right', color: '#94a3b8', fontSize: '12px' }}>Giá mua</th>
+                      <th style={{ padding: '12px', textAlign: 'right', color: '#94a3b8', fontSize: '12px' }}>Hiện tại</th>
+                      <th style={{ padding: '12px', textAlign: 'right', color: '#94a3b8', fontSize: '12px' }}>L/L</th>
+                      <th style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: '12px' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {portfolio.map((stock) => (
+                      <tr key={stock.ticker} style={{ borderBottom: '1px solid #334155' }}>
+                        <td style={{ padding: '12px', color: '#fff', fontWeight: '600' }}>{stock.ticker}</td>
+                        <td style={{ padding: '12px', textAlign: 'right', color: '#fff' }}>{stock.quantity}</td>
+                        <td style={{ padding: '12px', textAlign: 'right', color: '#fff' }}>
+                          {stock.avg_price.toLocaleString('vi-VN')}
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'right', color: '#3b82f6', fontWeight: '600' }}>
+                          {stock.current_price.toLocaleString('vi-VN')}
+                        </td>
+                        <td style={{ 
+                          padding: '12px', 
+                          textAlign: 'right',
+                          color: stock.pl_pct >= 0 ? '#10b981' : '#ef4444',
+                          fontWeight: '600'
+                        }}>
+                          {stock.pl_pct >= 0 ? '+' : ''}{stock.pl_pct.toFixed(2)}%
+                          <div style={{ fontSize: '11px', marginTop: '2px' }}>
+                            {stock.pl_amount >= 0 ? '+' : ''}{stock.pl_amount.toLocaleString('vi-VN')} ₫
                           </div>
-                        </div>
-                        <div className="stock-details">
-                          {quantity} CP × Mua {avgPrice.toLocaleString()} VND
-                        </div>
-                        <div className="stock-current">
-                          Hiện tại: {currentPrice.toLocaleString()} VND
-                          <span style={{ 
-                            marginLeft: '10px',
-                            color: isProfit ? '#22c55e' : '#ef4444',
-                            fontSize: '12px'
-                          }}>
-                            ({isProfit ? '+' : ''}{plAmount.toLocaleString()} VND)
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteStock(ticker)}
-                        className="btn-delete"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'center' }}>
+                          <button
+                            onClick={() => deleteStock(stock.ticker)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#ef4444',
+                              cursor: 'pointer',
+                              padding: '4px'
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Allocation */}
+            {totalAssets > 0 && (
+              <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #334155' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                  <PieChart size={16} color="#3b82f6" />
+                  <span style={{ color: '#94a3b8', fontSize: '12px' }}>Phân bổ tài sản</span>
+                </div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Cổ phiếu</div>
+                    <div style={{ fontSize: '16px', color: '#3b82f6', fontWeight: '600' }}>
+                      {stockAllocation.toFixed(1)}%
                     </div>
-                  );
-                })}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Tiền mặt</div>
+                    <div style={{ fontSize: '16px', color: '#10b981', fontWeight: '600' }}>
+                      {cashAllocation.toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
+        </div>
 
-          {/* AI Chat Section */}
-          <div className="section">
-            <div className="section-header">
-              <h2 className="section-title">
-                <MessageSquare size={20} />
-                AI Advisor
-              </h2>
+        {/* Right Column - AI Chat */}
+        <div>
+          <div style={{
+            background: '#1e293b',
+            padding: '20px',
+            borderRadius: '12px',
+            border: '1px solid #334155',
+            height: 'calc(100vh - 140px)',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+              <MessageSquare size={20} color="#3b82f6" />
+              <h3 style={{ color: '#fff', margin: 0, fontSize: '18px' }}>
+                Quản lý danh mục với phân tích AI
+              </h3>
             </div>
 
-            <div className="chat-subtitle">
-              Phân tích danh mục và tư vấn đầu tư
-            </div>
+            <p style={{ 
+              fontSize: '13px', 
+              color: '#94a3b8',
+              marginBottom: '15px',
+              lineHeight: '1.5'
+            }}>
+              Hãy cập nhật danh mục của quý vị vào đây và hỏi AI để AI tư vấn và hỗ trợ kiểm soát tâm lý tránh FOMO và HOẢNG SỢ.
+            </p>
 
             {/* Chat History */}
-            <div className="chat-history">
+            <div style={{
+              flex: 1,
+              overflowY: 'auto',
+              marginBottom: '15px',
+              padding: '15px',
+              background: '#0f172a',
+              borderRadius: '8px'
+            }}>
               {chatHistory.length === 0 ? (
-                <div className="empty-state">
-                  <MessageSquare size={48} style={{ color: '#64748b' }} />
-                  <p style={{ marginTop: '10px' }}>
-                    Hỏi AI về danh mục của bạn
-                  </p>
-                  <p style={{ fontSize: '13px', color: '#64748b', marginTop: '5px' }}>
-                    VD: "Phân tích rủi ro danh mục của tôi"
-                  </p>
+                <div style={{ 
+                  textAlign: 'center', 
+                  padding: '40px', 
+                  color: '#64748b' 
+                }}>
+                  Bắt đầu cuộc trò chuyện với AI Advisor
                 </div>
               ) : (
-                chatHistory.map((chat, idx) => (
-                  <div key={idx} className="chat-messages">
-                    <div className="user-message">
-                      <strong>Bạn:</strong> {chat.message}
+                chatHistory.map((chat, index) => (
+                  <div key={index} style={{ marginBottom: '20px' }}>
+                    {/* User Message */}
+                    <div style={{
+                      background: '#1e40af',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      marginBottom: '8px',
+                      maxWidth: '80%',
+                      marginLeft: 'auto'
+                    }}>
+                      <div style={{ fontSize: '13px', color: '#fff' }}>{chat.message}</div>
                     </div>
-                    <div className="ai-message">
-                      <strong>AI:</strong> {chat.response}
+
+                    {/* AI Response */}
+                    <div style={{
+                      background: '#334155',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      maxWidth: '80%'
+                    }}>
+                      <div style={{ fontSize: '13px', color: '#fff', whiteSpace: 'pre-wrap' }}>
+                        {chat.response}
+                      </div>
                     </div>
                   </div>
                 ))
@@ -468,384 +614,44 @@ export default function AIPortfolioManager() {
             </div>
 
             {/* Chat Input */}
-            <div className="chat-input-container">
+            <form onSubmit={sendMessage} style={{ display: 'flex', gap: '10px' }}>
               <input
                 type="text"
-                placeholder="Hỏi AI về danh mục..."
-                value={userMessage}
-                onChange={(e) => setUserMessage(e.target.value)}
-                onKeyDown={handleChatKeyDown}
-                className="input"
-                disabled={loading}
+                placeholder="Hỏi AI về danh mục của bạn..."
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                disabled={chatLoading}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid #475569',
+                  background: '#0f172a',
+                  color: '#fff',
+                  fontSize: '14px'
+                }}
               />
               <button
-                onClick={handleSendMessage}
-                disabled={loading || !userMessage.trim()}
-                className="btn-send"
+                type="submit"
+                disabled={chatLoading || !message.trim()}
+                style={{
+                  padding: '12px 20px',
+                  background: chatLoading || !message.trim() ? '#475569' : '#3b82f6',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: chatLoading || !message.trim() ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
               >
                 <Send size={18} />
               </button>
-            </div>
+            </form>
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        .portfolio-manager {
-          min-height: 100vh;
-          background: #0f172a;
-          padding: 20px;
-        }
-
-        .container {
-          max-width: 1400px;
-          margin: 0 auto;
-        }
-
-        .error-banner {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 15px 20px;
-          background: #ef444420;
-          border: 1px solid #ef4444;
-          border-radius: 8px;
-          color: #ef4444;
-          margin-bottom: 20px;
-          font-size: 14px;
-        }
-
-        .error-banner button {
-          background: none;
-          border: none;
-          color: #ef4444;
-          cursor: pointer;
-          font-size: 20px;
-          padding: 0;
-          width: 24px;
-          height: 24px;
-          margin-left: auto;
-        }
-
-        .header {
-          margin-bottom: 30px;
-        }
-
-        .title {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          color: white;
-          font-size: 28px;
-          margin-bottom: 8px;
-        }
-
-        .subtitle {
-          color: #94a3b8;
-          font-size: 15px;
-        }
-
-        .stats-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-          gap: 20px;
-          margin-bottom: 30px;
-        }
-
-        .stat-card {
-          background: #1e293b;
-          border: 1px solid #334155;
-          border-radius: 12px;
-          padding: 20px;
-          display: flex;
-          align-items: center;
-          gap: 15px;
-        }
-
-        .stat-icon {
-          width: 48px;
-          height: 48px;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .stat-label {
-          color: #94a3b8;
-          font-size: 13px;
-          margin-bottom: 5px;
-        }
-
-        .stat-value {
-          color: white;
-          font-size: 20px;
-          font-weight: bold;
-        }
-
-        .main-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
-        }
-
-        .section {
-          background: #1e293b;
-          border: 1px solid #334155;
-          border-radius: 12px;
-          padding: 25px;
-        }
-
-        .section-header {
-          margin-bottom: 20px;
-        }
-
-        .section-title {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          color: white;
-          font-size: 18px;
-          font-weight: 600;
-          margin: 0;
-        }
-
-        .add-stock-form {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-
-        .cash-section {
-          margin-top: 20px;
-          padding-top: 20px;
-          border-top: 1px solid #334155;
-        }
-
-        .cash-display {
-          display: flex;
-          flex-direction: column;
-          gap: 15px;
-        }
-
-        .cash-amount {
-          display: flex;
-          align-items: center;
-          padding: 15px;
-          background: #0f172a;
-          border: 1px solid #334155;
-          border-radius: 8px;
-        }
-
-        .cash-input-group {
-          display: flex;
-          gap: 10px;
-        }
-
-        .input {
-          padding: 12px 16px;
-          background: #0f172a;
-          border: 1px solid #334155;
-          border-radius: 8px;
-          color: white;
-          font-size: 14px;
-          transition: all 0.2s;
-        }
-
-        .input:focus {
-          outline: none;
-          border-color: #3b82f6;
-        }
-
-        .input:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .input::placeholder {
-          color: #64748b;
-        }
-
-        .btn-primary, .btn-secondary {
-          padding: 12px 24px;
-          background: #3b82f6;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s;
-          white-space: nowrap;
-        }
-
-        .btn-secondary {
-          background: #22c55e;
-        }
-
-        .btn-primary:hover:not(:disabled), .btn-secondary:hover:not(:disabled) {
-          opacity: 0.9;
-        }
-
-        .btn-primary:disabled, .btn-secondary:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .stocks-list {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-
-        .stock-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 15px;
-          background: #0f172a;
-          border: 1px solid #334155;
-          border-radius: 8px;
-        }
-
-        .stock-info {
-          flex: 1;
-        }
-
-        .stock-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 8px;
-        }
-
-        .stock-ticker {
-          color: #3b82f6;
-          font-weight: bold;
-          font-size: 18px;
-        }
-
-        .stock-pl {
-          font-weight: 700;
-          font-size: 16px;
-        }
-
-        .stock-details {
-          color: #94a3b8;
-          font-size: 13px;
-          margin-bottom: 4px;
-        }
-
-        .stock-current {
-          color: #e2e8f0;
-          font-size: 14px;
-          font-weight: 500;
-        }
-
-        .btn-delete {
-          padding: 8px;
-          background: #ef444420;
-          border: 1px solid #ef4444;
-          border-radius: 6px;
-          color: #ef4444;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .btn-delete:hover {
-          background: #ef4444;
-          color: white;
-        }
-
-        .chat-subtitle {
-          color: #94a3b8;
-          font-size: 14px;
-          margin-bottom: 20px;
-        }
-
-        .chat-history {
-          height: 400px;
-          overflow-y: auto;
-          padding: 15px;
-          background: #0f172a;
-          border: 1px solid #334155;
-          border-radius: 8px;
-          margin-bottom: 15px;
-        }
-
-        .chat-messages {
-          margin-bottom: 20px;
-        }
-
-        .user-message {
-          padding: 12px;
-          background: #3b82f620;
-          border-left: 3px solid #3b82f6;
-          border-radius: 6px;
-          margin-bottom: 10px;
-          color: white;
-          font-size: 14px;
-        }
-
-        .ai-message {
-          padding: 12px;
-          background: #22c55e20;
-          border-left: 3px solid #22c55e;
-          border-radius: 6px;
-          color: white;
-          font-size: 14px;
-          line-height: 1.6;
-        }
-
-        .chat-input-container {
-          display: flex;
-          gap: 10px;
-        }
-
-        .btn-send {
-          padding: 12px 16px;
-          background: #3b82f6;
-          border: none;
-          border-radius: 8px;
-          color: white;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .btn-send:hover:not(:disabled) {
-          background: #2563eb;
-        }
-
-        .btn-send:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .empty-state {
-          text-align: center;
-          padding: 60px 20px;
-          color: #64748b;
-        }
-
-        @media (max-width: 1024px) {
-          .main-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        @media (max-width: 768px) {
-          .add-stock-form {
-            flex-direction: column;
-          }
-
-          .input {
-            width: 100%;
-          }
-
-          .stats-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
     </div>
   );
 }
