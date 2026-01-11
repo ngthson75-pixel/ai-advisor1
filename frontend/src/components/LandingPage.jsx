@@ -85,7 +85,7 @@ export default function LandingPage({ onLogin }) {
     totalSignals: 127,
     successRate: 78.5,
     avgReturn: 6.8,
-    activeUsers: 1250
+    failureRate: 21.5
   }
 
   const handleSubmit = (e) => {
@@ -143,8 +143,8 @@ export default function LandingPage({ onLogin }) {
                   <div className="stat-label">Lợi nhuận TB</div>
                 </div>
                 <div className="stat-item">
-                  <div className="stat-number">{stats.activeUsers.toLocaleString()}</div>
-                  <div className="stat-label">Người dùng</div>
+                  <div className="stat-number" style={{color: '#ef4444'}}>{stats.failureRate}%</div>		
+                  <div className="stat-label">Tỷ lệ không thành công</div>
                 </div>
               </div>
 
