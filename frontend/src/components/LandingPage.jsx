@@ -13,9 +13,73 @@ export default function LandingPage({ onLogin }) {
     name: ''
   })
 
-  // Fetch recommendations from API instead of mock data
+  // Fetch recommendations from API + historical data
   const [recommendations, setRecommendations] = useState([])
   const [loading, setLoading] = useState(true)
+
+  // Historical signals from 06/01/2026
+  const historicalSignals = [
+    {
+      id: 'hist-1',
+      ticker: 'VNM',
+      entryPrice: 60700,
+      stopLoss: 57665,  // -5%
+      takeProfit: 65556, // +8%
+      score: 75,
+      type: 'Blue Chip',
+      date: '06/01/2026'
+    },
+    {
+      id: 'hist-2',
+      ticker: 'BID',
+      entryPrice: 38750,
+      stopLoss: 36812,  // -5%
+      takeProfit: 41850, // +8%
+      score: 75,
+      type: 'Blue Chip',
+      date: '06/01/2026'
+    },
+    {
+      id: 'hist-3',
+      ticker: 'CTG',
+      entryPrice: 36120,
+      stopLoss: 34314,  // -5%
+      takeProfit: 39010, // +8%
+      score: 75,
+      type: 'Blue Chip',
+      date: '06/01/2026'
+    },
+    {
+      id: 'hist-4',
+      ticker: 'POW',
+      entryPrice: 12750,
+      stopLoss: 12112,  // -5%
+      takeProfit: 13770, // +8%
+      score: 75,
+      type: 'Blue Chip',
+      date: '06/01/2026'
+    },
+    {
+      id: 'hist-5',
+      ticker: 'SAB',
+      entryPrice: 45700,
+      stopLoss: 43415,  // -5%
+      takeProfit: 49356, // +8%
+      score: 75,
+      type: 'Blue Chip',
+      date: '06/01/2026'
+    },
+    {
+      id: 'hist-6',
+      ticker: 'HNG',
+      entryPrice: 6300,
+      stopLoss: 5985,   // -5%
+      takeProfit: 6804,  // +8%
+      score: 75,
+      type: 'Blue Chip',
+      date: '06/01/2026'
+    }
+  ]
 
   useEffect(() => {
     fetchRecommendations()
@@ -27,32 +91,28 @@ export default function LandingPage({ onLogin }) {
       const data = await response.json()
       
       if (data.success && data.signals) {
-        // Map API signals to match existing card format
-        const mappedSignals = data.signals.slice(0, 6).map((signal, index) => {
-          // Calculate potential return
-          const entryPrice = signal.entry_price
-          const targetPrice = signal.take_profit
-          const potentialReturn = ((targetPrice - entryPrice) / entryPrice * 100).toFixed(1)
-          
-          return {
-            id: signal.id || index + 1,
-            ticker: signal.ticker || signal.code,
-            action: signal.action || 'MUA',
-            entryPrice: entryPrice,
-            targetPrice: targetPrice,
-            actualPrice: targetPrice, // Show target as "result" for now
-            result: `+${potentialReturn}%`,
-            date: signal.date || new Date(signal.created_at).toLocaleDateString('vi-VN'),
-            status: 'success'
-          }
-        })
+        // Map API signals to table format
+        const apiSignals = data.signals.slice(0, 10).map((signal, index) => ({
+          id: signal.id || `api-${index + 1}`,
+          ticker: signal.ticker || signal.code,
+          entryPrice: signal.entry_price,
+          stopLoss: signal.stop_loss,
+          takeProfit: signal.take_profit,
+          score: signal.strength || 75,
+          type: signal.stock_type || 'Blue Chip',
+          date: signal.date || new Date(signal.created_at).toLocaleDateString('vi-VN')
+        }))
         
-        setRecommendations(mappedSignals)
+        // Combine historical + API signals
+        setRecommendations([...historicalSignals, ...apiSignals])
+      } else {
+        // If no API signals, show only historical
+        setRecommendations(historicalSignals)
       }
     } catch (error) {
       console.error('Error fetching signals:', error)
-      // Keep empty array if fetch fails
-      setRecommendations([])
+      // On error, show historical signals
+      setRecommendations(historicalSignals)
     } finally {
       setLoading(false)
     }
@@ -223,7 +283,7 @@ export default function LandingPage({ onLogin }) {
         </div>
       </section>
 
-      {/* Recommendations Showcase */}
+      {/* Recommendations Table */}
       <section className="showcase" id="showcase">
         <div className="container">
           <div className="section-header">
@@ -242,51 +302,35 @@ export default function LandingPage({ onLogin }) {
               <div style={{ fontSize: '14px' }}>Hệ thống sẽ tự động tạo tín hiệu mới</div>
             </div>
           ) : (
-            <div className="recommendations-grid">
-              {recommendations.map((rec) => (
-                <div key={rec.id} className="recommendation-card">
-                  <div className="rec-header">
-                    <div className="rec-info">
-                      <span className={`rec-badge ${rec.action.toLowerCase()}`}>
-                        {rec.action}
-                      </span>
-                      <span className="rec-ticker">{rec.ticker}</span>
-                    </div>
-                    <div className="rec-date">{rec.date}</div>
-                  </div>
-
-                  <div className="rec-body">
-                    <div className="rec-prices">
-                      <div className="price-item">
-                        <label>Giá {rec.action === 'MUA' ? 'mua' : 'bán'}</label>
-                        <div className="price">{formatCurrency(rec.entryPrice)}</div>
-                      </div>
-                      <div className="price-arrow">→</div>
-                      <div className="price-item">
-                        <label>Mục tiêu</label>
-                        <div className="price">{formatCurrency(rec.targetPrice)}</div>
-                      </div>
-                    </div>
-
-                    <div className="rec-result">
-                      <div className="result-label">Tiềm năng:</div>
-                      <div className="result-value">
-                        {formatCurrency(rec.actualPrice)}
-                        <span className="result-percent success">{rec.result}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rec-footer">
-                    <span className="status-badge success">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                        <polyline points="20 6 9 17 4 12"/>
-                      </svg>
-                      Tín hiệu mới
-                    </span>
-                  </div>
-                </div>
-              ))}
+            <div className="signals-table-container">
+              <table className="signals-table">
+                <thead>
+                  <tr>
+                    <th>MÃ CK</th>
+                    <th>GIÁ VÀO</th>
+                    <th>STOP LOSS</th>
+                    <th>TAKE PROFIT</th>
+                    <th>SCORE</th>
+                    <th>LOẠI</th>
+                    <th>NGÀY</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recommendations.map((signal) => (
+                    <tr key={signal.id}>
+                      <td className="ticker-cell">{signal.ticker}</td>
+                      <td className="price-cell">{formatCurrency(signal.entryPrice)}</td>
+                      <td className="stoploss-cell">{formatCurrency(signal.stopLoss)}</td>
+                      <td className="takeprofit-cell">{formatCurrency(signal.takeProfit)}</td>
+                      <td className="score-cell">
+                        <span className="score-badge">{signal.score}</span>
+                      </td>
+                      <td className="type-cell">{signal.type}</td>
+                      <td className="date-cell">{signal.date}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
 
@@ -636,6 +680,117 @@ export default function LandingPage({ onLogin }) {
           </div>
         </div>
       </footer>
+
+      {/* Custom CSS for table */}
+      <style jsx>{`
+        .signals-table-container {
+          overflow-x: auto;
+          margin: 30px 0;
+        }
+
+        .signals-table {
+          width: 100%;
+          border-collapse: separate;
+          border-spacing: 0;
+          background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+          border-radius: 12px;
+          overflow: hidden;
+        }
+
+        .signals-table thead {
+          background: rgba(15, 23, 42, 0.8);
+        }
+
+        .signals-table th {
+          padding: 16px 20px;
+          text-align: left;
+          font-size: 12px;
+          font-weight: 600;
+          color: #94a3b8;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          border-bottom: 1px solid #334155;
+        }
+
+        .signals-table tbody tr {
+          border-bottom: 1px solid #334155;
+          transition: background 0.2s;
+        }
+
+        .signals-table tbody tr:last-child {
+          border-bottom: none;
+        }
+
+        .signals-table tbody tr:hover {
+          background: rgba(59, 130, 246, 0.05);
+        }
+
+        .signals-table td {
+          padding: 20px;
+          font-size: 14px;
+          color: #e2e8f0;
+        }
+
+        .ticker-cell {
+          font-weight: 700;
+          font-size: 16px;
+          color: #3b82f6;
+        }
+
+        .price-cell {
+          font-weight: 500;
+          color: #e2e8f0;
+        }
+
+        .stoploss-cell {
+          font-weight: 600;
+          color: #ef4444;
+        }
+
+        .takeprofit-cell {
+          font-weight: 600;
+          color: #10b981;
+        }
+
+        .score-cell {
+          text-align: center;
+        }
+
+        .score-badge {
+          display: inline-block;
+          padding: 6px 16px;
+          background: #10b981;
+          color: #fff;
+          font-weight: 700;
+          font-size: 14px;
+          border-radius: 20px;
+        }
+
+        .type-cell {
+          color: #94a3b8;
+          font-size: 13px;
+        }
+
+        .date-cell {
+          color: #94a3b8;
+          font-size: 13px;
+        }
+
+        @media (max-width: 768px) {
+          .signals-table {
+            font-size: 12px;
+          }
+
+          .signals-table th,
+          .signals-table td {
+            padding: 12px 10px;
+          }
+
+          .ticker-cell {
+            font-size: 14px;
+          }
+        }
+      `}</style>
     </div>
   )
 }
