@@ -23,61 +23,73 @@ export default function LandingPage({ onLogin }) {
       id: 'hist-1',
       ticker: 'VNM',
       entryPrice: 60700,
-      stopLoss: 57665,  // -5%
-      takeProfit: 65556, // +8%
+      stopLoss: 57665,
+      takeProfit: 65556,
       score: 75,
       type: 'Blue Chip',
-      date: '06/01/2026'
+      date: '06/01/2026',
+      status: 'active',
+      action: null
     },
     {
       id: 'hist-2',
       ticker: 'BID',
       entryPrice: 38750,
-      stopLoss: 36812,  // -5%
-      takeProfit: 41850, // +8%
+      stopLoss: 36812,
+      takeProfit: 41850,
       score: 75,
       type: 'Blue Chip',
-      date: '06/01/2026'
+      date: '06/01/2026',
+      status: 'active',
+      action: null
     },
     {
       id: 'hist-3',
       ticker: 'CTG',
       entryPrice: 36120,
-      stopLoss: 34314,  // -5%
-      takeProfit: 39010, // +8%
+      stopLoss: 34314,
+      takeProfit: 39010,
       score: 75,
       type: 'Blue Chip',
-      date: '06/01/2026'
+      date: '06/01/2026',
+      status: 'active',
+      action: null
     },
     {
       id: 'hist-4',
       ticker: 'POW',
       entryPrice: 12750,
-      stopLoss: 12112,  // -5%
-      takeProfit: 13770, // +8%
+      stopLoss: 12112,
+      takeProfit: 13770,
       score: 75,
       type: 'Blue Chip',
-      date: '06/01/2026'
+      date: '06/01/2026',
+      status: 'active',
+      action: null
     },
     {
       id: 'hist-5',
       ticker: 'SAB',
       entryPrice: 45700,
-      stopLoss: 43415,  // -5%
-      takeProfit: 49356, // +8%
+      stopLoss: 43415,
+      takeProfit: 49356,
       score: 75,
       type: 'Blue Chip',
-      date: '06/01/2026'
+      date: '06/01/2026',
+      status: 'active',
+      action: null
     },
     {
       id: 'hist-6',
       ticker: 'HNG',
       entryPrice: 6300,
-      stopLoss: 5985,   // -5%
-      takeProfit: 6804,  // +8%
+      stopLoss: 5985,
+      takeProfit: 6804,
       score: 75,
       type: 'Blue Chip',
-      date: '06/01/2026'
+      date: '06/01/2026',
+      status: 'active',
+      action: null
     }
   ]
 
@@ -85,23 +97,91 @@ export default function LandingPage({ onLogin }) {
     fetchRecommendations()
   }, [])
 
+  // Format date from various formats to DD/MM/YYYY
+  const formatDate = (dateString) => {
+    if (!dateString) return ''
+    
+    // If already in DD/MM/YYYY format, return as-is
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateString)) {
+      return dateString
+    }
+    
+    // Parse ISO format (YYYY-MM-DD or ISO datetime)
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return dateString
+      
+      const day = String(date.getDate()).padStart(2, '0')
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const year = date.getFullYear()
+      
+      return `${day}/${month}/${year}`
+    } catch (e) {
+      return dateString
+    }
+  }
+
+  // Simulate sell signal logic (in real app, this would be backend)
+  const evaluateSellSignal = (signal, currentPrice, ma20) => {
+    // This is a simulation - in production, fetch real prices and MA20
+    
+    // If price reached TP → Sell 1/2
+    if (currentPrice >= signal.takeProfit && signal.status === 'active') {
+      return {
+        status: 'half_sold',
+        action: 'BÁN 1/2',
+        reason: 'Đạt Take Profit'
+      }
+    }
+    
+    // If already sold 1/2 and price cuts below MA20 → Sell remaining 1/2
+    if (signal.status === 'half_sold' && currentPrice < ma20) {
+      return {
+        status: 'fully_sold',
+        action: 'BÁN NỐT 1/2',
+        reason: 'Cắt xuống MA20'
+      }
+    }
+    
+    // Otherwise hold
+    if (signal.status === 'half_sold') {
+      return {
+        status: 'half_sold',
+        action: 'NẮM GIỮ',
+        reason: 'Trên MA20'
+      }
+    }
+    
+    return {
+      status: 'active',
+      action: null,
+      reason: null
+    }
+  }
+
   const fetchRecommendations = async () => {
     try {
       const response = await fetch(`${API_BASE}/signals`)
       const data = await response.json()
       
       if (data.success && data.signals) {
-        // Map API signals to table format
-        const apiSignals = data.signals.slice(0, 10).map((signal, index) => ({
-          id: signal.id || `api-${index + 1}`,
-          ticker: signal.ticker || signal.code,
-          entryPrice: signal.entry_price,
-          stopLoss: signal.stop_loss,
-          takeProfit: signal.take_profit,
-          score: signal.strength || 75,
-          type: signal.stock_type || 'Blue Chip',
-          date: signal.date || new Date(signal.created_at).toLocaleDateString('vi-VN')
-        }))
+        // Map API signals to table format with correct date format
+        const apiSignals = data.signals.slice(0, 10).map((signal, index) => {
+          const dateStr = signal.date || signal.created_at
+          
+          return {
+            id: signal.id || `api-${index + 1}`,
+            ticker: signal.ticker || signal.code,
+            entryPrice: signal.entry_price,
+            stopLoss: signal.stop_loss,
+            takeProfit: signal.take_profit,
+            score: signal.strength || 75,
+            type: signal.stock_type || 'Blue Chip',
+            date: formatDate(dateStr), // Fix date format here
+            status: 'active',
+            action: null
+          }
+        })
         
         // Combine historical + API signals
         setRecommendations([...historicalSignals, ...apiSignals])
@@ -302,36 +382,54 @@ export default function LandingPage({ onLogin }) {
               <div style={{ fontSize: '14px' }}>Hệ thống sẽ tự động tạo tín hiệu mới</div>
             </div>
           ) : (
-            <div className="signals-table-container">
-              <table className="signals-table">
-                <thead>
-                  <tr>
-                    <th>MÃ CK</th>
-                    <th>GIÁ VÀO</th>
-                    <th>STOP LOSS</th>
-                    <th>TAKE PROFIT</th>
-                    <th>SCORE</th>
-                    <th>LOẠI</th>
-                    <th>NGÀY</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recommendations.map((signal) => (
-                    <tr key={signal.id}>
-                      <td className="ticker-cell">{signal.ticker}</td>
-                      <td className="price-cell">{formatCurrency(signal.entryPrice)}</td>
-                      <td className="stoploss-cell">{formatCurrency(signal.stopLoss)}</td>
-                      <td className="takeprofit-cell">{formatCurrency(signal.takeProfit)}</td>
-                      <td className="score-cell">
-                        <span className="score-badge">{signal.score}</span>
-                      </td>
-                      <td className="type-cell">{signal.type}</td>
-                      <td className="date-cell">{signal.date}</td>
+            <>
+              <div className="signals-table-container">
+                <table className="signals-table">
+                  <thead>
+                    <tr>
+                      <th>MÃ CK</th>
+                      <th>GIÁ VÀO</th>
+                      <th>STOP LOSS</th>
+                      <th>TAKE PROFIT</th>
+                      <th>SCORE</th>
+                      <th>LOẠI</th>
+                      <th>NGÀY</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {recommendations.map((signal) => (
+                      <tr key={signal.id}>
+                        <td className="ticker-cell">{signal.ticker}</td>
+                        <td className="price-cell">{formatCurrency(signal.entryPrice)}</td>
+                        <td className="stoploss-cell">{formatCurrency(signal.stopLoss)}</td>
+                        <td className="takeprofit-cell">{formatCurrency(signal.takeProfit)}</td>
+                        <td className="score-cell">
+                          <span className="score-badge">{signal.score}</span>
+                        </td>
+                        <td className="type-cell">{signal.type}</td>
+                        <td className="date-cell">{signal.date}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Sell Signal Strategy Info */}
+              <div className="strategy-info">
+                <div className="strategy-card">
+                  <div className="strategy-icon">📊</div>
+                  <div className="strategy-content">
+                    <h4>Chiến lược bán tự động</h4>
+                    <p>Hệ thống theo dõi các CP trong danh sách và đưa ra tín hiệu bán theo quy tắc:</p>
+                    <ul>
+                      <li><strong>Bán 1/2:</strong> Khi giá đạt Take Profit</li>
+                      <li><strong>Bán nốt 1/2:</strong> Khi giá cắt xuống MA20 (sau khi đã bán 1/2)</li>
+                      <li><strong>Nắm giữ:</strong> Khi giá trên MA20 (sau khi đã bán 1/2)</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
 
           <div className="showcase-cta">
@@ -776,6 +874,62 @@ export default function LandingPage({ onLogin }) {
           font-size: 13px;
         }
 
+        .strategy-info {
+          margin-top: 40px;
+          padding: 20px 0;
+        }
+
+        .strategy-card {
+          background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+          border: 1px solid #334155;
+          border-radius: 12px;
+          padding: 30px;
+          display: flex;
+          gap: 20px;
+        }
+
+        .strategy-icon {
+          font-size: 48px;
+          flex-shrink: 0;
+        }
+
+        .strategy-content h4 {
+          font-size: 20px;
+          color: #3b82f6;
+          margin-bottom: 12px;
+        }
+
+        .strategy-content p {
+          color: #94a3b8;
+          margin-bottom: 16px;
+          line-height: 1.6;
+        }
+
+        .strategy-content ul {
+          list-style: none;
+          padding: 0;
+        }
+
+        .strategy-content li {
+          color: #e2e8f0;
+          padding: 8px 0;
+          padding-left: 24px;
+          position: relative;
+          line-height: 1.6;
+        }
+
+        .strategy-content li:before {
+          content: "→";
+          position: absolute;
+          left: 0;
+          color: #3b82f6;
+          font-weight: bold;
+        }
+
+        .strategy-content strong {
+          color: #10b981;
+        }
+
         @media (max-width: 768px) {
           .signals-table {
             font-size: 12px;
@@ -788,6 +942,15 @@ export default function LandingPage({ onLogin }) {
 
           .ticker-cell {
             font-size: 14px;
+          }
+
+          .strategy-card {
+            flex-direction: column;
+            padding: 20px;
+          }
+
+          .strategy-icon {
+            font-size: 36px;
           }
         }
       `}</style>
