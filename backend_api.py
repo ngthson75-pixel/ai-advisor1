@@ -15,9 +15,16 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
+# SELL Signal Integration
+from backend_sell_api import register_sell_routes
+
 # Initialize Flask
 app = Flask(__name__)
 CORS(app)
+
+# Register SELL Signal Routes
+register_sell_routes(app)
+print("✅ SELL signal routes registered")
 
 # Configure OpenAI
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
