@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI ADVISOR - BACKEND v3.3
-WITH STRICT AI SYSTEM PROMPT FOR INVESTMENT GUIDANCE
+AI ADVISOR - COMPLETE BACKEND v3.0
+ALL FEATURES: Signals, EOD Prices, Cash, P&L, Chat AI
 """
 
 from flask import Flask, request, jsonify
@@ -34,106 +34,20 @@ DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:////tmp/ai_advisor.db')
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 
-# EOD file settings
-EOD_FILE = 'latest_prices_all.json'
-PRICES_CACHE = {}
-CACHE_LOADED = False
+# EOD prices file
+PRICES_FILE = 'latest_prices.json'
 
-
-# ========================================================================
-# AI SYSTEM PROMPT - STRICT INVESTMENT GUIDANCE RULES
-# ========================================================================
-
-AI_SYSTEM_PROMPT = """You are AI ADVISOR, a decision-support system for investors.
-
-Your primary role:
-- Support investment decision-making through structured analysis.
-- Provide insights that help users understand risk, probability, and scenarios.
-- Guide users toward disciplined, system-based investing.
-
-Product rule (critical):
-- AI ADVISOR only provides action-oriented guidance (buy/sell considerations)
-  for stocks that are included in the official "Buysell Signal" list
-  within the AI ADVISOR application.
-- For all other stocks, AI ADVISOR may analyze and explain,
-  but must NOT suggest or imply any investment action.
-
-Core principles:
-1. You do NOT provide direct buy/sell commands outside the Buysell Signal list.
-2. You do NOT promise profits or guaranteed outcomes.
-3. You do NOT encourage speculation, gambling, or impulsive behavior.
-4. You prioritize capital protection, risk management, and discipline.
-5. You clearly distinguish between:
-   - Analysis-only stocks
-   - System-approved Buysell Signal stocks
-
-Behavior rules by stock type:
-
-A. If the stock IS in the "Buysell Signal" list:
-- You may discuss:
-  - Signal status (trend, momentum, valuation context)
-  - Risk conditions and invalidation scenarios
-  - Position sizing considerations (conceptual, not numeric)
-- You must still avoid explicit trade commands or price targets.
-- You must emphasize that signals are system-based, not guarantees.
-
-B. If the stock is NOT in the "Buysell Signal" list:
-- You may:
-  - Analyze fundamentals, trends, and risks
-  - Explain why the stock may or may not fit certain strategies
-- You must:
-  - Clearly state that the stock is NOT in the Buysell Signal system
-  - Avoid any form of recommendation, suggestion, or implied action
-  - Redirect the user toward the Buysell Signal list if they seek action
-
-Mandatory phrasing for non-signal stocks:
-- Explicitly include a sentence equivalent to:
-  "This stock is currently not part of the AI ADVISOR Buysell Signal system.
-   Therefore, the following analysis is for understanding only,
-   not for action guidance."
-
-Response style:
-- Professional, disciplined, and neutral.
-- No hype, no emotional language, no persuasive tone.
-- Concise by default; expand only if explicitly requested.
-- RESPOND IN VIETNAMESE unless user writes in English.
-
-Default output structure:
-
-For Buysell Signal stocks:
-1. Signal context summary
-2. Supporting analysis
-3. Risk & invalidation conditions
-4. System-based considerations (not advice)
-
-For non-signal stocks:
-1. Analysis summary
-2. Key factors & risks
-3. Why it is outside the Buysell Signal scope
-4. What type of stock typically qualifies for the system (educational)
-
-User expectation management:
-- Clearly state that AI ADVISOR supports decision-making,
-  but final responsibility belongs to the user.
-- Emphasize that the Buysell Signal list is the only source
-  of system-approved actionable guidance.
-
-If user pushes for action on non-signal stocks:
-- Politely refuse.
-- Reframe toward analysis or suggest checking the Buysell Signal list.
-
-If user intent is unclear:
-- Ask ONE clarifying question only.
-
-Always act as a disciplined, system-driven investment advisor,
-not a trader, promoter, or discretionary stock picker.
-
-CRITICAL: Help users control FOMO (fear of missing out) and PANIC SELLING by:
-- Reminding them of their investment plan and system rules
-- Encouraging rational analysis over emotional reactions
-- Pointing out when market behavior is driven by emotion vs fundamentals
-- Supporting disciplined decision-making based on data, not fear or greed
-"""
+# Mock EOD prices (fallback if file doesn't exist)
+MOCK_PRICES = {
+    'VCB': {'price': 90000, 'change_percent': 1.5},
+    'VHM': {'price': 58000, 'change_percent': -0.8},
+    'VIC': {'price': 42000, 'change_percent': 0.5},
+    'TCB': {'price': 26500, 'change_percent': 2.1},
+    'HPG': {'price': 28000, 'change_percent': 1.2},
+    'MBB': {'price': 27500, 'change_percent': -0.3},
+    'FPT': {'price': 145000, 'change_percent': 0.8},
+    'VNM': {'price': 87000, 'change_percent': 0.2}
+}
 
 
 # ========================================================================
@@ -191,71 +105,43 @@ class ChatHistory(Base):
 
 
 # ========================================================================
-# EOD FILE MANAGEMENT
+# HELPER FUNCTIONS
 # ========================================================================
 
-def load_eod_prices():
-    """Load EOD prices from file"""
-    global PRICES_CACHE, CACHE_LOADED
-    
-    if not os.path.exists(EOD_FILE):
-        print(f"⚠️ EOD file not found: {EOD_FILE}")
-        PRICES_CACHE = {}
-        CACHE_LOADED = True
-        return False
-    
+def load_latest_prices():
+    """Load EOD prices from file or use mock"""
     try:
-        with open(EOD_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        PRICES_CACHE = data.get('prices', {})
-        
-        print(f"✅ Loaded {len(PRICES_CACHE)} prices from EOD file")
-        
-        CACHE_LOADED = True
-        return True
-        
+        if os.path.exists(PRICES_FILE):
+            with open(PRICES_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return data.get('prices', {})
     except Exception as e:
-        print(f"❌ Error loading EOD file: {e}")
-        PRICES_CACHE = {}
-        CACHE_LOADED = True
-        return False
+        print(f"Error loading prices: {e}")
+    
+    # Fallback to mock prices
+    return MOCK_PRICES
 
 
 def get_current_price(ticker):
-    """Get current price for ticker from EOD file"""
-    global PRICES_CACHE, CACHE_LOADED
-    
-    if not CACHE_LOADED:
-        load_eod_prices()
-    
-    ticker = ticker.upper().strip()
-    
-    if ticker in PRICES_CACHE:
-        price_data = PRICES_CACHE[ticker]
-        return price_data.get('price')
-    
-    return None
+    """Get current price for ticker"""
+    prices = load_latest_prices()
+    if ticker in prices:
+        return prices[ticker].get('price', 0)
+    return 0
 
-
-# ========================================================================
-# PORTFOLIO CONTEXT & AI CHAT
-# ========================================================================
 
 def get_portfolio_context(user_id):
-    """Get portfolio context with P&L"""
+    """Get portfolio context with P&L for AI"""
     session = Session()
     try:
         portfolios = session.query(Portfolio).filter_by(user_id=user_id).all()
         cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
         cash = cash_pos.cash_amount if cash_pos else 0
         
-        # Get list of stocks in Buysell Signal system
-        signals = session.query(Signal).all()
-        signal_tickers = set([s.ticker for s in signals])
+        prices = load_latest_prices()
         
         if not portfolios and cash == 0:
-            return "Danh mục: Trống", signal_tickers
+            return "Danh mục: Trống"
         
         context = "DANH MỤC ĐẦU TƯ:\n\n"
         
@@ -268,20 +154,14 @@ def get_portfolio_context(user_id):
                 cost = p.quantity * p.avg_price
                 total_cost += cost
                 
-                current_price = get_current_price(p.ticker)
-                if not current_price:
-                    current_price = p.avg_price
-                
+                current_price = prices.get(p.ticker, {}).get('price', p.avg_price)
                 current_value = p.quantity * current_price
                 total_value += current_value
                 
                 pl = current_value - cost
                 pl_pct = (pl / cost * 100) if cost > 0 else 0
                 
-                # Mark if stock is in Buysell Signal system
-                in_signal = "✅ [IN BUYSELL SIGNAL]" if p.ticker in signal_tickers else "⚠️ [NOT IN SIGNAL LIST]"
-                
-                context += f"- {p.ticker} {in_signal}: {p.quantity} CP @ {p.avg_price:,.0f} VND\n"
+                context += f"- {p.ticker}: {p.quantity} CP @ {p.avg_price:,.0f} VND\n"
                 context += f"  Giá hiện tại: {current_price:,.0f} VND\n"
                 context += f"  P&L: {pl:+,.0f} VND ({pl_pct:+.1f}%)\n"
             
@@ -298,34 +178,28 @@ def get_portfolio_context(user_id):
             context += f"\nTỔNG TÀI SẢN: {total_assets:,.0f} VND\n"
             context += f"Phân bổ: {stock_pct:.1f}% CP / {cash_pct:.1f}% TM\n"
         
-        context += f"\n\nCỔ PHIẾU TRONG BUYSELL SIGNAL SYSTEM:\n"
-        context += ", ".join(sorted(signal_tickers)) if signal_tickers else "Chưa có signal nào"
-        
-        return context, signal_tickers
+        return context
         
     except Exception as e:
         print(f"Error: {e}")
-        return "Danh mục: Lỗi", set()
+        return "Danh mục: Lỗi"
     finally:
         session.close()
 
 
-def chat_with_gpt(message, portfolio_context, signal_tickers):
-    """Chat with OpenAI using strict system prompt"""
+def chat_with_gpt(message, portfolio_context):
+    """Chat with OpenAI"""
     if not openai_client:
         return "Xin lỗi, AI chưa được cấu hình."
     
     try:
-        # Build system message with portfolio context
-        system_message = AI_SYSTEM_PROMPT + f"\n\n{portfolio_context}"
-        
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": system_message},
+                {"role": "system", "content": f"Bạn là AI tư vấn đầu tư VN.\n\n{portfolio_context}\n\nTrả lời ngắn gọn, thực tế."},
                 {"role": "user", "content": message}
             ],
-            max_tokens=800,
+            max_tokens=500,
             temperature=0.7
         )
         return response.choices[0].message.content
@@ -341,24 +215,20 @@ def chat_with_gpt(message, portfolio_context, signal_tickers):
 @app.route('/', methods=['GET'])
 def index():
     return jsonify({
-        'service': 'AI Advisor Backend v3.3',
-        'version': '3.3 (Strict AI Prompt)',
-        'features': ['signals', 'portfolio', 'cash', 'eod_prices', 'chat_ai_strict', 'fomo_control'],
-        'eod_file': {
-            'exists': os.path.exists(EOD_FILE),
-            'tickers': len(PRICES_CACHE)
-        },
+        'service': 'AI Advisor Backend v3.0',
+        'version': '3.0',
+        'features': ['signals', 'portfolio', 'cash', 'eod_prices', 'chat_ai'],
         'status': 'running'
     })
 
 
 @app.route('/health', methods=['GET'])
 def health():
+    prices = load_latest_prices()
     return jsonify({
         'status': 'healthy',
         'openai': openai_client is not None,
-        'eod_file_loaded': CACHE_LOADED,
-        'eod_tickers': len(PRICES_CACHE),
+        'prices_loaded': len(prices),
         'timestamp': datetime.now().isoformat()
     })
 
@@ -407,14 +277,18 @@ def get_signals():
 
 @app.route('/api/scan', methods=['POST'])
 def scan_signals():
-    """Scan for new signals (mock)"""
+    """Scan for new signals (mock for now)"""
     try:
+        # Mock signals for testing
         session = Session()
         
+        # Create sample signals
         sample_tickers = ['VCB', 'VHM', 'HPG', 'TCB']
-        created_count = 0
+        prices = load_latest_prices()
         
+        created_count = 0
         for ticker in sample_tickers:
+            # Check if already exists today
             today = datetime.now().strftime('%Y-%m-%d')
             existing = session.query(Signal).filter(
                 Signal.ticker == ticker,
@@ -424,10 +298,10 @@ def scan_signals():
             if existing:
                 continue
             
-            price = get_current_price(ticker)
-            if not price:
-                price = 50000
+            # Get price
+            price = prices.get(ticker, {}).get('price', 50000)
             
+            # Create signal
             signal = Signal(
                 ticker=ticker,
                 strategy='PULLBACK',
@@ -459,13 +333,23 @@ def scan_signals():
         session.close()
 
 
+@app.route('/api/scan/status', methods=['GET'])
+def scan_status():
+    """Get scan status"""
+    return jsonify({
+        'success': True,
+        'status': 'ready',
+        'last_scan': datetime.now().isoformat()
+    })
+
+
 # ========================================================================
 # PORTFOLIO ENDPOINTS
 # ========================================================================
 
 @app.route('/api/portfolio', methods=['GET'])
 def get_portfolio():
-    """Get portfolio with P&L from EOD file"""
+    """Get portfolio with P&L"""
     user_id = request.args.get('user_id', 1, type=int)
     
     session = Session()
@@ -474,12 +358,11 @@ def get_portfolio():
         cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
         cash = cash_pos.cash_amount if cash_pos else 0
         
+        prices = load_latest_prices()
+        
         portfolio_data = []
         for p in portfolios:
-            current_price = get_current_price(p.ticker)
-            if not current_price:
-                current_price = p.avg_price
-            
+            current_price = prices.get(p.ticker, {}).get('price', p.avg_price)
             cost = p.quantity * p.avg_price
             current_value = p.quantity * current_price
             pl_amount = current_value - cost
@@ -583,16 +466,21 @@ def delete_portfolio(ticker):
 
 
 # ========================================================================
-# CASH & CHAT ENDPOINTS
+# CASH ENDPOINTS
 # ========================================================================
 
 @app.route('/api/cash', methods=['GET'])
 def get_cash():
+    """Get cash position"""
     user_id = request.args.get('user_id', 1, type=int)
+    
     session = Session()
     try:
         cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
-        return jsonify({'success': True, 'cash': cash_pos.cash_amount if cash_pos else 0})
+        return jsonify({
+            'success': True,
+            'cash': cash_pos.cash_amount if cash_pos else 0
+        })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
@@ -601,7 +489,9 @@ def get_cash():
 
 @app.route('/api/cash', methods=['POST'])
 def update_cash():
+    """Update cash position"""
     data = request.json
+    
     user_id = data.get('user_id', 1)
     cash_amount = float(data.get('cash', 0))
     
@@ -629,10 +519,54 @@ def update_cash():
         session.close()
 
 
+# ========================================================================
+# PRICES ENDPOINTS
+# ========================================================================
+
+@app.route('/api/prices/latest', methods=['GET'])
+def get_latest_prices():
+    """Get all latest prices"""
+    try:
+        prices = load_latest_prices()
+        return jsonify({
+            'success': True,
+            'prices': prices,
+            'count': len(prices)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/prices/<ticker>', methods=['GET'])
+def get_ticker_price(ticker):
+    """Get price for ticker"""
+    try:
+        prices = load_latest_prices()
+        
+        if ticker.upper() not in prices:
+            return jsonify({
+                'success': False,
+                'error': f'Price not found for {ticker}'
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'ticker': ticker.upper(),
+            'data': prices[ticker.upper()]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ========================================================================
+# CHAT ENDPOINTS
+# ========================================================================
+
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    """Chat with AI using strict system prompt"""
+    """Chat with AI"""
     data = request.json
+    
     user_id = data.get('user_id', 1)
     message = data.get('message', '').strip()
     
@@ -641,8 +575,8 @@ def chat():
     
     session = Session()
     try:
-        portfolio_context, signal_tickers = get_portfolio_context(user_id)
-        ai_response = chat_with_gpt(message, portfolio_context, signal_tickers)
+        portfolio_context = get_portfolio_context(user_id)
+        ai_response = chat_with_gpt(message, portfolio_context)
         
         chat_entry = ChatHistory(
             user_id=user_id,
@@ -668,6 +602,7 @@ def chat():
 
 @app.route('/api/chat/history', methods=['GET'])
 def get_chat_history():
+    """Get chat history"""
     user_id = request.args.get('user_id', 1, type=int)
     limit = request.args.get('limit', 20, type=int)
     
@@ -697,32 +632,13 @@ def get_chat_history():
         session.close()
 
 
-@app.route('/api/eod/status', methods=['GET'])
-def eod_status():
-    """Get EOD file status"""
-    from datetime import timedelta
-    
-    file_exists = os.path.exists(EOD_FILE)
-    file_age_days = None
-    last_modified = None
-    
-    if file_exists:
-        file_time = datetime.fromtimestamp(os.path.getmtime(EOD_FILE))
-        file_age_days = (datetime.now() - file_time).days
-        last_modified = file_time.isoformat()
-    
-    return jsonify({
-        'success': True,
-        'file_exists': file_exists,
-        'tickers_count': len(PRICES_CACHE),
-        'file_age_days': file_age_days,
-        'last_modified': last_modified,
-        'needs_refresh': file_age_days > 5 if file_age_days is not None else True
-    })
-
+# ========================================================================
+# MIGRATION
+# ========================================================================
 
 @app.route('/api/migrate', methods=['POST'])
 def migrate():
+    """Run migration"""
     try:
         Base.metadata.create_all(engine)
         return jsonify({
@@ -739,25 +655,29 @@ def migrate():
 # ========================================================================
 
 try:
-    print("\n🚀 Starting AI Advisor Backend v3.3...")
+    print("\n🚀 Starting AI Advisor Backend v3.0...")
     Base.metadata.create_all(engine)
     print("✅ Database initialized")
     
-    load_eod_prices()
+    prices = load_latest_prices()
+    print(f"💰 Loaded {len(prices)} prices")
     
 except Exception as e:
     print(f"⚠️ Warning: {e}")
 
 
+# ========================================================================
+# MAIN
+# ========================================================================
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 10000))
     print(f"\n{'='*70}")
-    print("🚀 AI ADVISOR BACKEND v3.3 - STRICT AI PROMPT")
+    print("🚀 AI ADVISOR BACKEND v3.0 - COMPLETE")
     print(f"{'='*70}")
-    print(f"AI: {'✅ GPT-4o-mini (Strict Rules)' if openai_client else '❌ Not configured'}")
-    print(f"EOD File: {'✅ Loaded' if CACHE_LOADED and PRICES_CACHE else '⚠️ Not found'}")
-    print(f"Tickers: {len(PRICES_CACHE)}")
+    print(f"AI: {'✅ GPT-4o-mini' if openai_client else '❌ Not configured'}")
     print(f"Database: {DATABASE_URL}")
+    print(f"Prices: {len(load_latest_prices())} tickers")
     print(f"Port: {port}")
     print(f"{'='*70}\n")
     

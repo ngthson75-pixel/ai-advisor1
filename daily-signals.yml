@@ -1,0 +1,65 @@
+name: Daily Signal Generation
+
+on:
+  schedule:
+    # Runs at 11:00 AM UTC = 6:00 PM Vietnam (UTC+7)
+    - cron: '0 11 * * *'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  generate-signals:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v3
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: 📦 Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt --break-system-packages
+      
+      - name: 🗄️ Setup database
+        run: |
+          # Run database migration if needed
+          python scripts/update_database.py
+      
+      - name: 🚀 Run daily signal generation
+        run: |
+          cd scripts
+          python daily_signal_runner.py
+      
+      - name: 📊 Show signal summary
+        if: always()
+        run: |
+          python -c "
+          import sqlite3
+          conn = sqlite3.connect('signals.db')
+          cursor = conn.cursor()
+          
+          # Count BUY signals
+          cursor.execute('SELECT COUNT(*) FROM signals WHERE action = \"BUY\" AND date = date(\"now\")')
+          buy_count = cursor.fetchone()[0]
+          
+          # Count SELL signals
+          cursor.execute('SELECT COUNT(*) FROM signals WHERE action = \"SELL\" AND date = date(\"now\")')
+          sell_count = cursor.fetchone()[0]
+          
+          print(f'📊 Today\\'s Signals:')
+          print(f'  BUY:  {buy_count} signals')
+          print(f'  SELL: {sell_count} signals')
+          
+          conn.close()
+          "
+      
+      - name: ✅ Done
+        run: |
+          echo "✅ Signal generation completed!"
+          echo "⏰ Time: $(date)"

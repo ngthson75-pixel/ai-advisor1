@@ -1,0 +1,55 @@
+name: Daily Signal Scan
+
+on:
+  schedule:
+    # Run every day at 6:00 PM Vietnam time (11:00 AM UTC)
+    - cron: '0 11 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  scan-signals:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Trigger Signal Scan
+        run: |
+          echo "🔍 Triggering signal scan..."
+          
+          response=$(curl -X POST \
+            https://ai-advisor1-backend.onrender.com/api/scan \
+            -H "Content-Type: application/json" \
+            -w "\n%{http_code}" \
+            -s)
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Response: $body"
+          echo "HTTP Code: $http_code"
+          
+          if [ "$http_code" -eq 200 ]; then
+            echo "✅ Scan triggered successfully!"
+          else
+            echo "❌ Scan failed with code: $http_code"
+            exit 1
+          fi
+      
+      - name: Wait for Scan to Complete
+        run: |
+          echo "⏰ Waiting 3 minutes for scan to complete..."
+          sleep 180
+      
+      - name: Verify Signals
+        run: |
+          echo "🔍 Verifying signals created..."
+          
+          response=$(curl -s https://ai-advisor1-backend.onrender.com/api/signals)
+          signal_count=$(echo "$response" | grep -o '"count":[0-9]*' | grep -o '[0-9]*')
+          
+          echo "Signal count: $signal_count"
+          
+          if [ "$signal_count" -gt 0 ]; then
+            echo "✅ Signals verified: $signal_count signals found"
+          else
+            echo "⚠️ No signals found"
+          fi
