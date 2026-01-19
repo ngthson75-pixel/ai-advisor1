@@ -757,7 +757,302 @@ try:
 except Exception as e:
     print(f"⚠️ Warning: {e}")
 
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+ADDITIONAL API ENDPOINTS FOR DATABASE MANAGEMENT
+Add these to backend_api.py
+"""
 
+from flask import jsonify, request
+from datetime import datetime
+from sqlalchemy import func
+
+# ============================================================================
+# DEDUPLICATE SIGNALS ENDPOINT
+# ============================================================================
+
+@app.route('/api/signals/deduplicate', methods=['POST'])
+def deduplicate_signals():
+    """
+    Remove duplicate BUY signals
+    Keep signal with highest score for each ticker+date combination
+    """
+    session = Session()
+    
+    try:
+        # Find duplicate groups
+        duplicates = session.query(
+            Signal.ticker,
+            Signal.date,
+            func.count(Signal.id).label('count')
+        ).filter(
+            Signal.action == 'BUY'
+        ).group_by(
+            Signal.ticker,
+            Signal.date
+        ).having(
+            func.count(Signal.id) > 1
+        ).all()
+        
+        removed = 0
+        details = []
+        
+        for ticker, date, count in duplicates:
+            # Get all signals for this ticker+date, ordered by strength DESC
+            signals = session.query(Signal).filter_by(
+                ticker=ticker,
+                date=date,
+                action='BUY'
+            ).order_by(
+                Signal.strength.desc()
+            ).all()
+            
+            # Keep first (highest score), delete rest
+            kept_signal = signals[0]
+            for sig in signals[1:]:
+                session.delete(sig)
+                removed += 1
+            
+            details.append({
+                'ticker': ticker,
+                'date': date,
+                'kept_score': kept_signal.strength,
+                'removed': len(signals) - 1
+            })
+        
+        session.commit()
+        
+        return jsonify({
+            'success': True,
+            'removed': removed,
+            'duplicate_groups': len(duplicates),
+            'details': details,
+            'message': f'Removed {removed} duplicate signals from {len(duplicates)} groups'
+        })
+        
+    except Exception as e:
+        session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+# ============================================================================
+# UPDATE STOCK TYPES ENDPOINT
+# ============================================================================
+
+@app.route('/api/signals/update-stock-types', methods=['POST'])
+def update_stock_types():
+    """
+    Update stock_type classification for all signals
+    """
+    session = Session()
+    
+    try:
+        # Define stock classifications
+        blue_chips = [
+            'VCB', 'VHM', 'VNM', 'VIC', 'GAS', 'MSN', 'MBB', 'TCB', 'VPB', 'HPG',
+            'BID', 'CTG', 'FPT', 'PLX', 'SAB', 'VRE', 'VJC', 'GVR', 'POW', 'ACB',
+            'HDB', 'MWG', 'SSI', 'TPB', 'VHC', 'NVL', 'KDH', 'PDR', 'STB', 'BCM',
+            'BVH', 'VCI', 'DHG', 'PNJ', 'REE'
+        ]
+        
+        mid_caps = [
+            'DGC', 'DPM', 'FRT', 'GMD', 'HAG', 'HNG', 'HSG', 'HT1', 'KBC',
+            'LGC', 'NT2', 'NVT', 'PC1', 'PET', 'PPC', 'PVD', 'PVT', 'QCG',
+            'SBT', 'SCS', 'SZC', 'TLG', 'VCS', 'VGC', 'VHG', 'VPI'
+        ]
+        
+        # Update Blue Chip
+        blue_updated = 0
+        for ticker in blue_chips:
+            result = session.query(Signal).filter(
+                Signal.ticker == ticker
+            ).update({
+                'stock_type': 'Blue Chip'
+            })
+            blue_updated += result
+        
+        # Update Mid Cap
+        mid_updated = 0
+        for ticker in mid_caps:
+            result = session.query(Signal).filter(
+                Signal.ticker == ticker,
+                Signal.ticker.notin_(blue_chips)
+            ).update({
+                'stock_type': 'Mid Cap'
+            })
+            mid_updated += result
+        
+        # Update Penny (everything else)
+        penny_updated = session.query(Signal).filter(
+            Signal.ticker.notin_(blue_chips + mid_caps)
+        ).update({
+            'stock_type': 'Penny'
+        }, synchronize_session=False)
+        
+        session.commit()
+        
+        return jsonify({
+            'success': True,
+            'updated': {
+                'blue_chip': blue_updated,
+                'mid_cap': mid_updated,
+                'penny': penny_updated,
+                'total': blue_updated + mid_updated + penny_updated
+            },
+            'message': f'Updated {blue_updated + mid_updated + penny_updated} signals'
+        })
+        
+    except Exception as e:
+        session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+# ============================================================================
+# CLEAR OLD SIGNALS ENDPOINT
+# ============================================================================
+
+@app.route('/api/signals/clear-old', methods=['POST'])
+def clear_old_signals():
+    """
+    Delete signals older than X days
+    Default: 30 days
+    """
+    session = Session()
+    
+    try:
+        # Get days parameter (default 30)
+        days = request.json.get('days', 30) if request.is_json else 30
+        
+        # Calculate cutoff date
+        from datetime import timedelta
+        cutoff_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+        
+        # Delete old signals
+        deleted = session.query(Signal).filter(
+            Signal.date < cutoff_date
+        ).delete()
+        
+        session.commit()
+        
+        return jsonify({
+            'success': True,
+            'deleted': deleted,
+            'cutoff_date': cutoff_date,
+            'message': f'Deleted {deleted} signals older than {cutoff_date}'
+        })
+        
+    except Exception as e:
+        session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+# ============================================================================
+# DATABASE STATS ENDPOINT
+# ============================================================================
+
+@app.route('/api/signals/stats', methods=['GET'])
+def get_signals_stats():
+    """
+    Get database statistics
+    """
+    session = Session()
+    
+    try:
+        # Total signals
+        total = session.query(Signal).count()
+        
+        # By action
+        buy_count = session.query(Signal).filter_by(action='BUY').count()
+        sell_count = session.query(Signal).filter_by(action='SELL').count()
+        
+        # By stock type
+        stock_types = session.query(
+            Signal.stock_type,
+            func.count(Signal.id)
+        ).filter(
+            Signal.action == 'BUY'
+        ).group_by(
+            Signal.stock_type
+        ).all()
+        
+        # By date
+        dates = session.query(
+            Signal.date,
+            func.count(Signal.id)
+        ).filter(
+            Signal.action == 'BUY'
+        ).group_by(
+            Signal.date
+        ).order_by(
+            Signal.date.desc()
+        ).limit(10).all()
+        
+        # Date range
+        min_date = session.query(func.min(Signal.date)).scalar()
+        max_date = session.query(func.max(Signal.date)).scalar()
+        
+        # Duplicates check
+        duplicates = session.query(
+            Signal.ticker,
+            Signal.date,
+            func.count(Signal.id).label('count')
+        ).filter(
+            Signal.action == 'BUY'
+        ).group_by(
+            Signal.ticker,
+            Signal.date
+        ).having(
+            func.count(Signal.id) > 1
+        ).all()
+        
+        return jsonify({
+            'success': True,
+            'stats': {
+                'total_signals': total,
+                'buy_signals': buy_count,
+                'sell_signals': sell_count,
+                'stock_types': {st: count for st, count in stock_types},
+                'date_range': {
+                    'min': min_date,
+                    'max': max_date
+                },
+                'recent_dates': [{'date': d, 'count': c} for d, c in dates],
+                'duplicates': len(duplicates),
+                'has_duplicates': len(duplicates) > 0
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+# ============================================================================
+# USAGE EXAMPLES
+# ============================================================================
+"""
+# Deduplicate signals
+curl -X POST https://ai-advisor1-backend.onrender.com/api/signals/deduplicate
+
+# Update stock types
+curl -X POST https://ai-advisor1-backend.onrender.com/api/signals/update-stock-types
+
+# Clear signals older than 30 days
+curl -X POST https://ai-advisor1-backend.onrender.com/api/signals/clear-old \
+  -H "Content-Type: application/json" \
+  -d '{"days": 30}'
+
+# Get stats
+curl https://ai-advisor1-backend.onrender.com/api/signals/stats
+"""
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 10000))
     print(f"\n{'='*70}")
