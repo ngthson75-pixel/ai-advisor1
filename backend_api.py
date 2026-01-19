@@ -37,9 +37,10 @@ else:
 
 # Database
 Base = declarative_base()
+
+# Database Configuration
+DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///signals.db')
 DDATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///signals.db')
-engine = create_engine(DATABASE_URL)
-Session = sessionmaker(bind=engine)
 
 # EOD file settings
 EOD_FILE = 'latest_prices_all.json'
