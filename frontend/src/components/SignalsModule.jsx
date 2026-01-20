@@ -8,6 +8,7 @@ export default function SignalsModule() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [scanning, setScanning] = useState(false);
+  const [activeTab, setActiveTab] = useState('buy'); // NEW: Tab state
 
   const fetchSignals = async () => {
     try {
@@ -49,8 +50,10 @@ export default function SignalsModule() {
     fetchSignals();
   }, []);
 
-  // Filter buy signals
-  const buySignals = signals.filter(s => s.action === 'BUY');
+  // Filter signals by tab
+  const buySignals = signals.filter(s => s.action === 'BUY' || !s.action);
+  const sellSignals = signals.filter(s => s.action === 'SELL');
+  const displaySignals = activeTab === 'buy' ? buySignals : sellSignals;
 
   if (loading) {
     return (
@@ -71,7 +74,6 @@ export default function SignalsModule() {
             Tín Hiệu Giao Dịch
           </h2>
           <p style={{ color: '#94a3b8', fontSize: '14px' }}>
-            {/* ✅ ẨN TEXT VỀ CHIẾN LƯỢC */}
             Tín hiệu được tạo tự động từ hệ thống phân tích AI
           </p>
         </div>
@@ -93,6 +95,49 @@ export default function SignalsModule() {
         >
           <RefreshCw size={16} className={scanning ? 'spin' : ''} />
           Refresh
+        </button>
+      </div>
+
+      {/* NEW: Tabs */}
+      <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setActiveTab('buy')}
+          style={{
+            padding: '12px 24px',
+            backgroundColor: activeTab === 'buy' ? '#10b981' : '#334155',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            fontSize: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all 0.3s'
+          }}
+        >
+          📈 Tín hiệu MUA ({buySignals.length})
+        </button>
+        
+        <button
+          onClick={() => setActiveTab('sell')}
+          style={{
+            padding: '12px 24px',
+            backgroundColor: activeTab === 'sell' ? '#ef4444' : '#334155',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            fontSize: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all 0.3s'
+          }}
+        >
+          📉 Tín hiệu BÁN ({sellSignals.length})
         </button>
       </div>
 
@@ -119,17 +164,24 @@ export default function SignalsModule() {
         marginBottom: '30px'
       }}>
         <div className="stat-card">
-          <div className="stat-value" style={{ color: '#22c55e' }}>
+          <div className="stat-value" style={{ color: '#10b981' }}>
             {buySignals.length}
           </div>
           <div className="stat-label">Tín hiệu MUA</div>
         </div>
         
         <div className="stat-card">
+          <div className="stat-value" style={{ color: '#ef4444' }}>
+            {sellSignals.length}
+          </div>
+          <div className="stat-label">Tín hiệu BÁN</div>
+        </div>
+
+        <div className="stat-card">
           <div className="stat-value" style={{ color: '#3b82f6' }}>
             {buySignals.filter(s => (s.strength || 0) >= 70).length}
           </div>
-          <div className="stat-label">Tín hiệu mạnh</div>
+          <div className="stat-label">Tín hiệu mạnh (&gt;70%)</div>
         </div>
 
         <div className="stat-card">
@@ -141,7 +193,7 @@ export default function SignalsModule() {
       </div>
 
       {/* Signals Table */}
-      {buySignals.length === 0 ? (
+      {displaySignals.length === 0 ? (
         <div style={{
           textAlign: 'center',
           padding: '60px 20px',
@@ -151,7 +203,7 @@ export default function SignalsModule() {
         }}>
           <AlertCircle size={48} style={{ color: '#64748b', marginBottom: '15px' }} />
           <h3 style={{ color: '#94a3b8', marginBottom: '10px' }}>
-            Chưa có tín hiệu nào
+            Chưa có tín hiệu {activeTab === 'buy' ? 'MUA' : 'BÁN'}
           </h3>
           <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '20px' }}>
             Hệ thống sẽ tự động quét và cập nhật tín hiệu mới
@@ -187,39 +239,46 @@ export default function SignalsModule() {
               </tr>
             </thead>
             <tbody>
-              {buySignals.map((signal, idx) => (
-                <tr key={idx}>
+              {displaySignals.map((signal, idx) => (
+                <tr key={signal.id || idx}>
                   <td>
-                    <strong style={{ color: '#3b82f6', fontSize: '16px' }}>
-                      {signal.ticker}
+                    <strong style={{ 
+                      color: signal.action === 'SELL' ? '#ef4444' : '#3b82f6', 
+                      fontSize: '16px' 
+                    }}>
+                      {signal.ticker || signal.code}
                     </strong>
                   </td>
                   <td>{signal.entry_price?.toLocaleString()}</td>
                   <td style={{ color: '#ef4444' }}>
                     {signal.stop_loss?.toLocaleString()}
                   </td>
-                  <td style={{ color: '#22c55e' }}>
+                  <td style={{ color: '#10b981' }}>
                     {signal.take_profit?.toLocaleString()}
                   </td>
                   <td>
                     <span style={{
                       padding: '4px 12px',
-                      background: (signal.strength || 0) >= 70 ? '#22c55e' : '#f59e0b',
+                      background: (signal.strength || 0) >= 70 ? '#10b981' : 
+                                 (signal.strength || 0) >= 50 ? '#3b82f6' :
+                                 (signal.strength || 0) > 0 ? '#f59e0b' : '#6b7280',
                       color: 'white',
                       borderRadius: '12px',
                       fontSize: '12px',
                       fontWeight: 'bold'
                     }}>
-                      {(signal.strength || 0).toFixed(0)}
+                      {(signal.strength || 0) > 0 ? `${(signal.strength || 0).toFixed(0)}%` : 'N/A'}
                     </span>
                   </td>
                   <td>
                     <span style={{
                       padding: '4px 8px',
-                      background: '#1e293b',
+                      background: signal.stock_type === 'Blue Chip' ? '#3b82f6' :
+                                 signal.stock_type === 'Mid Cap' ? '#8b5cf6' : '#6b7280',
                       borderRadius: '6px',
                       fontSize: '11px',
-                      color: '#94a3b8'
+                      color: 'white',
+                      fontWeight: '500'
                     }}>
                       {signal.stock_type || 'N/A'}
                     </span>
