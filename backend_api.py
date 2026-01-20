@@ -1063,7 +1063,7 @@ Add this to backend_api.py
 @app.route('/api/signals/import', methods=['POST'])
 def import_signal():
     """
-    Import a single signal from external source (e.g., local scanner)
+    Import a single signal from external source
     """
     session = Session()
     
@@ -1090,7 +1090,7 @@ def import_signal():
                 'existing_id': existing.id
             }), 409
         
-        # Create new signal
+        # Create new signal - ONLY with fields that exist in production
         signal = Signal(
             ticker=data['ticker'],
             strategy=data['strategy'],
@@ -1102,9 +1102,8 @@ def import_signal():
             stock_type=data.get('stock_type', 'Penny'),
             rsi=data.get('rsi', 50),
             date=data['date'],
-            action=data.get('action', 'BUY'),
-            signal_status=data.get('signal_status', 'ACTIVE'),
-            quantity_sold=data.get('quantity_sold', 0)
+            action=data.get('action', 'BUY')
+            # REMOVED: is_priority, signal_status, quantity_sold
         )
         
         session.add(signal)
