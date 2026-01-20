@@ -1099,7 +1099,6 @@ def import_signal():
             take_profit=data['take_profit'],
             risk_reward=data.get('risk_reward', 0),
             strength=data.get('strength', 0),
-            is_priority=data.get('is_priority', 0),
             stock_type=data.get('stock_type', 'Penny'),
             rsi=data.get('rsi', 50),
             date=data['date'],
