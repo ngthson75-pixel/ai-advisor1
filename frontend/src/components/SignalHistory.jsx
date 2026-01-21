@@ -20,9 +20,17 @@ export default function SignalHistory() {
       const data = await response.json()
       
       if (data.success) {
-        // Get latest 10 signals
-        setSignals(data.signals.slice(0, 10))
-      }
+  // Sort by date DESC (newest first), then get latest 10
+  const sortedSignals = data.signals
+    .sort((a, b) => {
+      const dateA = new Date(a.date);
+      const dateB = new Date(b.date);
+      return dateB - dateA; // Descending (newest first)
+    })
+    .slice(0, 10);
+  
+  setSignals(sortedSignals);
+}
     } catch (error) {
       console.error('Error fetching signals:', error)
     } finally {
