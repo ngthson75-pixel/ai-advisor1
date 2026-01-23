@@ -1,3 +1,4 @@
+import { getUserId } from '../utils/userSession';
 import React, { useState, useEffect } from 'react';
 import { MessageCircle, TrendingUp, Trash2, PlusCircle } from 'lucide-react';
 import { getUserId, debugUserSession } from '../utils/userSession';

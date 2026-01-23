@@ -70,34 +70,6 @@ export const setUserEmail = (email) => {
 };
 
 /**
- * Export user data (for manual backup)
- * 
- * @returns {object} User session data
- */
-export const exportUserSession = () => {
-  return {
-    userId: getUserId(),
-    email: getUserEmail(),
-    exportedAt: new Date().toISOString()
-  };
-};
-
-/**
- * Import user session (from backup)
- * 
- * @param {object} sessionData
- */
-export const importUserSession = (sessionData) => {
-  if (sessionData.userId) {
-    localStorage.setItem(USER_ID_KEY, sessionData.userId);
-  }
-  if (sessionData.email) {
-    localStorage.setItem(USER_EMAIL_KEY, sessionData.email);
-  }
-  console.log('✅ User session imported');
-};
-
-/**
  * Debug: Show user info
  */
 export const debugUserSession = () => {
@@ -119,7 +91,5 @@ export default {
   hasUserSession,
   getUserEmail,
   setUserEmail,
-  exportUserSession,
-  importUserSession,
   debugUserSession
 };
