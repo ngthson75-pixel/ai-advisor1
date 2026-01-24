@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
+import { getUserId } from '../utils/userSession'
 
 export default function AIPortfolioManager() {
+  // ✅ User isolation - mỗi user có ID riêng
+  const [userId] = useState(() => getUserId())
+  
   // Portfolio state
   const [capital, setCapital] = useState('')
   const [positions, setPositions] = useState([])
@@ -22,6 +26,8 @@ export default function AIPortfolioManager() {
   const [loading, setLoading] = useState(false)
   const messagesEndRef = useRef(null)
 
+  const API_BASE = import.meta.env.VITE_API_URL || 'https://ai-advisor1-backend.onrender.com/api'
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
@@ -29,6 +35,83 @@ export default function AIPortfolioManager() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // ✅ Load portfolio from backend on mount
+  useEffect(() => {
+    loadPortfolioFromBackend()
+    loadChatHistoryFromBackend()
+  }, [userId])
+
+  const loadPortfolioFromBackend = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/portfolio?user_id=${userId}`)
+      const data = await response.json()
+      
+      if (data.success && data.portfolio && data.portfolio.length > 0) {
+        // Convert backend format to frontend format
+        const loadedPositions = data.portfolio.map(stock => ({
+          id: stock.ticker + '_' + Date.now(),
+          ticker: stock.ticker,
+          quantity: stock.quantity.toString(),
+          entryPrice: stock.avg_price.toString(),
+          currentPrice: stock.avg_price.toString() // Default to entry price
+        }))
+        
+        setPositions(loadedPositions)
+        console.log('✅ Portfolio loaded:', loadedPositions.length, 'positions')
+      }
+    } catch (error) {
+      console.error('Error loading portfolio:', error)
+    }
+  }
+
+  const loadChatHistoryFromBackend = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/chat/history?user_id=${userId}`)
+      const data = await response.json()
+      
+      if (data.success && data.history && data.history.length > 0) {
+        const loadedMessages = data.history.map(chat => [
+          { role: 'user', content: chat.message },
+          { role: 'assistant', content: chat.response }
+        ]).flat()
+        
+        setMessages(prev => [...prev, ...loadedMessages])
+        console.log('✅ Chat history loaded:', data.history.length, 'messages')
+      }
+    } catch (error) {
+      console.error('Error loading chat history:', error)
+    }
+  }
+
+  const savePositionToBackend = async (position) => {
+    try {
+      await fetch(`${API_BASE}/portfolio`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          ticker: position.ticker,
+          quantity: parseInt(position.quantity),
+          price: parseFloat(position.entryPrice)
+        })
+      })
+      console.log('✅ Saved to backend:', position.ticker)
+    } catch (error) {
+      console.error('Error saving:', error)
+    }
+  }
+
+  const deletePositionFromBackend = async (ticker) => {
+    try {
+      await fetch(`${API_BASE}/portfolio/${ticker}?user_id=${userId}`, {
+        method: 'DELETE'
+      })
+      console.log('✅ Deleted from backend:', ticker)
+    } catch (error) {
+      console.error('Error deleting:', error)
+    }
+  }
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('vi-VN', {
@@ -39,10 +122,14 @@ export default function AIPortfolioManager() {
 
   const addPosition = () => {
     if (newPosition.ticker && newPosition.quantity && newPosition.entryPrice && newPosition.currentPrice) {
-      setPositions([...positions, { ...newPosition, id: Date.now() }])
+      const position = { ...newPosition, id: Date.now() }
+      setPositions([...positions, position])
+      
+      // ✅ Save to backend
+      savePositionToBackend(position)
+      
       setNewPosition({ ticker: '', quantity: '', entryPrice: '', currentPrice: '' })
       
-      // Add message about position added
       const positionMsg = {
         role: 'assistant',
         content: `✅ Đã thêm vị thế ${newPosition.ticker}!\n\nBạn có thể hỏi tôi về:\n- Nên giữ hay bán ${newPosition.ticker}?\n- Rủi ro của danh mục hiện tại?\n- Chiến lược phân bổ vốn?`
@@ -56,6 +143,9 @@ export default function AIPortfolioManager() {
     setPositions(positions.filter(p => p.id !== id))
     
     if (position) {
+      // ✅ Delete from backend
+      deletePositionFromBackend(position.ticker)
+      
       const msg = {
         role: 'assistant',
         content: `Đã xóa vị thế ${position.ticker}. Danh mục của bạn đã được cập nhật.`
@@ -151,92 +241,38 @@ export default function AIPortfolioManager() {
     setInput('')
     setLoading(true)
 
-    // AI Response based on portfolio context
-    setTimeout(() => {
-      let response = ''
-      const hasPortfolio = positions.length > 0
-      const inputLower = currentInput.toLowerCase()
+    try {
+      // ✅ Call GEMINI AI through backend (đã có sẵn)
+      const response = await fetch(`${API_BASE}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          message: currentInput,
+          portfolio: positions.map(p => p.ticker) // Portfolio context
+        })
+      })
 
-      if (inputLower.includes('mua') || inputLower.includes('buy')) {
-        if (hasPortfolio) {
-          const totalInvested = positions.reduce((sum, p) => 
-            sum + (parseFloat(p.quantity) * parseFloat(p.entryPrice)), 0
-          )
-          const capitalUsage = capital ? (totalInvested / parseFloat(capital)) * 100 : 0
-          
-          response = `💡 **VỀ VIỆC MUA THÊM:**\n\n`
-          response += `Dựa trên danh mục hiện tại:\n`
-          response += `- Bạn đang sử dụng ${capitalUsage.toFixed(1)}% vốn\n\n`
-          
-          if (capitalUsage > 80) {
-            response += `⚠️ **KHÔNG NÊN** mua thêm ngay!\n`
-            response += `- Vốn đã sử dụng quá nhiều\n`
-            response += `- Nên chờ chốt lời một số vị thế trước\n`
-            response += `- Hoặc giảm bớt size các mã hiện tại\n\n`
-          } else {
-            response += `✅ Vẫn có thể cân nhắc mua thêm:\n`
-            response += `- Vốn khả dụng: ~${formatCurrency(parseFloat(capital || 0) - totalInvested)}\n`
-            response += `- Nên dùng tối đa 50% vốn còn lại\n`
-            response += `- Ưu tiên mã có tín hiệu rõ ràng\n`
-            response += `- Đặt stop loss ngay sau khi vào lệnh\n\n`
-          }
-          response += `Bạn quan tâm mã nào? Tôi có thể phân tích chi tiết hơn!`
-        } else {
-          response = `Bạn chưa có danh mục nào. Hãy thêm vốn và vị thế để tôi tư vấn chính xác hơn!\n\nNếu muốn mua mã mới, cho tôi biết:\n- Mã cổ phiếu\n- Số vốn dự kiến\n- Kỳ vọng nắm giữ (ngắn/dài hạn)`
-        }
-      } else if (inputLower.includes('bán') || inputLower.includes('sell')) {
-        if (hasPortfolio) {
-          response = `📉 **VỀ VIỆC BÁN:**\n\n`
-          response += `Dựa vào danh mục hiện tại:\n\n`
-          
-          positions.forEach(p => {
-            const invested = parseFloat(p.quantity) * parseFloat(p.entryPrice)
-            const current = parseFloat(p.quantity) * parseFloat(p.currentPrice)
-            const pnl = ((current - invested) / invested) * 100
-            
-            response += `**${p.ticker}**: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%\n`
-            
-            if (pnl > 15) {
-              response += `→ ✅ Nên bán 50-70% để chốt lời\n`
-            } else if (pnl > 8) {
-              response += `→ Có thể chốt 30-50% nếu cần\n`
-            } else if (pnl < -7) {
-              response += `→ ⚠️ Cân nhắc cắt lỗ nếu xu hướng xấu đi\n`
-            } else {
-              response += `→ Giữ và theo dõi thêm\n`
-            }
-            response += `\n`
-          })
-          
-          response += `\nBạn muốn phân tích kỹ mã nào?`
-        } else {
-          response = `Bạn chưa có vị thế nào để bán. Hãy thêm danh mục đầu tư của bạn!`
-        }
-      } else if (inputLower.includes('rủi ro') || inputLower.includes('risk')) {
-        if (hasPortfolio && capital) {
-          analyzePortfolio()
-          return
-        } else {
-          response = `Để phân tích rủi ro, vui lòng:\n1. Nhập tổng vốn\n2. Thêm các vị thế hiện tại\n3. Bấm "Phân tích danh mục" hoặc hỏi lại tôi!`
-        }
+      const data = await response.json()
+      
+      if (data.success && data.response) {
+        const assistantMessage = { role: 'assistant', content: data.response }
+        setMessages(prev => [...prev, assistantMessage])
       } else {
-        // Generic helpful response
-        response = `Tôi có thể giúp bạn:\n\n`
-        response += `💼 **Về danh mục:**\n`
-        response += `- Phân tích rủi ro\n`
-        response += `- Đánh giá từng vị thế\n`
-        response += `- Tư vấn mua/bán\n\n`
-        response += `📊 **Về chiến lược:**\n`
-        response += `- Khi nào nên cắt lỗ\n`
-        response += `- Cách phân bổ vốn\n`
-        response += `- Quản lý rủi ro\n\n`
-        response += `Hãy hỏi cụ thể hơn hoặc cho tôi biết bạn đang quan tâm điều gì! 😊`
+        throw new Error('Backend response failed')
       }
-
-      const assistantMessage = { role: 'assistant', content: response }
-      setMessages(prev => [...prev, assistantMessage])
+    } catch (error) {
+      console.error('Error calling AI:', error)
+      
+      // Fallback message
+      const errorMsg = {
+        role: 'assistant',
+        content: '⚠️ Xin lỗi, tôi gặp sự cố kết nối. Vui lòng thử lại sau!'
+      }
+      setMessages(prev => [...prev, errorMsg])
+    } finally {
       setLoading(false)
-    }, 1000)
+    }
   }
 
   return (
@@ -361,7 +397,7 @@ export default function AIPortfolioManager() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
               </svg>
-              Tư vấn AI
+              Tư vấn AI (Gemini)
             </h3>
           </div>
 
