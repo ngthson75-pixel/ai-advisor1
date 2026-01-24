@@ -7,19 +7,20 @@ export default function AIPortfolioManager() {
   
   // Portfolio state
   const [capital, setCapital] = useState('')
+  const [cash, setCash] = useState('') // ✅ NEW: Tiền mặt field
   const [positions, setPositions] = useState([])
   const [newPosition, setNewPosition] = useState({
     ticker: '',
     quantity: '',
-    entryPrice: '',
-    currentPrice: ''
+    entryPrice: ''
+    // ❌ REMOVED: currentPrice - sẽ auto-fetch
   })
 
   // Chat state
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: '👋 Xin chào! Tôi là AI Advisor của bạn.\n\nHãy bắt đầu bằng cách:\n1. Nhập vốn đầu tư của bạn\n2. Thêm các vị thế hiện tại (nếu có)\n3. Đặt câu hỏi hoặc yêu cầu phân tích\n\nTôi sẽ phân tích danh mục và tư vấn chiến lược phù hợp! 🚀'
+      content: '👋 Xin chào! Tôi là AI Advisor của bạn.\n\nHãy bắt đầu bằng cách:\n1. Nhập vốn đầu tư của bạn\n2. Nhập tiền mặt khả dụng\n3. Thêm các vị thế hiện tại (nếu có)\n4. Đặt câu hỏi hoặc yêu cầu phân tích\n\nTôi sẽ phân tích danh mục và tư vấn chiến lược phù hợp! 🚀'
     }
   ])
   const [input, setInput] = useState('')
@@ -54,7 +55,7 @@ export default function AIPortfolioManager() {
           ticker: stock.ticker,
           quantity: stock.quantity.toString(),
           entryPrice: stock.avg_price.toString(),
-          currentPrice: stock.avg_price.toString() // Default to entry price
+          currentPrice: stock.current_price ? stock.current_price.toString() : stock.avg_price.toString()
         }))
         
         setPositions(loadedPositions)
@@ -84,6 +85,25 @@ export default function AIPortfolioManager() {
     }
   }
 
+  // ✅ NEW: Auto-fetch current price from backend
+  const fetchCurrentPrice = async (ticker) => {
+    try {
+      const response = await fetch(`${API_BASE}/stock/current-price?ticker=${ticker}`)
+      const data = await response.json()
+      
+      if (data.success && data.price) {
+        console.log(`✅ Fetched ${ticker} price: ${data.price}`)
+        return data.price
+      } else {
+        console.warn(`⚠️ No price data for ${ticker}, using entry price`)
+        return null
+      }
+    } catch (error) {
+      console.error('Error fetching price:', error)
+      return null
+    }
+  }
+
   const savePositionToBackend = async (position) => {
     try {
       await fetch(`${API_BASE}/portfolio`, {
@@ -93,7 +113,8 @@ export default function AIPortfolioManager() {
           user_id: userId,
           ticker: position.ticker,
           quantity: parseInt(position.quantity),
-          price: parseFloat(position.entryPrice)
+          price: parseFloat(position.entryPrice),
+          current_price: parseFloat(position.currentPrice)
         })
       })
       console.log('✅ Saved to backend:', position.ticker)
@@ -120,21 +141,42 @@ export default function AIPortfolioManager() {
     }).format(value)
   }
 
-  const addPosition = () => {
-    if (newPosition.ticker && newPosition.quantity && newPosition.entryPrice && newPosition.currentPrice) {
-      const position = { ...newPosition, id: Date.now() }
+  const addPosition = async () => {
+    if (!newPosition.ticker || !newPosition.quantity || !newPosition.entryPrice) {
+      alert('Vui lòng điền đầy đủ thông tin (Mã, Số lượng, Giá mua)')
+      return
+    }
+
+    // Show loading indicator
+    setLoading(true)
+    
+    try {
+      // ✅ AUTO-FETCH current price from backend
+      const currentPrice = await fetchCurrentPrice(newPosition.ticker.toUpperCase())
+      
+      const position = {
+        ...newPosition,
+        ticker: newPosition.ticker.toUpperCase(),
+        currentPrice: currentPrice ? currentPrice.toString() : newPosition.entryPrice,
+        id: Date.now()
+      }
+      
       setPositions([...positions, position])
       
       // ✅ Save to backend
       savePositionToBackend(position)
       
-      setNewPosition({ ticker: '', quantity: '', entryPrice: '', currentPrice: '' })
+      setNewPosition({ ticker: '', quantity: '', entryPrice: '' })
       
       const positionMsg = {
         role: 'assistant',
-        content: `✅ Đã thêm vị thế ${newPosition.ticker}!\n\nBạn có thể hỏi tôi về:\n- Nên giữ hay bán ${newPosition.ticker}?\n- Rủi ro của danh mục hiện tại?\n- Chiến lược phân bổ vốn?`
+        content: `✅ Đã thêm vị thế ${position.ticker}!\n\n${currentPrice ? 'Giá hiện tại đã được cập nhật tự động từ thị trường.' : 'Đang dùng giá mua làm giá hiện tại (chưa có dữ liệu EOD).'}\n\nBạn có thể hỏi tôi về:\n- Nên giữ hay bán ${position.ticker}?\n- Rủi ro của danh mục hiện tại?\n- Chiến lược phân bổ vốn?`
       }
       setMessages(prev => [...prev, positionMsg])
+    } catch (error) {
+      alert('Lỗi khi thêm vị thế: ' + error.message)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -178,10 +220,12 @@ export default function AIPortfolioManager() {
       const pnl = currentValue - totalInvested
       const pnlPercent = (pnl / totalInvested) * 100
       const capitalUsage = (totalInvested / parseFloat(capital)) * 100
+      const cashAmount = cash ? parseFloat(cash) : 0
 
       let analysis = `📊 **PHÂN TÍCH DANH MỤC ĐẦU TƯ**\n\n`
       analysis += `💰 **Tổng quan:**\n`
       analysis += `- Vốn: ${formatCurrency(parseFloat(capital))}\n`
+      analysis += `- Tiền mặt: ${formatCurrency(cashAmount)}\n`
       analysis += `- Đã đầu tư: ${formatCurrency(totalInvested)} (${capitalUsage.toFixed(1)}%)\n`
       analysis += `- Giá trị hiện tại: ${formatCurrency(currentValue)}\n`
       analysis += `- Lãi/Lỗ: ${formatCurrency(pnl)} (${pnl >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%)\n\n`
@@ -242,14 +286,19 @@ export default function AIPortfolioManager() {
     setLoading(true)
 
     try {
-      // ✅ Call GEMINI AI through backend (đã có sẵn)
+      // ✅ Call ChatGPT-4o through backend (with System Rule)
       const response = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
           message: currentInput,
-          portfolio: positions.map(p => p.ticker) // Portfolio context
+          portfolio: positions.map(p => ({
+            ticker: p.ticker,
+            quantity: parseInt(p.quantity),
+            entryPrice: parseFloat(p.entryPrice),
+            currentPrice: parseFloat(p.currentPrice)
+          }))
         })
       })
 
@@ -279,7 +328,8 @@ export default function AIPortfolioManager() {
     <div className="ai-portfolio-manager">
       <div className="module-header">
         <h2>🤖 Quản trị đầu tư bằng AI</h2>
-        <p>Chia sẻ danh mục của bạn và nhận tư vấn từ AI 24/7</p>
+        {/* ✅ UPDATED subtitle */}
+        <p>Hãy chia sẻ danh mục của bạn và hỏi đáp mua bán để AI hỗ trợ quản lý danh mục và kiểm soát FOMO hay HOẢNG SỢ</p>
       </div>
 
       <div className="portfolio-grid">
@@ -305,6 +355,17 @@ export default function AIPortfolioManager() {
             />
           </div>
 
+          {/* ✅ NEW: Tiền mặt field */}
+          <div className="form-group">
+            <label>Tiền mặt khả dụng (VND)</label>
+            <input
+              type="number"
+              value={cash}
+              onChange={(e) => setCash(e.target.value)}
+              placeholder="Số tiền mặt hiện có"
+            />
+          </div>
+
           <div className="form-group">
             <label>Thêm vị thế</label>
             <div className="position-inputs">
@@ -313,28 +374,26 @@ export default function AIPortfolioManager() {
                 value={newPosition.ticker}
                 onChange={(e) => setNewPosition({...newPosition, ticker: e.target.value.toUpperCase()})}
                 placeholder="Mã (VD: VCB)"
+                style={{ flex: '1' }}
               />
               <input
                 type="number"
                 value={newPosition.quantity}
                 onChange={(e) => setNewPosition({...newPosition, quantity: e.target.value})}
                 placeholder="Số lượng"
+                style={{ flex: '1' }}
               />
               <input
                 type="number"
                 value={newPosition.entryPrice}
                 onChange={(e) => setNewPosition({...newPosition, entryPrice: e.target.value})}
                 placeholder="Giá mua"
+                style={{ flex: '1' }}
               />
-              <input
-                type="number"
-                value={newPosition.currentPrice}
-                onChange={(e) => setNewPosition({...newPosition, currentPrice: e.target.value})}
-                placeholder="Giá hiện tại"
-              />
+              {/* ❌ REMOVED: Giá hiện tại input - will auto-fetch */}
             </div>
-            <button onClick={addPosition} className="btn-add">
-              + Thêm vị thế
+            <button onClick={addPosition} className="btn-add" disabled={loading}>
+              {loading ? '⏳ Đang xử lý...' : '+ Thêm vị thế'}
             </button>
           </div>
 
@@ -353,7 +412,7 @@ export default function AIPortfolioManager() {
                       <div className="position-info">
                         <div className="position-ticker">{position.ticker}</div>
                         <div className="position-details">
-                          {position.quantity} CP × {formatCurrency(position.entryPrice)}
+                          {position.quantity} CP × {formatCurrency(parseFloat(position.entryPrice))}
                           <span style={{
                             marginLeft: '8px',
                             color: pnl >= 0 ? '#10b981' : '#ef4444',
@@ -361,6 +420,10 @@ export default function AIPortfolioManager() {
                           }}>
                             {pnl >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%
                           </span>
+                        </div>
+                        <div className="position-prices" style={{ fontSize: '0.85em', color: '#94a3b8', marginTop: '4px' }}>
+                          Giá mua: {formatCurrency(parseFloat(position.entryPrice))} | 
+                          Giá hiện tại: {formatCurrency(parseFloat(position.currentPrice))}
                         </div>
                       </div>
                       <button onClick={() => removePosition(position.id)} className="btn-remove-small">
@@ -397,7 +460,8 @@ export default function AIPortfolioManager() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
               </svg>
-              Tư vấn AI (Gemini)
+              {/* ✅ REMOVED "(Gemini)" */}
+              Tư vấn AI
             </h3>
           </div>
 
