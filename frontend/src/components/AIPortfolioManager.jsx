@@ -19,11 +19,6 @@ const AIPortfolioManager = () => {
 
   const API_BASE = import.meta.env.VITE_API_URL || 'https://ai-advisor1-backend.onrender.com/api';
 
-  // Debug: Show user ID (remove in production)
-  useEffect(() => {
-    debugUserSession();
-  }, []);
-
   // Fetch portfolio on mount
   useEffect(() => {
     fetchPortfolio();
