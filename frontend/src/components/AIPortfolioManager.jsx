@@ -2,7 +2,8 @@ import { getUserId } from '../utils/userSession';
 import React, { useState, useEffect } from 'react';
 import { MessageCircle, TrendingUp, Trash2, PlusCircle } from 'lucide-react';
 
-const AIPortfolioManager = () {
+const AIPortfolioManager = () => {
+  // ✅ FIX: Mỗi user có ID riêng thay vì hardcode user_id=1
   const [userId] = useState(() => getUserId());
   
   const [portfolio, setPortfolio] = useState([]);
@@ -18,14 +19,20 @@ const AIPortfolioManager = () {
 
   const API_BASE = import.meta.env.VITE_API_URL || 'https://ai-advisor1-backend.onrender.com/api';
 
+  // Debug: Show user ID (remove in production)
+  useEffect(() => {
+    debugUserSession();
+  }, []);
+
   // Fetch portfolio on mount
   useEffect(() => {
     fetchPortfolio();
     fetchChatHistory();
-  }, [userId]);
+  }, [userId]); // Re-fetch khi userId thay đổi
 
   const fetchPortfolio = async () => {
     try {
+      // ✅ FIX: Sử dụng userId riêng thay vì user_id=1
       const response = await fetch(`${API_BASE}/portfolio?user_id=${userId}`);
       const data = await response.json();
       
@@ -39,6 +46,7 @@ const AIPortfolioManager = () {
 
   const fetchChatHistory = async () => {
     try {
+      // ✅ FIX: Lấy chat history riêng của user
       const response = await fetch(`${API_BASE}/chat/history?user_id=${userId}`);
       const data = await response.json();
       
@@ -50,22 +58,6 @@ const AIPortfolioManager = () {
     }
   };
 
-  // ✅ NEW: Auto-fetch current price
-  const fetchCurrentPrice = async (ticker) => {
-    try {
-      const response = await fetch(`${API_BASE}/stock/current-price?ticker=${ticker}`);
-      const data = await response.json();
-      
-      if (data.success && data.price) {
-        return data.price;
-      }
-      return null;
-    } catch (error) {
-      console.error('Error fetching price:', error);
-      return null;
-    }
-  };
-
   const handleAddStock = async (e) => {
     e.preventDefault();
     
@@ -74,21 +66,16 @@ const AIPortfolioManager = () {
       return;
     }
 
-    setIsLoading(true);
-
     try {
-      // ✅ NEW: Fetch current price before saving
-      const currentPrice = await fetchCurrentPrice(newStock.ticker.toUpperCase());
-      
+      // ✅ FIX: Thêm stock vào portfolio riêng của user
       const response = await fetch(`${API_BASE}/portfolio`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: userId,
+          user_id: userId, // ✅ User ID riêng
           ticker: newStock.ticker.toUpperCase(),
           quantity: parseInt(newStock.quantity),
-          price: parseFloat(newStock.price),
-          current_price: currentPrice || parseFloat(newStock.price) // ✅ Save current price
+          price: parseFloat(newStock.price)
         })
       });
 
@@ -97,19 +84,12 @@ const AIPortfolioManager = () {
       if (data.success) {
         fetchPortfolio();
         setNewStock({ ticker: '', quantity: '', price: '' });
-        
-        // ✅ Show message about price update
-        if (currentPrice) {
-          alert(`✅ Đã thêm ${newStock.ticker.toUpperCase()}!\nGiá hiện tại: ${currentPrice.toLocaleString()} VND`);
-        }
       } else {
         alert('Error: ' + data.error);
       }
     } catch (error) {
       console.error('Error adding stock:', error);
       alert('Lỗi khi thêm cổ phiếu');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -117,6 +97,7 @@ const AIPortfolioManager = () {
     if (!confirm(`Xóa ${ticker} khỏi danh mục?`)) return;
 
     try {
+      // ✅ FIX: Xóa stock từ portfolio riêng của user
       const response = await fetch(
         `${API_BASE}/portfolio/${ticker}?user_id=${userId}`,
         { method: 'DELETE' }
@@ -140,31 +121,14 @@ const AIPortfolioManager = () {
     setIsLoading(true);
 
     try {
-      // ✅ IMPROVED: Include P/L info in portfolio context
-      const portfolioWithPnL = portfolio.map(stock => {
-        const currentPrice = stock.current_price || stock.avg_price;
-        const invested = stock.quantity * stock.avg_price;
-        const currentValue = stock.quantity * currentPrice;
-        const pnl = currentValue - invested;
-        const pnlPercent = (pnl / invested) * 100;
-        
-        return {
-          ticker: stock.ticker,
-          quantity: stock.quantity,
-          avg_price: stock.avg_price,
-          current_price: currentPrice,
-          pnl: pnl,
-          pnl_percent: pnlPercent
-        };
-      });
-
+      // ✅ FIX: Gửi message với user context riêng
       const response = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: userId,
+          user_id: userId,  // ✅ User ID riêng
           message: userMessage,
-          portfolio: portfolioWithPnL // ✅ Send P/L data to AI
+          portfolio: portfolio.map(s => s.ticker) // Context: portfolio của user
         })
       });
 
@@ -188,18 +152,10 @@ const AIPortfolioManager = () {
     }
   };
 
-  // ✅ IMPROVED: Calculate with current_price for P/L
-  const totalInvested = portfolio.reduce((sum, stock) => 
+  // Calculate total value
+  const totalValue = portfolio.reduce((sum, stock) => 
     sum + (stock.quantity * stock.avg_price), 0
   );
-  
-  const totalCurrentValue = portfolio.reduce((sum, stock) => {
-    const currentPrice = stock.current_price || stock.avg_price;
-    return sum + (stock.quantity * currentPrice);
-  }, 0);
-  
-  const totalPnL = totalCurrentValue - totalInvested;
-  const totalPnLPercent = totalInvested > 0 ? (totalPnL / totalInvested * 100) : 0;
 
   return (
     <div className="portfolio-manager">
@@ -211,6 +167,10 @@ const AIPortfolioManager = () {
         <p style={{fontSize: '14px', color: '#94a3b8', marginTop: '8px'}}>
           Hãy chia sẻ danh mục của bạn và hỏi đáp mua bán để AI hỗ trợ quản lý danh mục và kiểm soát FOMO hay HOẢNG SỢ
         </p>
+        {/* Debug info - Remove in production */}
+        <div className="user-info" style={{fontSize: '0.8em', color: '#666'}}>
+          👤 User ID: {userId.substring(0, 20)}...
+        </div>
       </div>
 
       <div className="portfolio-container">
@@ -219,7 +179,6 @@ const AIPortfolioManager = () {
           <h3>Danh mục của bạn</h3>
           
           <form onSubmit={handleAddStock} className="add-stock-form">
-            {/* ✅ IMPROVED: Placeholders với ví dụ */}
             <input
               type="text"
               placeholder="Mã chứng khoán (VD: VCB)"
@@ -238,9 +197,9 @@ const AIPortfolioManager = () {
               value={newStock.price}
               onChange={(e) => setNewStock({...newStock, price: e.target.value})}
             />
-            <button type="submit" disabled={isLoading}>
+            <button type="submit">
               <PlusCircle size={18} />
-              {isLoading ? 'Đang xử lý...' : 'Thêm'}
+              Thêm
             </button>
           </form>
 
@@ -250,67 +209,26 @@ const AIPortfolioManager = () {
             </div>
           ) : (
             <>
-              {/* ✅ IMPROVED: Display with P/L */}
               <div className="portfolio-list">
-                {portfolio.map((stock) => {
-                  const currentPrice = stock.current_price || stock.avg_price;
-                  const invested = stock.quantity * stock.avg_price;
-                  const currentValue = stock.quantity * currentPrice;
-                  const pnl = currentValue - invested;
-                  const pnlPercent = (pnl / invested) * 100;
-                  
-                  return (
-                    <div key={stock.ticker} className="stock-item">
-                      <div className="stock-info">
-                        <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '4px'}}>
-                          <strong>{stock.ticker}</strong>
-                          <span style={{
-                            color: pnl >= 0 ? '#10b981' : '#ef4444',
-                            fontWeight: 'bold'
-                          }}>
-                            {pnl >= 0 ? '+' : ''}{pnl.toLocaleString()} VND ({pnl >= 0 ? '+' : ''}{pnlPercent.toFixed(2)}%)
-                          </span>
-                        </div>
-                        <span style={{fontSize: '13px', color: '#94a3b8'}}>
-                          {stock.quantity} CP × {stock.avg_price.toLocaleString()} = {invested.toLocaleString()} VND
-                        </span>
-                        {stock.current_price && stock.current_price !== stock.avg_price && (
-                          <div style={{fontSize: '12px', color: '#cbd5e1', marginTop: '2px'}}>
-                            Giá hiện tại: {currentPrice.toLocaleString()} VND
-                          </div>
-                        )}
-                      </div>
-                      <button 
-                        onClick={() => handleDeleteStock(stock.ticker)}
-                        className="delete-btn"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                {portfolio.map((stock) => (
+                  <div key={stock.ticker} className="stock-item">
+                    <div className="stock-info">
+                      <strong>{stock.ticker}</strong>
+                      <span>{stock.quantity} CP × {stock.avg_price.toLocaleString()} = {(stock.quantity * stock.avg_price).toLocaleString()} VND</span>
                     </div>
-                  );
-                })}
+                    <button 
+                      onClick={() => handleDeleteStock(stock.ticker)}
+                      className="delete-btn"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
               </div>
               
-              {/* ✅ IMPROVED: Show total P/L */}
               <div className="portfolio-total">
-                <div style={{marginBottom: '8px'}}>
-                  <strong>Tổng đầu tư:</strong>
-                  <span>{totalInvested.toLocaleString()} VND</span>
-                </div>
-                <div style={{marginBottom: '8px'}}>
-                  <strong>Giá trị hiện tại:</strong>
-                  <span>{totalCurrentValue.toLocaleString()} VND</span>
-                </div>
-                <div style={{
-                  paddingTop: '8px',
-                  borderTop: '1px solid #475569',
-                  fontWeight: 'bold'
-                }}>
-                  <strong>Lãi/Lỗ:</strong>
-                  <span style={{color: totalPnL >= 0 ? '#10b981' : '#ef4444'}}>
-                    {totalPnL >= 0 ? '+' : ''}{totalPnL.toLocaleString()} VND ({totalPnL >= 0 ? '+' : ''}{totalPnLPercent.toFixed(2)}%)
-                  </span>
-                </div>
+                <strong>Tổng giá trị:</strong>
+                <span>{totalValue.toLocaleString()} VND</span>
               </div>
             </>
           )}
