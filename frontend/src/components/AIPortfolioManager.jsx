@@ -2,7 +2,7 @@ import { getUserId } from '../utils/userSession';
 import React, { useState, useEffect } from 'react';
 import { MessageCircle, TrendingUp, Trash2, PlusCircle } from 'lucide-react';
 
-const AIPortfolioManager = () => {
+const AIPortfolioManager = () {
   const [userId] = useState(() => getUserId());
   
   const [portfolio, setPortfolio] = useState([]);
