@@ -1261,7 +1261,7 @@ from vnstock import Vnstock
 # ============================================================================
 
 @app.route('/api/stock/current-price', methods=['GET'])
-def get_current_price():
+def get_stock_price_endpoint():
     """
     Get current/latest EOD price for a stock
     
