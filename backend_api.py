@@ -748,6 +748,40 @@ def migrate():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/recreate-db', methods=['POST'])
+def recreate_database():
+    """
+    DROP all tables and recreate with new schema
+    ⚠️ WARNING: This will delete ALL data!
+    Use this when schema changes (e.g., Integer → String)
+    """
+    try:
+        # Drop all existing tables
+        Base.metadata.drop_all(engine)
+        print("✅ All tables dropped")
+        
+        # Recreate with new schema
+        Base.metadata.create_all(engine)
+        print("✅ All tables recreated with new schema")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Database recreated successfully',
+            'tables': [table.name for table in Base.metadata.sorted_tables],
+            'warning': '⚠️ All previous data has been deleted'
+        })
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ ERROR recreating database: {str(e)}")
+        print(f"Traceback:\n{error_trace}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': error_trace
+        }), 500
+
+
 # ========================================================================
 # STARTUP
 # ========================================================================
