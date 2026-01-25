@@ -176,7 +176,7 @@ class Portfolio(Base):
     __tablename__ = 'portfolios'
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, nullable=False)
+    user_id = Column(String(100), nullable=False)
     ticker = Column(String(10), nullable=False)
     quantity = Column(Integer, nullable=False)
     avg_price = Column(Float, nullable=False)
@@ -188,7 +188,7 @@ class CashPosition(Base):
     __tablename__ = 'cash_positions'
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, nullable=False, unique=True)
+    user_id = Column(String(100), nullable=False, unique=True)
     cash_amount = Column(Float, nullable=False, default=0)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -197,7 +197,7 @@ class ChatHistory(Base):
     __tablename__ = 'chat_history'
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, nullable=False)
+    user_id = Column(String(100), nullable=False)
     message = Column(Text, nullable=False)
     response = Column(Text, nullable=False)
     portfolio_context = Column(Text)
@@ -480,7 +480,7 @@ def scan_signals():
 @app.route('/api/portfolio', methods=['GET'])
 def get_portfolio():
     """Get portfolio with P&L from EOD file"""
-    user_id = request.args.get('user_id', 1, type=int)
+    user_id = request.args.get('user_id', '1')
     
     session = Session()
     try:
@@ -573,7 +573,7 @@ def add_portfolio():
 @app.route('/api/portfolio/<ticker>', methods=['DELETE'])
 def delete_portfolio(ticker):
     """Delete stock"""
-    user_id = request.args.get('user_id', 1, type=int)
+    user_id = request.args.get('user_id', '1')
     
     session = Session()
     try:
@@ -602,7 +602,7 @@ def delete_portfolio(ticker):
 
 @app.route('/api/cash', methods=['GET'])
 def get_cash():
-    user_id = request.args.get('user_id', 1, type=int)
+    user_id = request.args.get('user_id', '1')
     session = Session()
     try:
         cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
@@ -682,7 +682,7 @@ def chat():
 
 @app.route('/api/chat/history', methods=['GET'])
 def get_chat_history():
-    user_id = request.args.get('user_id', 1, type=int)
+    user_id = request.args.get('user_id', '1')
     limit = request.args.get('limit', 20, type=int)
     
     session = Session()
