@@ -1,0 +1,130 @@
+name: Daily EOD Signal Scanner
+
+on:
+  # Schedule: Run daily at 8:30 UTC (15:30 Vietnam Time)
+  schedule:
+    - cron: '30 8 * * *'
+  
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to scan'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  scan-signals:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set environment URL
+        id: set-url
+        run: |
+          if [ "${{ github.event_name }}" == "schedule" ]; then
+            echo "ENVIRONMENT=production" >> $GITHUB_OUTPUT
+            echo "API_URL=https://ai-advisor1-backend.onrender.com" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.inputs.environment }}" == "production" ]; then
+            echo "ENVIRONMENT=production" >> $GITHUB_OUTPUT
+            echo "API_URL=https://ai-advisor1-backend.onrender.com" >> $GITHUB_OUTPUT
+          else
+            echo "ENVIRONMENT=staging" >> $GITHUB_OUTPUT
+            echo "API_URL=https://ai-advisor1-staging.onrender.com" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Display scan info
+        run: |
+          echo "🔍 Starting signal scan"
+          echo "Environment: ${{ steps.set-url.outputs.ENVIRONMENT }}"
+          echo "API URL: ${{ steps.set-url.outputs.API_URL }}"
+          echo "Time (UTC): $(date -u '+%Y-%m-%d %H:%M:%S')"
+          echo "Time (VN): $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S')"
+      
+      - name: Wake up backend (if sleeping)
+        run: |
+          echo "⏰ Waking up backend..."
+          curl -f -s "${{ steps.set-url.outputs.API_URL }}/health" || true
+          sleep 30
+      
+      - name: Trigger signal scanner
+        id: trigger
+        run: |
+          echo "🚀 Triggering scanner..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${{ steps.set-url.outputs.API_URL }}/api/scan")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+          
+          echo "Response code: $HTTP_CODE"
+          echo "Response body: $BODY"
+          
+          if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 202 ]; then
+            echo "✅ Scanner triggered successfully"
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Failed to trigger scanner"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+      
+      - name: Wait for scanner completion
+        run: |
+          echo "⏳ Waiting for scanner to complete (10-15 minutes)..."
+          echo "Scanner is processing 343 stocks..."
+          
+          # Wait 12 minutes for scanner to complete
+          for i in {1..12}; do
+            echo "⏱️  Minute $i/12..."
+            sleep 60
+          done
+          
+          echo "✅ Wait complete"
+      
+      - name: Check scan status
+        id: status
+        run: |
+          echo "🔍 Checking scan status..."
+          STATUS=$(curl -s "${{ steps.set-url.outputs.API_URL }}/api/scan/status")
+          echo "Status: $STATUS"
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+      
+      - name: Verify signals
+        run: |
+          echo "📊 Fetching signals..."
+          SIGNALS=$(curl -s "${{ steps.set-url.outputs.API_URL }}/api/signals")
+          
+          # Parse signal count
+          COUNT=$(echo "$SIGNALS" | grep -o '"count":[0-9]*' | grep -o '[0-9]*' || echo "0")
+          
+          echo "Signal count: $COUNT"
+          
+          if [ "$COUNT" -gt 0 ]; then
+            echo "✅ Signals found: $COUNT"
+          else
+            echo "⚠️  No signals found"
+          fi
+      
+      - name: Send notification (on failure)
+        if: failure()
+        run: |
+          echo "❌ Scanner workflow failed!"
+          echo "Environment: ${{ steps.set-url.outputs.ENVIRONMENT }}"
+          echo "Time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          # Add Telegram/Slack notification here if needed
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📊 SCAN SUMMARY"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Environment: ${{ steps.set-url.outputs.ENVIRONMENT }}"
+          echo "Trigger: ${{ steps.trigger.outputs.status }}"
+          echo "Completed: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

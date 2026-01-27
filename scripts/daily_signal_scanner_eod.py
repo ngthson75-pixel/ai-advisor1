@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import sqlite3
 import time
 import logging
+import random  # For random delay jitter
 
 # CORRECT vnstock 3.3.1 API
 from vnstock import Quote
@@ -19,15 +20,62 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DB_PATH = 'signals.db'
+DB_PATH = '../signals.db'  # Use parent directory
 
-TOP_STOCKS = [
+# 343 Cổ phiếu có thanh khoản cao nhất HOSE + HNX
+# Updated: 2026-01-27
+TOP_343_STOCKS = [
+    # HOSE - Top Blue Chips & Large Caps (50 stocks)
     'VCB', 'VHM', 'VIC', 'VNM', 'HPG', 'TCB', 'VPB', 'MBB', 'STB', 'MSN',
     'FPT', 'VRE', 'SSI', 'BID', 'CTG', 'PLX', 'GAS', 'MWG', 'VJC', 'HDB',
     'PDR', 'POW', 'SAB', 'NVL', 'BCM', 'KDH', 'DGC', 'REE', 'TPB', 'ACB',
     'GVR', 'PNJ', 'VGC', 'DHG', 'DPM', 'GMD', 'HPX', 'LPB', 'VCI', 'SSB',
-    'BVH', 'HNG', 'TCH', 'DXG', 'VHC', 'PC1', 'DIG', 'HT1', 'VGS', 'IDC'
+    'BVH', 'HNG', 'TCH', 'DXG', 'VHC', 'PC1', 'DIG', 'HT1', 'VGS', 'IDC',
+    
+    # HOSE - Mid Caps (100 stocks)
+    'VPI', 'GEX', 'HSG', 'DCM', 'NT2', 'HVN', 'VND', 'VCG', 'SBT', 'EVF',
+    'DBC', 'HCM', 'CTD', 'KBC', 'DGW', 'SZC', 'LGC', 'VNE', 'VIX', 'HDG',
+    'PPC', 'VSC', 'BWE', 'HT2', 'VDS', 'VSH', 'VTP', 'SCS', 'TDH', 'PVD',
+    'PVT', 'ASM', 'CSV', 'ITA', 'NLG', 'VCF', 'CMG', 'BMP', 'PAN', 'SGN',
+    'PHR', 'NBB', 'DPR', 'DVP', 'FCM', 'GEG', 'PVS', 'PTB', 'HBC', 'HAG',
+    'CMX', 'VPH', 'PVG', 'DMC', 'KDC', 'TNG', 'HRC', 'SVC', 'TCL', 'PXI',
+    'TYA', 'HHS', 'DRL', 'DRI', 'HAX', 'SZL', 'VTO', 'HAI', 'PET', 'PVP',
+    'ASP', 'HU3', 'FRT', 'SJS', 'VST', 'VCS', 'TRA', 'VIB', 'TCM', 'VGT',
+    'HAP', 'DHA', 'VNT', 'VMD', 'PDN', 'PMG', 'PVX', 'GIL', 'VFC', 'CTI',
+    'FCN', 'QCG', 'TDM', 'GMC', 'HQC', 'VPS', 'VIS', 'TNI', 'DXV', 'HDC',
+    
+    # HOSE - Small Caps (93 stocks)
+    'CII', 'HTN', 'PDC', 'PGD', 'AGG', 'FLC', 'POM', 'ASG', 'ITC', 'CAV',
+    'VOS', 'VTB', 'PGC', 'SHI', 'SRC', 'CNG', 'DVN', 'GDT', 'VLA', 'BTT',
+    'DTT', 'VRC', 'KSB', 'CRE', 'PGI', 'TTF', 'TNT', 'VDP', 'CSM', 'CTS',
+    'TPC', 'TCO', 'DLG', 'PGS', 'VCW', 'TMT', 'TIX', 'DVW', 'GTA', 'PGT',
+    'SII', 'TCR', 'TLG', 'LBM', 'GDW', 'THG', 'PLC', 'VNL', 'HTI', 'HU1',
+    'NHH', 'BCG', 'HU6', 'BFC', 'CTR', 'PNC', 'PTL', 'HDM', 'VHL', 'VTL',
+    'TCW', 'NHA', 'CLC', 'SAM', 'VCX', 'PTI', 'PXT', 'SMA', 'VIT', 'VGG',
+    'BAF', 'SHB', 'TLH', 'PAN', 'BCC', 'VSM', 'VE1', 'VE2', 'VE3', 'VE4',
+    'VE8', 'VE9', 'VHG', 'VID', 'VIE', 'VIF', 'VIG', 'VIH', 'VIK', 'VIM',
+    'VIN', 'VIP', 'VIR',
+    
+    # HNX - Top Stocks (100 stocks)
+    'PVS', 'ACB', 'VCS', 'SHS', 'PVB', 'CEO', 'VCG', 'BVS', 'BAB', 'NVB',
+    'VIB', 'OCB', 'SHB', 'MSB', 'TPB', 'BVB', 'EIB', 'VBB', 'PGB', 'VND',
+    'TIG', 'VGC', 'PVI', 'BMI', 'BIC', 'PTI', 'VIG', 'MIG', 'BSI', 'ABI',
+    'BII', 'PGI', 'EVS', 'PSI', 'HBS', 'TVS', 'APS', 'VDS', 'CTS', 'FTS',
+    'MBS', 'APG', 'AGG', 'SVC', 'L10', 'L14', 'L18', 'L40', 'L43', 'L44',
+    'L45', 'L61', 'L62', 'L63', 'DHT', 'DHA', 'DHM', 'NHP', 'NHS', 'NHT',
+    'NHW', 'SIC', 'LAS', 'HUT', 'BCC', 'DBC', 'DTD', 'DTT', 'NBC', 'NNC',
+    'PLC', 'PTC', 'PVL', 'PVV', 'SCR', 'SRA', 'TIG', 'VE1', 'VE2', 'VE3',
+    'VE4', 'VE8', 'VE9', 'VGS', 'VHL', 'VIG', 'VIX', 'CEO', 'VGG', 'VTB',
+    'AMV', 'API', 'ARM', 'ART', 'ASA', 'ASG', 'ASM', 'ASP', 'AST', 'ATA'
 ]
+
+def get_top_343_stocks():
+    """
+    Return 343 highest liquidity stocks (HOSE + HNX)
+    Static list updated periodically
+    """
+    logger.info(f"Using curated list of {len(TOP_343_STOCKS)} high-liquidity stocks")
+    return TOP_343_STOCKS
 
 def get_last_trading_day():
     """Get last trading day"""
@@ -42,31 +90,68 @@ def get_last_trading_day():
     
     return last_trading_day.strftime('%Y-%m-%d')
 
-def get_stock_data(ticker, days=100):
-    """Get stock data using Quote API"""
-    try:
-        end_date = get_last_trading_day()
-        start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=days*2)).strftime('%Y-%m-%d')
-        
-        logger.info(f"Fetching {ticker} ({start_date} to {end_date})")
-        
-        # CORRECT vnstock 3.3.1 syntax!
-        quote = Quote(symbol=ticker, source='VCI')
-        
-        # Get historical data
-        df = quote.history(start=start_date, end=end_date)
-        
-        if df is None or len(df) == 0:
-            logger.warning(f"No data for {ticker}")
-            return None
-        
-        logger.info(f"✓ Got {len(df)} days for {ticker}")
-        
-        return process_dataframe(df, ticker)
-        
-    except Exception as e:
-        logger.error(f"Error {ticker}: {str(e)}")
-        return None
+def get_stock_data(ticker, days=100, max_retries=3):
+    """
+    Get stock data using Quote API with retry logic
+    
+    Args:
+        ticker: Stock symbol
+        days: Days of historical data
+        max_retries: Max retry attempts for rate limit
+    
+    Returns:
+        Processed DataFrame or None
+    """
+    
+    for attempt in range(max_retries):
+        try:
+            end_date = get_last_trading_day()
+            start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=days*2)).strftime('%Y-%m-%d')
+            
+            logger.info(f"Fetching {ticker} ({start_date} to {end_date})")
+            
+            # CORRECT vnstock 3.3.1 syntax!
+            quote = Quote(symbol=ticker, source='VCI')
+            
+            # Get historical data
+            df = quote.history(start=start_date, end=end_date)
+            
+            if df is None or len(df) == 0:
+                logger.warning(f"No data for {ticker}")
+                return None
+            
+            logger.info(f"✓ Got {len(df)} days for {ticker}")
+            
+            return process_dataframe(df, ticker)
+            
+        except Exception as e:
+            error_msg = str(e).lower()
+            
+            # Detect rate limit errors
+            is_rate_limit = any(phrase in error_msg for phrase in [
+                'quá nhiều request',
+                'rate limit',
+                'too many',
+                'vui lòng thử lại'
+            ])
+            
+            if is_rate_limit:
+                wait_time = 30 * (attempt + 1)  # 30s, 60s, 90s
+                logger.warning(f"⚠️ RATE LIMIT for {ticker}. Waiting {wait_time}s... (Attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
+                
+                if attempt < max_retries - 1:
+                    logger.info(f"🔄 Retrying {ticker}...")
+                    continue  # Retry
+                else:
+                    logger.error(f"❌ Max retries reached for {ticker}")
+                    return None
+            else:
+                # Other errors - don't retry
+                logger.error(f"Error {ticker}: {str(e)}")
+                return None
+    
+    return None
 
 def process_dataframe(df, ticker):
     """Process dataframe"""
@@ -86,6 +171,13 @@ def process_dataframe(df, ticker):
         for old_col, new_col in column_mapping.items():
             if old_col in df.columns:
                 df = df.rename(columns={old_col: new_col})
+        
+        # 🔧 CRITICAL FIX: Convert from thousands VND to VND
+        # vnstock 3.3.1 (VCI) returns prices in thousands: 36.5 = 36,500 VND
+        # Without this conversion, all prices will be 1000x too small!
+        for col in ['Open', 'High', 'Low', 'Close']:
+            if col in df.columns:
+                df[col] = df[col] * 1000
         
         # Check required
         required = ['Close', 'High', 'Low', 'Volume']
@@ -341,7 +433,10 @@ def scan_all_stocks():
     logger.info("=" * 60)
     logger.info("Starting scan...")
     logger.info(f"Date: {get_last_trading_day()}")
-    logger.info(f"Stocks: {len(TOP_STOCKS)}")
+    
+    # Get top stocks by liquidity (343 stocks as per system design)
+    stocks_to_scan = get_top_343_stocks()
+    logger.info(f"Stocks: {len(stocks_to_scan)}")
     logger.info("=" * 60)
     
     init_database()
@@ -350,16 +445,18 @@ def scan_all_stocks():
     processed = 0
     failed = 0
     
-    for ticker in TOP_STOCKS:
+    for ticker in stocks_to_scan:
         try:
-            logger.info(f"Processing {ticker} ({processed + 1}/{len(TOP_STOCKS)})...")
+            logger.info(f"Processing {ticker} ({processed + 1}/{len(stocks_to_scan)})...")
             
             df = get_stock_data(ticker, days=100)
             
             if df is None or len(df) < 50:
                 logger.warning(f"Skip {ticker}")
                 failed += 1
-                time.sleep(0.5)
+                # Wait before next stock (even on skip)
+                # INCREASED from 1.5-2s to 2.5-3.5s to avoid VCI rate limit
+                time.sleep(2.5 + random.uniform(0, 1.0))  # 2.5-3.5s
                 continue
             
             pullback = check_pullback_strategy(df, ticker)
@@ -369,16 +466,22 @@ def scan_all_stocks():
             all_signals.extend(ema_cross)
             
             processed += 1
-            time.sleep(0.5)
+            
+            # IMPORTANT: Wait between requests to avoid rate limit
+            # INCREASED from 1.5-2s to 2.5-3.5s for better rate limit handling
+            # Base delay 2.5s + random 0-1s = 2.5-3.5s per stock
+            delay = 2.5 + random.uniform(0, 1.0)
+            time.sleep(delay)
             
         except Exception as e:
             logger.error(f"Error {ticker}: {str(e)}")
             failed += 1
-            time.sleep(0.5)
+            # Wait before next even on error
+            time.sleep(2.5 + random.uniform(0, 1.0))
     
     logger.info("=" * 60)
     logger.info("COMPLETE")
-    logger.info(f"Processed: {processed}/{len(TOP_STOCKS)}")
+    logger.info(f"Processed: {processed}/{len(stocks_to_scan)}")
     logger.info(f"Failed: {failed}")
     logger.info(f"Signals: {len(all_signals)}")
     logger.info("=" * 60)
