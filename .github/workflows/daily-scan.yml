@@ -5,6 +5,15 @@ on:
   schedule:
     - cron: '30 8 * * *'
   
+  # Trigger on push to see workflow immediately
+  push:
+    branches:
+      - staging
+      - main
+    paths:
+      - '.github/workflows/daily-scan.yml'
+      - 'scripts/daily_signal_scanner_eod.py'
+  
   # Allow manual trigger from GitHub UI
   workflow_dispatch:
     inputs:
