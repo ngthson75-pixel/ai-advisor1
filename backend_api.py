@@ -1,30 +1,44 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI ADVISOR - BACKEND v3.3
+AI ADVISOR - BACKEND v3.3 - FIXED
 WITH STRICT AI SYSTEM PROMPT FOR INVESTMENT GUIDANCE
 """
 
+# ========================================================================
+# IMPORTS (ALL AT TOP - NO DUPLICATES)
+# ========================================================================
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import json
+import subprocess
+import sqlite3
 from openai import OpenAI
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from vnstock import Vnstock
 
 # SELL Signal Integration
 from backend_sell_api import register_sell_routes
 
-# Initialize Flask
+# ========================================================================
+# FLASK APP INITIALIZATION
+# ========================================================================
+
 app = Flask(__name__)
 CORS(app)
 
 # Register SELL Signal Routes
 register_sell_routes(app)
 print("✅ SELL signal routes registered")
+
+# ========================================================================
+# CONFIGURATION
+# ========================================================================
 
 # Configure OpenAI
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
@@ -35,9 +49,6 @@ else:
     print("⚠️ OPENAI_API_KEY not set")
     openai_client = None
 
-# Database
-Base = declarative_base()
-
 # Database Configuration
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///signals.db')
 
@@ -45,17 +56,21 @@ DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///signals.db')
 if DATABASE_URL and DATABASE_URL.startswith('postgresql://'):
     DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
 
-engine = create_engine(DATABASE_URL)
-Session = sessionmaker(bind=engine)
-
 # EOD file settings
 EOD_FILE = 'latest_prices_all.json'
 PRICES_CACHE = {}
 CACHE_LOADED = False
 
+# ========================================================================
+# DATABASE SETUP
+# ========================================================================
+
+Base = declarative_base()
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)
 
 # ========================================================================
-# AI SYSTEM PROMPT - STRICT INVESTMENT GUIDANCE RULES
+# AI SYSTEM PROMPT
 # ========================================================================
 
 AI_SYSTEM_PROMPT = """You are AI ADVISOR, a decision-support system for investors.
@@ -149,7 +164,6 @@ CRITICAL: Help users control FOMO (fear of missing out) and PANIC SELLING by:
 - Supporting disciplined decision-making based on data, not fear or greed
 """
 
-
 # ========================================================================
 # DATABASE MODELS
 # ========================================================================
@@ -205,7 +219,7 @@ class ChatHistory(Base):
 
 
 # ========================================================================
-# EOD FILE MANAGEMENT
+# HELPER FUNCTIONS
 # ========================================================================
 
 def load_eod_prices():
@@ -223,9 +237,7 @@ def load_eod_prices():
             data = json.load(f)
         
         PRICES_CACHE = data.get('prices', {})
-        
         print(f"✅ Loaded {len(PRICES_CACHE)} prices from EOD file")
-        
         CACHE_LOADED = True
         return True
         
@@ -252,10 +264,6 @@ def get_current_price(ticker):
     return None
 
 
-# ========================================================================
-# PORTFOLIO CONTEXT & AI CHAT
-# ========================================================================
-
 def get_portfolio_context(user_id):
     """Get portfolio context with P&L"""
     session = Session()
@@ -264,7 +272,6 @@ def get_portfolio_context(user_id):
         cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
         cash = cash_pos.cash_amount if cash_pos else 0
         
-        # Get list of stocks in Buysell Signal system
         signals = session.query(Signal).all()
         signal_tickers = set([s.ticker for s in signals])
         
@@ -292,7 +299,6 @@ def get_portfolio_context(user_id):
                 pl = current_value - cost
                 pl_pct = (pl / cost * 100) if cost > 0 else 0
                 
-                # Mark if stock is in Buysell Signal system
                 in_signal = "✅ [IN BUYSELL SIGNAL]" if p.ticker in signal_tickers else "⚠️ [NOT IN SIGNAL LIST]"
                 
                 context += f"- {p.ticker} {in_signal}: {p.quantity} CP @ {p.avg_price:,.0f} VND\n"
@@ -330,7 +336,6 @@ def chat_with_gpt(message, portfolio_context, signal_tickers):
         return "Xin lỗi, AI chưa được cấu hình."
     
     try:
-        # Build system message with portfolio context
         system_message = AI_SYSTEM_PROMPT + f"\n\n{portfolio_context}"
         
         response = openai_client.chat.completions.create(
@@ -349,15 +354,15 @@ def chat_with_gpt(message, portfolio_context, signal_tickers):
 
 
 # ========================================================================
-# API ROUTES
+# API ROUTES - BASIC
 # ========================================================================
 
 @app.route('/', methods=['GET'])
 def index():
     return jsonify({
         'service': 'AI Advisor Backend v3.3',
-        'version': '3.3 (Strict AI Prompt)',
-        'features': ['signals', 'portfolio', 'cash', 'eod_prices', 'chat_ai_strict', 'fomo_control'],
+        'version': '3.3 (Strict AI Prompt) - FIXED',
+        'features': ['signals', 'portfolio', 'cash', 'eod_prices', 'chat_ai_strict', 'fomo_control', 'automation'],
         'eod_file': {
             'exists': os.path.exists(EOD_FILE),
             'tickers': len(PRICES_CACHE)
@@ -419,58 +424,112 @@ def get_signals():
         session.close()
 
 
+# ========================================================================
+# AUTOMATION ENDPOINTS (GitHub Actions)
+# ========================================================================
+
 @app.route('/api/scan', methods=['POST'])
-def scan_signals():
-    """Scan for new signals (mock)"""
+def trigger_scan():
+    """
+    Trigger signal scanner manually
+    Used by GitHub Actions automation
+    """
     try:
-        session = Session()
+        scanner_path = os.path.join(
+            os.path.dirname(__file__), 
+            'scripts', 
+            'daily_signal_scanner_eod.py'
+        )
         
-        sample_tickers = ['VCB', 'VHM', 'HPG', 'TCB']
-        created_count = 0
+        if not os.path.exists(scanner_path):
+            return jsonify({
+                'success': False,
+                'error': f'Scanner not found at {scanner_path}'
+            }), 404
         
-        for ticker in sample_tickers:
-            today = datetime.now().strftime('%Y-%m-%d')
-            existing = session.query(Signal).filter(
-                Signal.ticker == ticker,
-                Signal.date == today
-            ).first()
-            
-            if existing:
-                continue
-            
-            price = get_current_price(ticker)
-            if not price:
-                price = 50000
-            
-            signal = Signal(
-                ticker=ticker,
-                strategy='PULLBACK',
-                entry_price=price,
-                stop_loss=price * 0.95,
-                take_profit=price * 1.08,
-                risk_reward=1.6,
-                strength=75,
-                stock_type='Blue Chip',
-                rsi=65,
-                date=today,
-                action='BUY'
-            )
-            session.add(signal)
-            created_count += 1
-        
-        session.commit()
+        process = subprocess.Popen([
+            'python', 
+            scanner_path
+        ], 
+        stdout=subprocess.PIPE, 
+        stderr=subprocess.PIPE,
+        cwd=os.path.dirname(__file__)
+        )
         
         return jsonify({
             'success': True,
-            'message': f'Quét hoàn tất! Tìm thấy {created_count} tín hiệu mới.',
-            'signals_created': created_count
+            'status': 'scanning',
+            'message': 'Signal scanner started. This will take 20-25 minutes for 343 stocks.',
+            'process_id': process.pid
+        }), 202
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
+
+@app.route('/api/scan/status', methods=['GET'])
+def scan_status():
+    """Check scan status and signal count"""
+    try:
+        db_path = os.path.join(os.path.dirname(__file__), 'signals.db')
+        
+        if not os.path.exists(db_path):
+            return jsonify({
+                'success': True,
+                'signals_count': 0,
+                'status': 'no_database',
+                'message': 'Database not found - no scans run yet'
+            })
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM signals 
+            WHERE date = date('now')
+        """)
+        today_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM signals")
+        total_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT MAX(created_at) FROM signals")
+        last_scan = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        if today_count > 0:
+            status = 'complete'
+            is_recent = True
+        elif total_count > 0:
+            status = 'old_data'
+            is_recent = False
+        else:
+            status = 'no_signals'
+            is_recent = False
+        
+        return jsonify({
+            'success': True,
+            'signals_count': today_count,
+            'total_signals': total_count,
+            'last_scan': last_scan,
+            'is_recent': is_recent,
+            'status': status
         })
         
     except Exception as e:
-        session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        session.close()
+        return jsonify({
+            'success': True,
+            'signals_count': 0,
+            'status': 'error',
+            'error': str(e)
+        })
 
 
 # ========================================================================
@@ -711,571 +770,13 @@ def get_chat_history():
         session.close()
 
 
-@app.route('/api/eod/status', methods=['GET'])
-def eod_status():
-    """Get EOD file status"""
-    from datetime import timedelta
-    
-    file_exists = os.path.exists(EOD_FILE)
-    file_age_days = None
-    last_modified = None
-    
-    if file_exists:
-        file_time = datetime.fromtimestamp(os.path.getmtime(EOD_FILE))
-        file_age_days = (datetime.now() - file_time).days
-        last_modified = file_time.isoformat()
-    
-    return jsonify({
-        'success': True,
-        'file_exists': file_exists,
-        'tickers_count': len(PRICES_CACHE),
-        'file_age_days': file_age_days,
-        'last_modified': last_modified,
-        'needs_refresh': file_age_days > 5 if file_age_days is not None else True
-    })
-
-
-@app.route('/api/migrate', methods=['POST'])
-def migrate():
-    try:
-        Base.metadata.create_all(engine)
-        return jsonify({
-            'success': True,
-            'message': 'Migration successful',
-            'tables': ['signals', 'portfolios', 'cash_positions', 'chat_history']
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/recreate-db', methods=['POST'])
-def recreate_database():
-    """
-    DROP all tables and recreate with new schema
-    ⚠️ WARNING: This will delete ALL data!
-    Use this when schema changes (e.g., Integer → String)
-    """
-    try:
-        # Drop all existing tables
-        Base.metadata.drop_all(engine)
-        print("✅ All tables dropped")
-        
-        # Recreate with new schema
-        Base.metadata.create_all(engine)
-        print("✅ All tables recreated with new schema")
-        
-        return jsonify({
-            'success': True,
-            'message': 'Database recreated successfully',
-            'tables': [table.name for table in Base.metadata.sorted_tables],
-            'warning': '⚠️ All previous data has been deleted'
-        })
-    except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"❌ ERROR recreating database: {str(e)}")
-        print(f"Traceback:\n{error_trace}")
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'traceback': error_trace
-        }), 500
-
-
 # ========================================================================
-# STARTUP
+# STOCK PRICE ENDPOINTS (Real-time price fetching)
 # ========================================================================
-
-try:
-    print("\n🚀 Starting AI Advisor Backend v3.3...")
-    Base.metadata.create_all(engine)
-    print("✅ Database initialized")
-    
-    load_eod_prices()
-    
-except Exception as e:
-    print(f"⚠️ Warning: {e}")
-
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-ADDITIONAL API ENDPOINTS FOR DATABASE MANAGEMENT
-Add these to backend_api.py
-"""
-
-from flask import jsonify, request
-from datetime import datetime
-from sqlalchemy import func
-
-# ============================================================================
-# DEDUPLICATE SIGNALS ENDPOINT
-# ============================================================================
-
-@app.route('/api/signals/deduplicate', methods=['POST'])
-def deduplicate_signals():
-    """
-    Remove duplicate BUY signals
-    Keep signal with highest score for each ticker+date combination
-    """
-    session = Session()
-    
-    try:
-        # Find duplicate groups
-        duplicates = session.query(
-            Signal.ticker,
-            Signal.date,
-            func.count(Signal.id).label('count')
-        ).filter(
-            Signal.action == 'BUY'
-        ).group_by(
-            Signal.ticker,
-            Signal.date
-        ).having(
-            func.count(Signal.id) > 1
-        ).all()
-        
-        removed = 0
-        details = []
-        
-        for ticker, date, count in duplicates:
-            # Get all signals for this ticker+date, ordered by strength DESC
-            signals = session.query(Signal).filter_by(
-                ticker=ticker,
-                date=date,
-                action='BUY'
-            ).order_by(
-                Signal.strength.desc()
-            ).all()
-            
-            # Keep first (highest score), delete rest
-            kept_signal = signals[0]
-            for sig in signals[1:]:
-                session.delete(sig)
-                removed += 1
-            
-            details.append({
-                'ticker': ticker,
-                'date': date,
-                'kept_score': kept_signal.strength,
-                'removed': len(signals) - 1
-            })
-        
-        session.commit()
-        
-        return jsonify({
-            'success': True,
-            'removed': removed,
-            'duplicate_groups': len(duplicates),
-            'details': details,
-            'message': f'Removed {removed} duplicate signals from {len(duplicates)} groups'
-        })
-        
-    except Exception as e:
-        session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        session.close()
-
-
-# ============================================================================
-# UPDATE STOCK TYPES ENDPOINT
-# ============================================================================
-
-@app.route('/api/signals/update-stock-types', methods=['POST'])
-def update_stock_types():
-    """
-    Update stock_type classification for all signals
-    """
-    session = Session()
-    
-    try:
-        # Define stock classifications
-        blue_chips = [
-            'VCB', 'VHM', 'VNM', 'VIC', 'GAS', 'MSN', 'MBB', 'TCB', 'VPB', 'HPG',
-            'BID', 'CTG', 'FPT', 'PLX', 'SAB', 'VRE', 'VJC', 'GVR', 'POW', 'ACB',
-            'HDB', 'MWG', 'SSI', 'TPB', 'VHC', 'NVL', 'KDH', 'PDR', 'STB', 'BCM',
-            'BVH', 'VCI', 'DHG', 'PNJ', 'REE'
-        ]
-        
-        mid_caps = [
-            'DGC', 'DPM', 'FRT', 'GMD', 'HAG', 'HNG', 'HSG', 'HT1', 'KBC',
-            'LGC', 'NT2', 'NVT', 'PC1', 'PET', 'PPC', 'PVD', 'PVT', 'QCG',
-            'SBT', 'SCS', 'SZC', 'TLG', 'VCS', 'VGC', 'VHG', 'VPI'
-        ]
-        
-        # Update Blue Chip
-        blue_updated = 0
-        for ticker in blue_chips:
-            result = session.query(Signal).filter(
-                Signal.ticker == ticker
-            ).update({
-                'stock_type': 'Blue Chip'
-            })
-            blue_updated += result
-        
-        # Update Mid Cap
-        mid_updated = 0
-        for ticker in mid_caps:
-            result = session.query(Signal).filter(
-                Signal.ticker == ticker,
-                Signal.ticker.notin_(blue_chips)
-            ).update({
-                'stock_type': 'Mid Cap'
-            })
-            mid_updated += result
-        
-        # Update Penny (everything else)
-        penny_updated = session.query(Signal).filter(
-            Signal.ticker.notin_(blue_chips + mid_caps)
-        ).update({
-            'stock_type': 'Penny'
-        }, synchronize_session=False)
-        
-        session.commit()
-        
-        return jsonify({
-            'success': True,
-            'updated': {
-                'blue_chip': blue_updated,
-                'mid_cap': mid_updated,
-                'penny': penny_updated,
-                'total': blue_updated + mid_updated + penny_updated
-            },
-            'message': f'Updated {blue_updated + mid_updated + penny_updated} signals'
-        })
-        
-    except Exception as e:
-        session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        session.close()
-
-
-# ============================================================================
-# CLEAR OLD SIGNALS ENDPOINT
-# ============================================================================
-
-@app.route('/api/signals/clear-old', methods=['POST'])
-def clear_old_signals():
-    """
-    Delete signals older than X days
-    Default: 30 days
-    """
-    session = Session()
-    
-    try:
-        # Get days parameter (default 30)
-        days = request.json.get('days', 30) if request.is_json else 30
-        
-        # Calculate cutoff date
-        from datetime import timedelta
-        cutoff_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
-        
-        # Delete old signals
-        deleted = session.query(Signal).filter(
-            Signal.date < cutoff_date
-        ).delete()
-        
-        session.commit()
-        
-        return jsonify({
-            'success': True,
-            'deleted': deleted,
-            'cutoff_date': cutoff_date,
-            'message': f'Deleted {deleted} signals older than {cutoff_date}'
-        })
-        
-    except Exception as e:
-        session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        session.close()
-
-
-# ============================================================================
-# DATABASE STATS ENDPOINT
-# ============================================================================
-
-@app.route('/api/signals/stats', methods=['GET'])
-def get_signals_stats():
-    """
-    Get database statistics
-    """
-    session = Session()
-    
-    try:
-        # Total signals
-        total = session.query(Signal).count()
-        
-        # By action
-        buy_count = session.query(Signal).filter_by(action='BUY').count()
-        sell_count = session.query(Signal).filter_by(action='SELL').count()
-        
-        # By stock type
-        stock_types = session.query(
-            Signal.stock_type,
-            func.count(Signal.id)
-        ).filter(
-            Signal.action == 'BUY'
-        ).group_by(
-            Signal.stock_type
-        ).all()
-        
-        # By date
-        dates = session.query(
-            Signal.date,
-            func.count(Signal.id)
-        ).filter(
-            Signal.action == 'BUY'
-        ).group_by(
-            Signal.date
-        ).order_by(
-            Signal.date.desc()
-        ).limit(10).all()
-        
-        # Date range
-        min_date = session.query(func.min(Signal.date)).scalar()
-        max_date = session.query(func.max(Signal.date)).scalar()
-        
-        # Duplicates check
-        duplicates = session.query(
-            Signal.ticker,
-            Signal.date,
-            func.count(Signal.id).label('count')
-        ).filter(
-            Signal.action == 'BUY'
-        ).group_by(
-            Signal.ticker,
-            Signal.date
-        ).having(
-            func.count(Signal.id) > 1
-        ).all()
-        
-        return jsonify({
-            'success': True,
-            'stats': {
-                'total_signals': total,
-                'buy_signals': buy_count,
-                'sell_signals': sell_count,
-                'stock_types': {st: count for st, count in stock_types},
-                'date_range': {
-                    'min': min_date,
-                    'max': max_date
-                },
-                'recent_dates': [{'date': d, 'count': c} for d, c in dates],
-                'duplicates': len(duplicates),
-                'has_duplicates': len(duplicates) > 0
-            }
-        })
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        session.close()
-
-
-# ============================================================================
-# USAGE EXAMPLES
-# ============================================================================
-"""
-# Deduplicate signals
-curl -X POST https://ai-advisor1-backend.onrender.com/api/signals/deduplicate
-
-# Update stock types
-curl -X POST https://ai-advisor1-backend.onrender.com/api/signals/update-stock-types
-
-# Clear signals older than 30 days
-curl -X POST https://ai-advisor1-backend.onrender.com/api/signals/clear-old \
-  -H "Content-Type: application/json" \
-  -d '{"days": 30}'
-
-# Get stats
-curl https://ai-advisor1-backend.onrender.com/api/signals/stats
-"""
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-IMPORT SIGNAL ENDPOINT
-Add this to backend_api.py
-"""
-
-@app.route('/api/signals/import', methods=['POST'])
-def import_signal():
-    """
-    Import a single signal from external source
-    """
-    session = Session()
-    
-    try:
-        data = request.json
-        
-        # Validate required fields
-        required = ['ticker', 'strategy', 'entry_price', 'stop_loss', 'take_profit', 'date']
-        for field in required:
-            if field not in data:
-                return jsonify({'success': False, 'error': f'Missing field: {field}'}), 400
-        
-        # Check if signal already exists
-        existing = session.query(Signal).filter_by(
-            ticker=data['ticker'],
-            date=data['date'],
-            action=data.get('action', 'BUY')
-        ).first()
-        
-        if existing:
-            return jsonify({
-                'success': False,
-                'error': 'Signal already exists',
-                'existing_id': existing.id
-            }), 409
-        
-        # Create new signal - ONLY with fields that exist in production
-        signal = Signal(
-            ticker=data['ticker'],
-            strategy=data['strategy'],
-            entry_price=data['entry_price'],
-            stop_loss=data['stop_loss'],
-            take_profit=data['take_profit'],
-            risk_reward=data.get('risk_reward', 0),
-            strength=data.get('strength', 0),
-            stock_type=data.get('stock_type', 'Penny'),
-            rsi=data.get('rsi', 50),
-            date=data['date'],
-            action=data.get('action', 'BUY')
-            # REMOVED: is_priority, signal_status, quantity_sold
-        )
-        
-        session.add(signal)
-        session.commit()
-        
-        return jsonify({
-            'success': True,
-            'signal_id': signal.id,
-            'ticker': signal.ticker,
-            'message': 'Signal imported successfully'
-        })
-        
-    except Exception as e:
-        session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        session.close()
-
-
-@app.route('/api/signals/import-batch', methods=['POST'])
-def import_signals_batch():
-    """
-    Import multiple signals at once
-    """
-    session = Session()
-    
-    try:
-        data = request.json
-        signals_data = data.get('signals', [])
-        
-        if not signals_data:
-            return jsonify({'success': False, 'error': 'No signals provided'}), 400
-        
-        success_count = 0
-        error_count = 0
-        errors = []
-        
-        for sig_data in signals_data:
-            try:
-                # Check if exists
-                existing = session.query(Signal).filter_by(
-                    ticker=sig_data['ticker'],
-                    date=sig_data['date'],
-                    action=sig_data.get('action', 'BUY')
-                ).first()
-                
-                if existing:
-                    error_count += 1
-                    errors.append(f"{sig_data['ticker']}: Already exists")
-                    continue
-                
-                # Create signal
-                signal = Signal(
-                    ticker=sig_data['ticker'],
-                    strategy=sig_data['strategy'],
-                    entry_price=sig_data['entry_price'],
-                    stop_loss=sig_data['stop_loss'],
-                    take_profit=sig_data['take_profit'],
-                    risk_reward=sig_data.get('risk_reward', 0),
-                    strength=sig_data.get('strength', 0),
-                    is_priority=sig_data.get('is_priority', 0),
-                    stock_type=sig_data.get('stock_type', 'Penny'),
-                    rsi=sig_data.get('rsi', 50),
-                    date=sig_data['date'],
-                    action=sig_data.get('action', 'BUY'),
-                    signal_status=sig_data.get('signal_status', 'ACTIVE'),
-                    quantity_sold=sig_data.get('quantity_sold', 0)
-                )
-                
-                session.add(signal)
-                success_count += 1
-                
-            except Exception as e:
-                error_count += 1
-                errors.append(f"{sig_data.get('ticker', 'Unknown')}: {str(e)}")
-        
-        session.commit()
-        
-        return jsonify({
-            'success': True,
-            'imported': success_count,
-            'errors': error_count,
-            'error_details': errors[:10],  # Max 10 error messages
-            'message': f'Imported {success_count} signals, {error_count} errors'
-        })
-        
-    except Exception as e:
-        session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        session.close()
-if __name__ == '__main__':
-    port = int(os.getenv('PORT', 10000))
-    print(f"\n{'='*70}")
-    print("🚀 AI ADVISOR BACKEND v3.3 - STRICT AI PROMPT")
-    print(f"{'='*70}")
-    print(f"AI: {'✅ GPT-4o-mini (Strict Rules)' if openai_client else '❌ Not configured'}")
-    print(f"EOD File: {'✅ Loaded' if CACHE_LOADED and PRICES_CACHE else '⚠️ Not found'}")
-    print(f"Tickers: {len(PRICES_CACHE)}")
-    print(f"Database: {DATABASE_URL}")
-    print(f"Port: {port}")
-    print(f"{'='*70}\n")
-    
-    app.run(debug=False, host='0.0.0.0', port=port)
-"""
-BACKEND API ENHANCEMENT - Auto-fetch EOD Price Endpoint
-
-Add this to your existing backend_api.py
-"""
-
-from datetime import datetime, timedelta
-from vnstock import Vnstock
-
-# ============================================================================
-# NEW ENDPOINT: Auto-fetch current/EOD price
-# ============================================================================
 
 @app.route('/api/stock/current-price', methods=['GET'])
 def get_stock_price_endpoint():
-    """
-    Get current/latest EOD price for a stock
-    
-    Usage:
-        GET /api/stock/current-price?ticker=VCB
-    
-    Returns:
-        {
-            "success": true,
-            "price": 96500.0,
-            "source": "intraday" | "eod",
-            "timestamp": "2025-01-24T10:30:00"
-        }
-    """
+    """Get current/latest EOD price for a stock"""
     ticker = request.args.get('ticker')
     
     if not ticker:
@@ -1290,7 +791,7 @@ def get_stock_price_endpoint():
         stock_api = Vnstock()
         stock = stock_api.stock(symbol=ticker, source='VCI')
         
-        # Try intraday data first (real-time if market is open)
+        # Try intraday first
         try:
             intraday = stock.quote.intraday(symbol=ticker, page_size=1)
             if not intraday.empty:
@@ -1305,7 +806,7 @@ def get_stock_price_endpoint():
         except Exception as e:
             print(f"Intraday failed for {ticker}: {e}")
         
-        # Fallback to EOD (End of Day) data
+        # Fallback to EOD
         today = datetime.now().strftime('%Y-%m-%d')
         yesterday = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
         
@@ -1324,7 +825,6 @@ def get_stock_price_endpoint():
                 'trade_date': trade_date
             })
         
-        # No data found
         return jsonify({
             'success': False,
             'error': f'No price data found for {ticker}',
@@ -1340,32 +840,9 @@ def get_stock_price_endpoint():
         }), 500
 
 
-# ============================================================================
-# OPTIONAL: Batch price fetch (for updating multiple stocks at once)
-# ============================================================================
-
 @app.route('/api/stock/batch-prices', methods=['POST'])
 def get_batch_prices():
-    """
-    Get prices for multiple stocks at once
-    
-    Usage:
-        POST /api/stock/batch-prices
-        Body: {
-            "tickers": ["VCB", "HPG", "VNM"]
-        }
-    
-    Returns:
-        {
-            "success": true,
-            "prices": {
-                "VCB": 96500.0,
-                "HPG": 28300.0,
-                "VNM": 87400.0
-            },
-            "failed": []
-        }
-    """
+    """Get prices for multiple stocks at once"""
     data = request.json
     tickers = data.get('tickers', [])
     
@@ -1415,21 +892,75 @@ def get_batch_prices():
     })
 
 
-# ============================================================================
-# DATABASE SCHEMA UPDATE (if needed)
-# ============================================================================
+# ========================================================================
+# UTILITY ENDPOINTS
+# ========================================================================
 
-"""
-Add 'current_price' column to portfolios table if not exists:
+@app.route('/api/eod/status', methods=['GET'])
+def eod_status():
+    """Get EOD file status"""
+    file_exists = os.path.exists(EOD_FILE)
+    file_age_days = None
+    last_modified = None
+    
+    if file_exists:
+        file_time = datetime.fromtimestamp(os.path.getmtime(EOD_FILE))
+        file_age_days = (datetime.now() - file_time).days
+        last_modified = file_time.isoformat()
+    
+    return jsonify({
+        'success': True,
+        'file_exists': file_exists,
+        'tickers_count': len(PRICES_CACHE),
+        'file_age_days': file_age_days,
+        'last_modified': last_modified,
+        'needs_refresh': file_age_days > 5 if file_age_days is not None else True
+    })
 
-ALTER TABLE portfolios ADD COLUMN current_price REAL;
-ALTER TABLE portfolios ADD COLUMN price_updated_at TIMESTAMP;
 
-Or in SQLAlchemy:
+@app.route('/api/migrate', methods=['POST'])
+def migrate():
+    try:
+        Base.metadata.create_all(engine)
+        return jsonify({
+            'success': True,
+            'message': 'Migration successful',
+            'tables': ['signals', 'portfolios', 'cash_positions', 'chat_history']
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
-class Portfolio(Base):
-    # ... existing columns ...
-    current_price = Column(Float, nullable=True)
-    price_updated_at = Column(DateTime, nullable=True)
-"""
 
+# ========================================================================
+# APPLICATION STARTUP
+# ========================================================================
+
+if __name__ == '__main__':
+    # Initialize database
+    try:
+        print("\n🚀 Starting AI Advisor Backend v3.3 - FIXED...")
+        Base.metadata.create_all(engine)
+        print("✅ Database initialized")
+        
+        # Load EOD prices
+        load_eod_prices()
+        
+    except Exception as e:
+        print(f"⚠️ Warning: {e}")
+    
+    # Get port from environment (CRITICAL for Render!)
+    port = int(os.getenv('PORT', 10000))
+    
+    print(f"\n{'='*70}")
+    print("🚀 AI ADVISOR BACKEND v3.3 - FIXED VERSION")
+    print(f"{'='*70}")
+    print(f"AI: {'✅ GPT-4o-mini (Strict Rules)' if openai_client else '❌ Not configured'}")
+    print(f"EOD File: {'✅ Loaded' if CACHE_LOADED and PRICES_CACHE else '⚠️ Not found'}")
+    print(f"Tickers: {len(PRICES_CACHE)}")
+    print(f"Database: {DATABASE_URL}")
+    print(f"Host: 0.0.0.0 (Render-ready)")
+    print(f"Port: {port}")
+    print(f"{'='*70}\n")
+    
+    # CRITICAL: Bind to 0.0.0.0 and use PORT from environment!
+    app.run(debug=False, host='0.0.0.0', port=port)
