@@ -52,9 +52,10 @@ else:
 # Database Configuration
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///signals.db')
 
-# Fix PostgreSQL URL for psycopg3
+# Fix PostgreSQL URL for psycopg2
 if DATABASE_URL and DATABASE_URL.startswith('postgresql://'):
-    DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
+    DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg2://', 1)
+    print(f"✅ Using PostgreSQL with psycopg2 driver")
 
 # EOD file settings
 EOD_FILE = 'latest_prices_all.json'
