@@ -44,11 +44,11 @@ jobs:
             exit 1
           fi
       
-      - name: Wait for scanner to complete
-        run: |
-          echo "⏳ Waiting 12 minutes for scanner (343 stocks)..."
-          sleep 720
-      
+	- name: Wait for scanner to complete
+  	run: |
+    	echo "⏳ Waiting 25 minutes for scanner (343 stocks)..."
+    	sleep 1500  # 25 minutes (was 720 = 12 min)
+
       - name: Check scan status
         run: |
           echo "Checking scan status..."
