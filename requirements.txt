@@ -1,5 +1,5 @@
-# AI ADVISOR BACKEND v2 - REQUIREMENTS
-# Added vnstock for EOD price downloads
+# AI ADVISOR BACKEND v3.3 - REQUIREMENTS
+# Python 3.13 Compatible
 
 # Flask web framework
 Flask==3.0.0
@@ -8,11 +8,12 @@ gunicorn==21.2.0
 
 # Database
 SQLAlchemy==2.0.35
+psycopg[binary]==3.2.3
 
 # OpenAI
 openai==1.55.3
 
-# Stock data (for EOD downloads)
+# Stock data & data processing
 vnstock==3.3.1
 pandas>=2.0.0
 numpy>=1.24.0
@@ -20,5 +21,4 @@ numpy>=1.24.0
 # Basic utilities
 python-dotenv==1.0.0
 requests==2.32.3
-psycopg2-binary==2.9.9
 pytz==2025.2
