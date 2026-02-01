@@ -1,6 +1,6 @@
 # AI Advisor MVP
 
-MVP hoàn chỉnh với AI Decision Support cho investors. Sử dụng Claude AI để phân tích chứng khoán real-time.
+MVP hoàn chỉnh với AI Decision Support cho investors. Sử dụng AI để phân tích chứng khoán real-time.
 
 ## 🚀 Features
 
@@ -8,15 +8,15 @@ MVP hoàn chỉnh với AI Decision Support cho investors. Sử dụng Claude AI
 - **AI Decision Engine**: Tín hiệu MUA/BÁN với AI analysis
 - **AI Risk Shield**: Phân tích rủi ro thị trường real-time
 - **AI Discipline Coach**: Coaching hành vi đầu tư
-- **Backend API**: Next.js API routes với Anthropic Claude
+- **Backend API**: Next.js API routes với Chatgpt 4o
 - **Frontend**: React components với TypeScript
 
 ### 🎯 Công nghệ
 
 - **Framework**: Next.js 14 + React 18 + TypeScript
-- **AI**: Anthropic Claude API (Sonnet 4)
+- **AI**: Chatgpt 4o mini
 - **Styling**: CSS Modules
-- **Deploy**: Vercel (recommended) hoặc Netlify
+- **Deploy**: Render
 
 ## 📦 Setup Local
 
