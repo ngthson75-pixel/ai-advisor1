@@ -1,851 +1,452 @@
-import React, { useState, useEffect } from 'react';
-import { TrendingUp, DollarSign, PieChart, MessageSquare, Send, Plus, Trash2, BarChart3, AlertCircle, Wallet } from 'lucide-react';
-
-const API_BASE = 'https://ai-advisor1-backend.onrender.com/api';
-const USER_ID = 1;
+import { useState, useEffect, useRef } from 'react'
+import { getUserId } from '../utils/userSession'
 
 export default function AIPortfolioManager() {
-  const [portfolio, setPortfolio] = useState([]);
-  const [cash, setCash] = useState(0);
-  const [chatHistory, setChatHistory] = useState([]);
-  const [userMessage, setUserMessage] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  // Form state
-  const [newStock, setNewStock] = useState({
+  // ✅ User isolation - mỗi user có ID riêng
+  const [userId] = useState(() => getUserId())
+  
+  // Portfolio state
+  const [capital, setCapital] = useState('')
+  const [positions, setPositions] = useState([])
+  const [newPosition, setNewPosition] = useState({
     ticker: '',
     quantity: '',
-    price: ''
-  });
-  
-  const [cashInput, setCashInput] = useState('');
+    entryPrice: '',
+    currentPrice: ''
+  })
 
-  // Fetch portfolio with P&L
-  const fetchPortfolio = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/portfolio?user_id=${USER_ID}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setPortfolio(data.portfolio || []);
-        setCash(data.cash || 0);
-      }
-    } catch (err) {
-      console.error('Error fetching portfolio:', err);
+  // Chat state
+  const [messages, setMessages] = useState([
+    {
+      role: 'assistant',
+      content: '👋 Xin chào! Tôi là AI Advisor của bạn.\n\nHãy bắt đầu bằng cách:\n1. Nhập vốn đầu tư của bạn\n2. Thêm các vị thế hiện tại (nếu có)\n3. Đặt câu hỏi hoặc yêu cầu phân tích\n\nTôi sẽ phân tích danh mục và tư vấn chiến lược phù hợp! 🚀'
     }
-  };
+  ])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const messagesEndRef = useRef(null)
 
-  // Fetch chat history
-  const fetchChatHistory = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/chat/history?user_id=${USER_ID}`);
-      const data = await response.json();
-      if (data.success) {
-        setChatHistory(data.history || []);
-      }
-    } catch (err) {
-      console.error('Error fetching chat:', err);
-    }
-  };
+  const API_BASE = import.meta.env.VITE_API_URL || 'https://ai-advisor1-backend.onrender.com/api'
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
 
   useEffect(() => {
-    fetchPortfolio();
-    fetchChatHistory();
-  }, []);
+    scrollToBottom()
+  }, [messages])
 
-  // Add stock
-  const handleAddStock = async () => {
-    if (!newStock.ticker || !newStock.quantity || !newStock.price) {
-      setError('Vui lòng điền đầy đủ thông tin');
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
+  // ✅ Load portfolio from backend on mount
+  useEffect(() => {
+    loadPortfolioFromBackend()
+    loadChatHistoryFromBackend()
+  }, [userId])
 
+  const loadPortfolioFromBackend = async () => {
     try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch(`${API_BASE}/portfolio`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: USER_ID,
-          ticker: newStock.ticker.toUpperCase(),
-          quantity: parseInt(newStock.quantity),
-          price: parseFloat(newStock.price)
-        })
-      });
-
-      const data = await response.json();
+      const response = await fetch(`${API_BASE}/portfolio?user_id=${userId}`)
+      const data = await response.json()
       
-      if (data.success) {
-        setNewStock({ ticker: '', quantity: '', price: '' });
-        await fetchPortfolio();
-      } else {
-        setError(data.error || 'Không thể thêm cổ phiếu');
+      if (data.success && data.portfolio && data.portfolio.length > 0) {
+        // Convert backend format to frontend format
+        const loadedPositions = data.portfolio.map(stock => ({
+          id: stock.ticker + '_' + Date.now(),
+          ticker: stock.ticker,
+          quantity: stock.quantity.toString(),
+          entryPrice: stock.avg_price.toString(),
+          currentPrice: stock.avg_price.toString() // Default to entry price
+        }))
+        
+        setPositions(loadedPositions)
+        console.log('✅ Portfolio loaded:', loadedPositions.length, 'positions')
       }
-    } catch (err) {
-      setError('Lỗi: ' + err.message);
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      console.error('Error loading portfolio:', error)
     }
-  };
+  }
 
-  // Handle key down
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      e.stopPropagation();
-      handleAddStock();
-    }
-  };
-
-  // Delete stock
-  const handleDeleteStock = async (ticker) => {
-    if (!confirm(`Xóa ${ticker} khỏi danh mục?`)) return;
-
+  const loadChatHistoryFromBackend = async () => {
     try {
-      const response = await fetch(`${API_BASE}/portfolio/${ticker}?user_id=${USER_ID}`, {
-        method: 'DELETE'
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        await fetchPortfolio();
-      } else {
-        setError(data.error || 'Không thể xóa');
+      const response = await fetch(`${API_BASE}/chat/history?user_id=${userId}`)
+      const data = await response.json()
+      
+      if (data.success && data.history && data.history.length > 0) {
+        const loadedMessages = data.history.map(chat => [
+          { role: 'user', content: chat.message },
+          { role: 'assistant', content: chat.response }
+        ]).flat()
+        
+        setMessages(prev => [...prev, ...loadedMessages])
+        console.log('✅ Chat history loaded:', data.history.length, 'messages')
       }
-    } catch (err) {
-      setError('Lỗi: ' + err.message);
+    } catch (error) {
+      console.error('Error loading chat history:', error)
     }
-  };
+  }
 
-  // Update cash
-  const handleUpdateCash = async () => {
-    const amount = parseFloat(cashInput);
-    
-    if (isNaN(amount) || amount < 0) {
-      setError('Số tiền không hợp lệ');
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
-
+  const savePositionToBackend = async (position) => {
     try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE}/cash`, {
+      await fetch(`${API_BASE}/portfolio`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: USER_ID,
-          cash: amount
+          user_id: userId,
+          ticker: position.ticker,
+          quantity: parseInt(position.quantity),
+          price: parseFloat(position.entryPrice)
         })
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setCash(data.cash);
-        setCashInput('');
-      } else {
-        setError(data.error || 'Không thể cập nhật tiền mặt');
-      }
-    } catch (err) {
-      setError('Lỗi: ' + err.message);
-    } finally {
-      setLoading(false);
+      })
+      console.log('✅ Saved to backend:', position.ticker)
+    } catch (error) {
+      console.error('Error saving:', error)
     }
-  };
+  }
 
-  // Send chat message
-  const handleSendMessage = async () => {
-    if (!userMessage.trim()) return;
+  const deletePositionFromBackend = async (ticker) => {
+    try {
+      await fetch(`${API_BASE}/portfolio/${ticker}?user_id=${userId}`, {
+        method: 'DELETE'
+      })
+      console.log('✅ Deleted from backend:', ticker)
+    } catch (error) {
+      console.error('Error deleting:', error)
+    }
+  }
 
-    const currentMessage = userMessage;
-    setUserMessage('');
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('vi-VN', {
+      style: 'currency',
+      currency: 'VND'
+    }).format(value)
+  }
+
+  const addPosition = () => {
+    if (newPosition.ticker && newPosition.quantity && newPosition.entryPrice && newPosition.currentPrice) {
+      const position = { ...newPosition, id: Date.now() }
+      setPositions([...positions, position])
+      
+      // ✅ Save to backend
+      savePositionToBackend(position)
+      
+      setNewPosition({ ticker: '', quantity: '', entryPrice: '', currentPrice: '' })
+      
+      const positionMsg = {
+        role: 'assistant',
+        content: `✅ Đã thêm vị thế ${newPosition.ticker}!\n\nBạn có thể hỏi tôi về:\n- Nên giữ hay bán ${newPosition.ticker}?\n- Rủi ro của danh mục hiện tại?\n- Chiến lược phân bổ vốn?`
+      }
+      setMessages(prev => [...prev, positionMsg])
+    }
+  }
+
+  const removePosition = (id) => {
+    const position = positions.find(p => p.id === id)
+    setPositions(positions.filter(p => p.id !== id))
+    
+    if (position) {
+      // ✅ Delete from backend
+      deletePositionFromBackend(position.ticker)
+      
+      const msg = {
+        role: 'assistant',
+        content: `Đã xóa vị thế ${position.ticker}. Danh mục của bạn đã được cập nhật.`
+      }
+      setMessages(prev => [...prev, msg])
+    }
+  }
+
+  const analyzePortfolio = () => {
+    if (!capital || positions.length === 0) {
+      const errorMsg = {
+        role: 'assistant',
+        content: '⚠️ Vui lòng nhập vốn và thêm ít nhất một vị thế để tôi có thể phân tích!'
+      }
+      setMessages(prev => [...prev, errorMsg])
+      return
+    }
+
+    setLoading(true)
+
+    setTimeout(() => {
+      const totalInvested = positions.reduce((sum, p) => 
+        sum + (parseFloat(p.quantity) * parseFloat(p.entryPrice)), 0
+      )
+      
+      const currentValue = positions.reduce((sum, p) => 
+        sum + (parseFloat(p.quantity) * parseFloat(p.currentPrice)), 0
+      )
+      
+      const pnl = currentValue - totalInvested
+      const pnlPercent = (pnl / totalInvested) * 100
+      const capitalUsage = (totalInvested / parseFloat(capital)) * 100
+
+      let analysis = `📊 **PHÂN TÍCH DANH MỤC ĐẦU TƯ**\n\n`
+      analysis += `💰 **Tổng quan:**\n`
+      analysis += `- Vốn: ${formatCurrency(parseFloat(capital))}\n`
+      analysis += `- Đã đầu tư: ${formatCurrency(totalInvested)} (${capitalUsage.toFixed(1)}%)\n`
+      analysis += `- Giá trị hiện tại: ${formatCurrency(currentValue)}\n`
+      analysis += `- Lãi/Lỗ: ${formatCurrency(pnl)} (${pnl >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%)\n\n`
+
+      analysis += `🎯 **Đánh giá rủi ro:**\n`
+      if (capitalUsage > 80) {
+        analysis += `⚠️ **Mức rủi ro: CAO**\n`
+        analysis += `- Bạn đang sử dụng ${capitalUsage.toFixed(1)}% vốn\n`
+        analysis += `- Khuyến nghị: Giảm bớt vị thế để duy trì thanh khoản\n`
+        analysis += `- Nên giữ ít nhất 20% vốn dự phòng\n\n`
+      } else if (capitalUsage > 50) {
+        analysis += `⚡ **Mức rủi ro: TRUNG BÌNH**\n`
+        analysis += `- Mức sử dụng vốn hợp lý (${capitalUsage.toFixed(1)}%)\n`
+        analysis += `- Theo dõi chặt chẽ các vị thế\n`
+        analysis += `- Cân nhắc đặt stop loss cho từng mã\n\n`
+      } else {
+        analysis += `✅ **Mức rủi ro: THẤP**\n`
+        analysis += `- Sử dụng ${capitalUsage.toFixed(1)}% vốn - an toàn\n`
+        analysis += `- Vẫn còn khả năng mở thêm vị thế\n`
+        analysis += `- Có thể tìm kiếm cơ hội mới\n\n`
+      }
+
+      analysis += `💡 **Khuyến nghị:**\n`
+      
+      positions.forEach(p => {
+        const invested = parseFloat(p.quantity) * parseFloat(p.entryPrice)
+        const current = parseFloat(p.quantity) * parseFloat(p.currentPrice)
+        const posPnl = current - invested
+        const posPnlPercent = (posPnl / invested) * 100
+        
+        if (posPnlPercent > 10) {
+          analysis += `- **${p.ticker}**: Đang lãi ${posPnlPercent.toFixed(1)}% - Cân nhắc chốt lời một phần\n`
+        } else if (posPnlPercent < -7) {
+          analysis += `- **${p.ticker}**: Đang lỗ ${posPnlPercent.toFixed(1)}% - Xem xét cắt lỗ nếu xu hướng không đảo chiều\n`
+        } else {
+          analysis += `- **${p.ticker}**: Trong vùng an toàn (${posPnlPercent.toFixed(1)}%) - Tiếp tục theo dõi\n`
+        }
+      })
+
+      const analysisMsg = {
+        role: 'assistant',
+        content: analysis
+      }
+      setMessages(prev => [...prev, analysisMsg])
+      setLoading(false)
+    }, 1500)
+  }
+
+  const sendMessage = async (e) => {
+    e.preventDefault()
+    
+    if (!input.trim()) return
+
+    const userMessage = { role: 'user', content: input }
+    setMessages(prev => [...prev, userMessage])
+    const currentInput = input
+    setInput('')
+    setLoading(true)
 
     try {
-      setLoading(true);
+      // ✅ Call GEMINI AI through backend (đã có sẵn)
       const response = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: USER_ID,
-          message: currentMessage
+          user_id: userId,
+          message: currentInput,
+          portfolio: positions.map(p => p.ticker) // Portfolio context
         })
-      });
+      })
 
-      const data = await response.json();
+      const data = await response.json()
       
-      if (data.success) {
-        setChatHistory([...chatHistory, {
-          message: currentMessage,
-          response: data.response
-        }]);
+      if (data.success && data.response) {
+        const assistantMessage = { role: 'assistant', content: data.response }
+        setMessages(prev => [...prev, assistantMessage])
       } else {
-        setError(data.error || 'AI không phản hồi');
-        setUserMessage(currentMessage);
+        throw new Error('Backend response failed')
       }
-    } catch (err) {
-      setError('Lỗi: ' + err.message);
-      setUserMessage(currentMessage);
+    } catch (error) {
+      console.error('Error calling AI:', error)
+      
+      // Fallback message
+      const errorMsg = {
+        role: 'assistant',
+        content: '⚠️ Xin lỗi, tôi gặp sự cố kết nối. Vui lòng thử lại sau!'
+      }
+      setMessages(prev => [...prev, errorMsg])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
-
-  // Handle chat key down
-  const handleChatKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      handleSendMessage();
-    }
-  };
-
-  // Calculate totals
-  const totalCost = portfolio.reduce((sum, stock) => 
-    sum + (stock?.cost || 0), 0
-  );
-  
-  const totalValue = portfolio.reduce((sum, stock) => 
-    sum + (stock?.current_value || 0), 0
-  );
-  
-  const totalPL = totalValue - totalCost;
-  const totalPLPct = totalCost > 0 ? (totalPL / totalCost * 100) : 0;
-  
-  const totalAssets = totalValue + cash;
-  const stockRatio = totalAssets > 0 ? (totalValue / totalAssets * 100) : 0;
-  const cashRatio = totalAssets > 0 ? (cash / totalAssets * 100) : 0;
+  }
 
   return (
-    <div className="portfolio-manager">
-      <div className="container">
-        {/* Error Banner */}
-        {error && (
-          <div className="error-banner">
-            <AlertCircle size={20} />
-            <span>{error}</span>
-            <button onClick={() => setError(null)}>✕</button>
-          </div>
-        )}
+    <div className="ai-portfolio-manager">
+      <div className="module-header">
+        <h2>🤖 Quản trị đầu tư bằng AI</h2>
+        <p>Chia sẻ danh mục của bạn và nhận tư vấn từ AI 24/7</p>
+      </div>
 
-        {/* Header */}
-        <div className="header">
-          <div>
-            <h1 className="title">
-              <BarChart3 size={32} />
-              Danh Mục Đầu Tư
-            </h1>
-            <p className="subtitle">Quản lý danh mục với phân tích AI</p>
-          </div>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="stats-grid">
-          <div className="stat-card">
-            <div className="stat-icon" style={{ background: '#22c55e20' }}>
-              <DollarSign size={24} style={{ color: '#22c55e' }} />
-            </div>
-            <div>
-              <div className="stat-label">Tổng tài sản</div>
-              <div className="stat-value">{totalAssets.toLocaleString()} VND</div>
-            </div>
+      <div className="portfolio-grid">
+        {/* Left: Portfolio Input */}
+        <div className="portfolio-section">
+          <div className="section-header">
+            <h3>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+              </svg>
+              Danh mục của bạn
+            </h3>
           </div>
 
-          <div className="stat-card">
-            <div className="stat-icon" style={{ background: totalPL >= 0 ? '#22c55e20' : '#ef444420' }}>
-              <TrendingUp size={24} style={{ color: totalPL >= 0 ? '#22c55e' : '#ef4444' }} />
-            </div>
-            <div>
-              <div className="stat-label">Lãi/Lỗ</div>
-              <div className="stat-value" style={{ color: totalPL >= 0 ? '#22c55e' : '#ef4444' }}>
-                {totalPL >= 0 ? '+' : ''}{totalPL.toLocaleString()} VND
-                <span style={{ fontSize: '14px', marginLeft: '5px' }}>
-                  ({totalPLPct >= 0 ? '+' : ''}{totalPLPct.toFixed(2)}%)
-                </span>
-              </div>
-            </div>
+          <div className="form-group">
+            <label>Tổng vốn (VND)</label>
+            <input
+              type="number"
+              value={capital}
+              onChange={(e) => setCapital(e.target.value)}
+              placeholder="Nhập tổng vốn đầu tư"
+            />
           </div>
 
-          <div className="stat-card">
-            <div className="stat-icon" style={{ background: '#3b82f620' }}>
-              <PieChart size={24} style={{ color: '#3b82f6' }} />
-            </div>
-            <div>
-              <div className="stat-label">Phân bổ</div>
-              <div className="stat-value" style={{ fontSize: '14px' }}>
-                {stockRatio.toFixed(1)}% CP / {cashRatio.toFixed(1)}% TM
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Main Grid */}
-        <div className="main-grid">
-          {/* Portfolio Section */}
-          <div className="section">
-            <div className="section-header">
-              <h2 className="section-title">
-                <Plus size={20} />
-                Thêm Cổ Phiếu
-              </h2>
-            </div>
-
-            {/* Add Stock Form */}
-            <div className="add-stock-form">
+          <div className="form-group">
+            <label>Thêm vị thế</label>
+            <div className="position-inputs">
               <input
                 type="text"
-                placeholder="Mã CP (VD: VCB)"
-                value={newStock.ticker}
-                onChange={(e) => setNewStock({...newStock, ticker: e.target.value})}
-                onKeyDown={handleKeyDown}
-                className="input"
-                style={{ flex: 1 }}
-                disabled={loading}
+                value={newPosition.ticker}
+                onChange={(e) => setNewPosition({...newPosition, ticker: e.target.value.toUpperCase()})}
+                placeholder="Mã (VD: VCB)"
               />
               <input
                 type="number"
+                value={newPosition.quantity}
+                onChange={(e) => setNewPosition({...newPosition, quantity: e.target.value})}
                 placeholder="Số lượng"
-                value={newStock.quantity}
-                onChange={(e) => setNewStock({...newStock, quantity: e.target.value})}
-                onKeyDown={handleKeyDown}
-                className="input"
-                style={{ flex: 1 }}
-                disabled={loading}
               />
               <input
                 type="number"
-                placeholder="Giá (VND)"
-                value={newStock.price}
-                onChange={(e) => setNewStock({...newStock, price: e.target.value})}
-                onKeyDown={handleKeyDown}
-                className="input"
-                style={{ flex: 1 }}
-                disabled={loading}
+                value={newPosition.entryPrice}
+                onChange={(e) => setNewPosition({...newPosition, entryPrice: e.target.value})}
+                placeholder="Giá mua"
               />
-              <button 
-                onClick={handleAddStock}
-                className="btn-primary"
-                disabled={loading}
-              >
-                {loading ? 'Đang thêm...' : 'Thêm'}
-              </button>
+              <input
+                type="number"
+                value={newPosition.currentPrice}
+                onChange={(e) => setNewPosition({...newPosition, currentPrice: e.target.value})}
+                placeholder="Giá hiện tại"
+              />
             </div>
+            <button onClick={addPosition} className="btn-add">
+              + Thêm vị thế
+            </button>
+          </div>
 
-            {/* Cash Section */}
-            <div className="cash-section">
-              <div className="section-header" style={{ marginTop: '20px', marginBottom: '15px' }}>
-                <h3 className="section-title" style={{ fontSize: '16px' }}>
-                  <Wallet size={18} />
-                  Tiền mặt
-                </h3>
-              </div>
-              
-              <div className="cash-display">
-                <div className="cash-amount">
-                  <span style={{ color: '#94a3b8', fontSize: '13px' }}>Số dư:</span>
-                  <span style={{ color: '#22c55e', fontSize: '20px', fontWeight: 'bold', marginLeft: '10px' }}>
-                    {cash.toLocaleString()} VND
-                  </span>
-                </div>
-                
-                <div className="cash-input-group">
-                  <input
-                    type="number"
-                    placeholder="Nhập số tiền mặt"
-                    value={cashInput}
-                    onChange={(e) => setCashInput(e.target.value)}
-                    className="input"
-                    style={{ flex: 1 }}
-                    disabled={loading}
-                  />
-                  <button
-                    onClick={handleUpdateCash}
-                    className="btn-secondary"
-                    disabled={loading}
-                  >
-                    Cập nhật
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Portfolio List */}
-            <div className="section-header" style={{ marginTop: '30px' }}>
-              <h2 className="section-title">Danh mục cổ phiếu</h2>
-            </div>
-
-            {portfolio.length === 0 ? (
-              <div className="empty-state">
-                <PieChart size={48} style={{ color: '#64748b', marginBottom: '10px' }} />
-                <p>Chưa có cổ phiếu nào</p>
-              </div>
-            ) : (
-              <div className="stocks-list">
-                {portfolio.map((stock, idx) => {
-                  const ticker = stock?.ticker || 'N/A';
-                  const quantity = stock?.quantity || 0;
-                  const avgPrice = stock?.avg_price || 0;
-                  const currentPrice = stock?.current_price || avgPrice;
-                  const plAmount = stock?.pl_amount || 0;
-                  const plPct = stock?.pl_pct || 0;
-                  const isProfit = plAmount >= 0;
+          {positions.length > 0 && (
+            <>
+              <div className="positions-list">
+                <label>Các vị thế hiện tại ({positions.length})</label>
+                {positions.map(position => {
+                  const invested = parseFloat(position.quantity) * parseFloat(position.entryPrice)
+                  const current = parseFloat(position.quantity) * parseFloat(position.currentPrice)
+                  const pnl = current - invested
+                  const pnlPercent = (pnl / invested) * 100
 
                   return (
-                    <div key={idx} className="stock-item">
-                      <div className="stock-info">
-                        <div className="stock-header">
-                          <div className="stock-ticker">{ticker}</div>
-                          <div className="stock-pl" style={{ color: isProfit ? '#22c55e' : '#ef4444' }}>
-                            {isProfit ? '+' : ''}{plPct.toFixed(2)}%
-                          </div>
-                        </div>
-                        <div className="stock-details">
-                          {quantity} CP × Mua {avgPrice.toLocaleString()} VND
-                        </div>
-                        <div className="stock-current">
-                          Hiện tại: {currentPrice.toLocaleString()} VND
-                          <span style={{ 
-                            marginLeft: '10px',
-                            color: isProfit ? '#22c55e' : '#ef4444',
-                            fontSize: '12px'
+                    <div key={position.id} className="position-card">
+                      <div className="position-info">
+                        <div className="position-ticker">{position.ticker}</div>
+                        <div className="position-details">
+                          {position.quantity} CP × {formatCurrency(position.entryPrice)}
+                          <span style={{
+                            marginLeft: '8px',
+                            color: pnl >= 0 ? '#10b981' : '#ef4444',
+                            fontWeight: 600
                           }}>
-                            ({isProfit ? '+' : ''}{plAmount.toLocaleString()} VND)
+                            {pnl >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%
                           </span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleDeleteStock(ticker)}
-                        className="btn-delete"
-                      >
-                        <Trash2 size={16} />
+                      <button onClick={() => removePosition(position.id)} className="btn-remove-small">
+                        ×
                       </button>
                     </div>
-                  );
+                  )
                 })}
               </div>
-            )}
+
+              <button onClick={analyzePortfolio} className="btn-analyze" disabled={loading}>
+                {loading ? (
+                  <>
+                    <div className="spinner" style={{width: '16px', height: '16px', borderWidth: '2px'}}></div>
+                    Đang phân tích...
+                  </>
+                ) : (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    Phân tích danh mục
+                  </>
+                )}
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Right: AI Chat */}
+        <div className="chat-section">
+          <div className="section-header">
+            <h3>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+              </svg>
+              Tư vấn AI (Gemini)
+            </h3>
           </div>
 
-          {/* AI Chat Section */}
-          <div className="section">
-            <div className="section-header">
-              <h2 className="section-title">
-                <MessageSquare size={20} />
-                AI Advisor
-              </h2>
-            </div>
-
-            <div className="chat-subtitle">
-              Phân tích danh mục và tư vấn đầu tư
-            </div>
-
-            {/* Chat History */}
-            <div className="chat-history">
-              {chatHistory.length === 0 ? (
-                <div className="empty-state">
-                  <MessageSquare size={48} style={{ color: '#64748b' }} />
-                  <p style={{ marginTop: '10px' }}>
-                    Hỏi AI về danh mục của bạn
-                  </p>
-                  <p style={{ fontSize: '13px', color: '#64748b', marginTop: '5px' }}>
-                    VD: "Phân tích rủi ro danh mục của tôi"
-                  </p>
-                </div>
-              ) : (
-                chatHistory.map((chat, idx) => (
-                  <div key={idx} className="chat-messages">
-                    <div className="user-message">
-                      <strong>Bạn:</strong> {chat.message}
-                    </div>
-                    <div className="ai-message">
-                      <strong>AI:</strong> {chat.response}
-                    </div>
+          <div className="chat-messages-container">
+            <div className="chat-messages">
+              {messages.map((message, index) => (
+                <div key={index} className={`message ${message.role}`}>
+                  <div className="message-avatar">
+                    {message.role === 'assistant' ? '🤖' : '👤'}
                   </div>
-                ))
+                  <div className="message-content">
+                    {message.content.split('\n').map((line, i) => (
+                      <p key={i} style={{ margin: line ? '0 0 8px 0' : '4px 0' }}>
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              
+              {loading && (
+                <div className="message assistant">
+                  <div className="message-avatar">🤖</div>
+                  <div className="message-content">
+                    <div className="spinner" style={{width: '20px', height: '20px', borderWidth: '2px'}}></div>
+                  </div>
+                </div>
               )}
+              
+              <div ref={messagesEndRef} />
             </div>
 
-            {/* Chat Input */}
-            <div className="chat-input-container">
+            <form onSubmit={sendMessage} className="chat-input">
               <input
                 type="text"
-                placeholder="Hỏi AI về danh mục..."
-                value={userMessage}
-                onChange={(e) => setUserMessage(e.target.value)}
-                onKeyDown={handleChatKeyDown}
-                className="input"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Đặt câu hỏi cho AI (VD: Tôi nên mua hay bán VCB?)"
                 disabled={loading}
               />
-              <button
-                onClick={handleSendMessage}
-                disabled={loading || !userMessage.trim()}
-                className="btn-send"
-              >
-                <Send size={18} />
+              <button type="submit" disabled={loading || !input.trim()}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                </svg>
               </button>
-            </div>
+            </form>
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        .portfolio-manager {
-          min-height: 100vh;
-          background: #0f172a;
-          padding: 20px;
-        }
-
-        .container {
-          max-width: 1400px;
-          margin: 0 auto;
-        }
-
-        .error-banner {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 15px 20px;
-          background: #ef444420;
-          border: 1px solid #ef4444;
-          border-radius: 8px;
-          color: #ef4444;
-          margin-bottom: 20px;
-          font-size: 14px;
-        }
-
-        .error-banner button {
-          background: none;
-          border: none;
-          color: #ef4444;
-          cursor: pointer;
-          font-size: 20px;
-          padding: 0;
-          width: 24px;
-          height: 24px;
-          margin-left: auto;
-        }
-
-        .header {
-          margin-bottom: 30px;
-        }
-
-        .title {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          color: white;
-          font-size: 28px;
-          margin-bottom: 8px;
-        }
-
-        .subtitle {
-          color: #94a3b8;
-          font-size: 15px;
-        }
-
-        .stats-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-          gap: 20px;
-          margin-bottom: 30px;
-        }
-
-        .stat-card {
-          background: #1e293b;
-          border: 1px solid #334155;
-          border-radius: 12px;
-          padding: 20px;
-          display: flex;
-          align-items: center;
-          gap: 15px;
-        }
-
-        .stat-icon {
-          width: 48px;
-          height: 48px;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .stat-label {
-          color: #94a3b8;
-          font-size: 13px;
-          margin-bottom: 5px;
-        }
-
-        .stat-value {
-          color: white;
-          font-size: 20px;
-          font-weight: bold;
-        }
-
-        .main-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
-        }
-
-        .section {
-          background: #1e293b;
-          border: 1px solid #334155;
-          border-radius: 12px;
-          padding: 25px;
-        }
-
-        .section-header {
-          margin-bottom: 20px;
-        }
-
-        .section-title {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          color: white;
-          font-size: 18px;
-          font-weight: 600;
-          margin: 0;
-        }
-
-        .add-stock-form {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-
-        .cash-section {
-          margin-top: 20px;
-          padding-top: 20px;
-          border-top: 1px solid #334155;
-        }
-
-        .cash-display {
-          display: flex;
-          flex-direction: column;
-          gap: 15px;
-        }
-
-        .cash-amount {
-          display: flex;
-          align-items: center;
-          padding: 15px;
-          background: #0f172a;
-          border: 1px solid #334155;
-          border-radius: 8px;
-        }
-
-        .cash-input-group {
-          display: flex;
-          gap: 10px;
-        }
-
-        .input {
-          padding: 12px 16px;
-          background: #0f172a;
-          border: 1px solid #334155;
-          border-radius: 8px;
-          color: white;
-          font-size: 14px;
-          transition: all 0.2s;
-        }
-
-        .input:focus {
-          outline: none;
-          border-color: #3b82f6;
-        }
-
-        .input:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .input::placeholder {
-          color: #64748b;
-        }
-
-        .btn-primary, .btn-secondary {
-          padding: 12px 24px;
-          background: #3b82f6;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s;
-          white-space: nowrap;
-        }
-
-        .btn-secondary {
-          background: #22c55e;
-        }
-
-        .btn-primary:hover:not(:disabled), .btn-secondary:hover:not(:disabled) {
-          opacity: 0.9;
-        }
-
-        .btn-primary:disabled, .btn-secondary:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .stocks-list {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-
-        .stock-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 15px;
-          background: #0f172a;
-          border: 1px solid #334155;
-          border-radius: 8px;
-        }
-
-        .stock-info {
-          flex: 1;
-        }
-
-        .stock-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 8px;
-        }
-
-        .stock-ticker {
-          color: #3b82f6;
-          font-weight: bold;
-          font-size: 18px;
-        }
-
-        .stock-pl {
-          font-weight: 700;
-          font-size: 16px;
-        }
-
-        .stock-details {
-          color: #94a3b8;
-          font-size: 13px;
-          margin-bottom: 4px;
-        }
-
-        .stock-current {
-          color: #e2e8f0;
-          font-size: 14px;
-          font-weight: 500;
-        }
-
-        .btn-delete {
-          padding: 8px;
-          background: #ef444420;
-          border: 1px solid #ef4444;
-          border-radius: 6px;
-          color: #ef4444;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .btn-delete:hover {
-          background: #ef4444;
-          color: white;
-        }
-
-        .chat-subtitle {
-          color: #94a3b8;
-          font-size: 14px;
-          margin-bottom: 20px;
-        }
-
-        .chat-history {
-          height: 400px;
-          overflow-y: auto;
-          padding: 15px;
-          background: #0f172a;
-          border: 1px solid #334155;
-          border-radius: 8px;
-          margin-bottom: 15px;
-        }
-
-        .chat-messages {
-          margin-bottom: 20px;
-        }
-
-        .user-message {
-          padding: 12px;
-          background: #3b82f620;
-          border-left: 3px solid #3b82f6;
-          border-radius: 6px;
-          margin-bottom: 10px;
-          color: white;
-          font-size: 14px;
-        }
-
-        .ai-message {
-          padding: 12px;
-          background: #22c55e20;
-          border-left: 3px solid #22c55e;
-          border-radius: 6px;
-          color: white;
-          font-size: 14px;
-          line-height: 1.6;
-        }
-
-        .chat-input-container {
-          display: flex;
-          gap: 10px;
-        }
-
-        .btn-send {
-          padding: 12px 16px;
-          background: #3b82f6;
-          border: none;
-          border-radius: 8px;
-          color: white;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .btn-send:hover:not(:disabled) {
-          background: #2563eb;
-        }
-
-        .btn-send:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .empty-state {
-          text-align: center;
-          padding: 60px 20px;
-          color: #64748b;
-        }
-
-        @media (max-width: 1024px) {
-          .main-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        @media (max-width: 768px) {
-          .add-stock-form {
-            flex-direction: column;
-          }
-
-          .input {
-            width: 100%;
-          }
-
-          .stats-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
     </div>
-  );
+  )
 }

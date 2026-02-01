@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database (local)
+  postgres:
+    image: postgres:15-alpine
+    container_name: aiadvisor-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aiadvisor
+      POSTGRES_PASSWORD: dev123456
+      POSTGRES_DB: aiadvisor_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiadvisor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: aiadvisor-backend
+    restart: unless-stopped
+    command: python backend_api.py
+    ports:
+      - "10000:10000"
+    environment:
+      # Database
+      DATABASE_URL: postgresql://aiadvisor:dev123456@postgres:5432/aiadvisor_dev
+      
+      # API Keys
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      
+      # Flask
+      FLASK_ENV: development
+      FLASK_DEBUG: 1
+      
+      # CORS
+      ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+    volumes:
+      - .:/app
+      - /app/__pycache__
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis (for caching - optional)
+  redis:
+    image: redis:7-alpine
+    container_name: aiadvisor-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: aiadvisor-network

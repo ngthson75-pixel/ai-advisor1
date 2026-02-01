@@ -1,0 +1,217 @@
+/* ============================================
+   AI PORTFOLIO MANAGER - RESPONSIVE STYLES
+   ============================================ */
+
+/* Desktop: 2 columns side-by-side */
+.portfolio-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 24px;
+}
+
+.portfolio-section,
+.chat-section {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  height: fit-content;
+}
+
+/* Position inputs in a row */
+.position-inputs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.position-inputs input {
+  flex: 1;
+  min-width: 0; /* Prevent overflow */
+}
+
+/* Chat section specific */
+.chat-messages-container {
+  display: flex;
+  flex-direction: column;
+  height: 600px;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 8px;
+  margin-bottom: 16px;
+}
+
+.chat-input {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.chat-input input {
+  flex: 1;
+}
+
+/* ============================================
+   MOBILE RESPONSIVE (≤ 768px)
+   ============================================ */
+
+@media (max-width: 768px) {
+  /* Stack vertically on mobile */
+  .portfolio-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  /* Portfolio section stays on top */
+  .portfolio-section {
+    order: 1;
+  }
+  
+  /* Chat section goes below portfolio */
+  .chat-section {
+    order: 2;
+  }
+  
+  /* Reduce padding on mobile */
+  .portfolio-section,
+  .chat-section {
+    padding: 16px;
+  }
+  
+  /* Stack position inputs vertically on very small screens */
+  @media (max-width: 480px) {
+    .position-inputs {
+      flex-direction: column;
+    }
+    
+    .position-inputs input {
+      width: 100%;
+    }
+  }
+  
+  /* Adjust chat height for mobile */
+  .chat-messages-container {
+    height: 400px; /* Shorter on mobile */
+  }
+  
+  /* Position card adjustments */
+  .position-card {
+    padding: 12px;
+  }
+  
+  .position-details {
+    font-size: 13px;
+  }
+  
+  .position-prices {
+    font-size: 11px !important;
+  }
+}
+
+/* ============================================
+   TABLET (768px - 1024px)
+   ============================================ */
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  /* Keep 2 columns but with smaller gap */
+  .portfolio-grid {
+    gap: 16px;
+  }
+  
+  .portfolio-section,
+  .chat-section {
+    padding: 20px;
+  }
+}
+
+/* ============================================
+   ADDITIONAL MOBILE OPTIMIZATIONS
+   ============================================ */
+
+@media (max-width: 768px) {
+  /* Make module header more compact */
+  .module-header h2 {
+    font-size: 20px;
+  }
+  
+  .module-header p {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  
+  /* Adjust form groups */
+  .form-group label {
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  
+  .form-group input {
+    font-size: 14px;
+    padding: 10px;
+  }
+  
+  /* Button adjustments */
+  .btn-add,
+  .btn-analyze {
+    font-size: 14px;
+    padding: 10px 16px;
+  }
+  
+  /* Message bubbles */
+  .message-content {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  
+  .message-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+  }
+  
+  /* Chat input */
+  .chat-input input {
+    font-size: 14px;
+    padding: 10px;
+  }
+  
+  .chat-input button {
+    min-width: 44px; /* Touch-friendly size */
+    min-height: 44px;
+  }
+}
+
+/* ============================================
+   LANDSCAPE MOBILE (optional)
+   ============================================ */
+
+@media (max-width: 768px) and (orientation: landscape) {
+  /* Shorter chat height in landscape */
+  .chat-messages-container {
+    height: 300px;
+  }
+}
+
+/* ============================================
+   PRINT STYLES (bonus)
+   ============================================ */
+
+@media print {
+  .chat-section {
+    display: none; /* Hide chat when printing */
+  }
+  
+  .portfolio-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .btn-add,
+  .btn-analyze,
+  .btn-remove-small {
+    display: none; /* Hide buttons */
+  }
+}
