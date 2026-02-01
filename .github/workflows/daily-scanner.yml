@@ -1,0 +1,214 @@
+name: Daily Signal Scanner
+
+on:
+  # Run daily at 9:00 AM Vietnam time (2:00 AM UTC)
+  schedule:
+    - cron: '0 2 * * *'
+  
+  # Allow manual trigger from GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to scan'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  scan-production:
+    if: github.event.inputs.environment == 'production' || github.event.inputs.environment == '' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Display scan info
+        run: |
+          echo "🚀 Starting Daily Signal Scanner - PRODUCTION"
+          echo "📅 Date: $(date +'%Y-%m-%d %H:%M:%S %Z')"
+          echo "🔗 Backend: https://ai-advisor1-backend.onrender.com"
+          echo "=================================="
+      
+      - name: Wake up backend
+        run: |
+          echo "⏰ Waking up backend..."
+          for i in {1..3}; do
+            response=$(curl -s -o /dev/null -w "%{http_code}" https://ai-advisor1-backend.onrender.com/health || echo "000")
+            if [ "$response" == "200" ]; then
+              echo "✅ Backend is awake (attempt $i)"
+              break
+            else
+              echo "⏳ Waiting for backend... (attempt $i/3)"
+              sleep 10
+            fi
+          done
+      
+      - name: Health check
+        id: health
+        run: |
+          echo "🏥 Checking backend health..."
+          response=$(curl -s https://ai-advisor1-backend.onrender.com/health)
+          echo "Response: $response"
+          
+          status=$(echo $response | jq -r '.status // "unknown"')
+          if [ "$status" == "healthy" ]; then
+            echo "✅ Backend is healthy"
+          else
+            echo "❌ Backend health check failed"
+            exit 1
+          fi
+      
+      - name: Check current signals
+        run: |
+          echo "📊 Current signals before scan:"
+          response=$(curl -s https://ai-advisor1-backend.onrender.com/api/signals)
+          count=$(echo $response | jq -r '.count // 0')
+          echo "Current signals: $count"
+          
+          if [ $count -gt 0 ]; then
+            latest=$(echo $response | jq -r '.signals[0].date // "unknown"')
+            echo "Latest signal date: $latest"
+          fi
+      
+      - name: Trigger signal scanner
+        id: scan
+        run: |
+          echo "🔍 Triggering signal scanner..."
+          response=$(curl -s -X POST https://ai-advisor1-backend.onrender.com/api/scan)
+          echo "Response: $response"
+          
+          success=$(echo $response | jq -r '.success // false')
+          if [ "$success" == "true" ]; then
+            echo "✅ Scanner triggered successfully"
+          else
+            error=$(echo $response | jq -r '.error // "Unknown error"')
+            echo "❌ Scanner failed: $error"
+            exit 1
+          fi
+      
+      - name: Monitor scan progress
+        run: |
+          echo "⏳ Monitoring scan progress (max 5 minutes)..."
+          for i in {1..10}; do
+            echo "Check #$i/10 ($(date +'%H:%M:%S'))..."
+            sleep 30
+            
+            response=$(curl -s https://ai-advisor1-backend.onrender.com/api/scan/status 2>/dev/null || echo '{"status":"checking"}')
+            status=$(echo $response | jq -r '.status // "checking"')
+            signals=$(echo $response | jq -r '.signals_count // 0')
+            
+            echo "  Status: $status | Signals: $signals"
+            
+            if [ "$status" == "complete" ] && [ $signals -gt 100 ]; then
+              echo "✅ Scan completed! Found $signals signals"
+              break
+            elif [ "$status" == "failed" ]; then
+              echo "❌ Scan reported failure"
+              exit 1
+            fi
+            
+            if [ $i -eq 10 ]; then
+              echo "⚠️ Monitoring timeout. Checking final results..."
+            fi
+          done
+      
+      - name: Get scan results
+        id: results
+        run: |
+          echo "📈 Getting final scan results..."
+          sleep 5  # Extra safety wait
+          
+          response=$(curl -s https://ai-advisor1-backend.onrender.com/api/signals)
+          count=$(echo $response | jq -r '.count // 0')
+          
+          echo "Total signals: $count"
+          
+          if [ $count -gt 0 ]; then
+            echo ""
+            echo "Latest 5 signals:"
+            echo $response | jq -r '.signals[:5] | .[] | "  - \(.ticker) (\(.strategy)) - \(.strength)% - \(.date)"'
+            
+            pullback=$(echo $response | jq '[.signals[] | select(.strategy == "PULLBACK")] | length')
+            ema_cross=$(echo $response | jq '[.signals[] | select(.strategy == "EMA_CROSS")] | length')
+            priority=$(echo $response | jq '[.signals[] | select(.strength >= 75)] | length')
+            
+            echo ""
+            echo "Strategy breakdown:"
+            echo "  PULLBACK: $pullback"
+            echo "  EMA_CROSS: $ema_cross"
+            echo "  Priority (≥75%): $priority"
+          else
+            echo "⚠️ Warning: No signals found!"
+          fi
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo ""
+          echo "=================================="
+          echo "🎯 DAILY SCAN COMPLETE"
+          echo "=================================="
+          echo "📅 Completed: $(date +'%Y-%m-%d %H:%M:%S %Z')"
+          echo "🌍 Environment: Production"
+          echo "🔗 View signals: https://ai-advisor.vn"
+          echo "=================================="
+
+  scan-staging:
+    if: github.event.inputs.environment == 'staging'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Display scan info
+        run: |
+          echo "🚀 Starting Signal Scanner - STAGING"
+          echo "📅 Date: $(date +'%Y-%m-%d %H:%M:%S %Z')"
+          echo "🔗 Backend: https://ai-advisor1-staging.onrender.com"
+          echo "=================================="
+      
+      - name: Wake up backend
+        run: |
+          echo "⏰ Waking up staging backend..."
+          for i in {1..5}; do
+            response=$(curl -s -o /dev/null -w "%{http_code}" https://ai-advisor1-staging.onrender.com/health || echo "000")
+            if [ "$response" == "200" ]; then
+              echo "✅ Backend is awake"
+              break
+            else
+              echo "⏳ Waiting... (attempt $i/5)"
+              sleep 15
+            fi
+          done
+      
+      - name: Health check
+        run: |
+          echo "🏥 Checking backend health..."
+          response=$(curl -s https://ai-advisor1-staging.onrender.com/health)
+          status=$(echo $response | jq -r '.status // "unknown"')
+          if [ "$status" == "healthy" ]; then
+            echo "✅ Backend is healthy"
+          else
+            echo "❌ Health check failed"
+            exit 1
+          fi
+      
+      - name: Trigger scanner
+        run: |
+          echo "🔍 Triggering staging scanner..."
+          response=$(curl -s -X POST https://ai-advisor1-staging.onrender.com/api/scan)
+          success=$(echo $response | jq -r '.success // false')
+          if [ "$success" == "true" ]; then
+            echo "✅ Scanner triggered"
+          else
+            echo "❌ Failed to trigger"
+            exit 1
+          fi
+      
+      - name: Wait and get results
+        run: |
+          echo "⏳ Waiting for scan completion..."
+          sleep 180  # Wait 3 minutes
+          
+          response=$(curl -s https://ai-advisor1-staging.onrender.com/api/signals)
+          count=$(echo $response | jq -r '.count // 0')
+          echo "✅ Staging signals: $count"
