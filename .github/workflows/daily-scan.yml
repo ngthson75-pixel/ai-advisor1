@@ -1,106 +1,100 @@
-name: Daily EOD Signal Scanner
+name: Daily Signal Scanner
 
+# Run daily at 15:30 Vietnam time (08:30 UTC)
 on:
   schedule:
-    - cron: '30 8 * * *'  # 15:30 Vietnam time (UTC+7)
-  workflow_dispatch:
-  push:
-    branches: [staging, main]
-    paths:
-      - '.github/workflows/daily-scan.yml'
-      - 'scripts/daily_signal_scanner_eod.py'
+    - cron: '30 8 * * *'  # 08:30 UTC = 15:30 Vietnam
+  
+  workflow_dispatch:  # Allow manual trigger
+    inputs:
+      environment:
+        description: 'Environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
 
 jobs:
   scan-signals:
+    name: Scan 343 Stocks
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     
     steps:
-      - name: Display scan info
+      - name: Set backend URL
+        id: backend
         run: |
-          echo "🔍 Starting Daily EOD Signal Scanner"
-          echo "Backend: https://ai-advisor1-staging.onrender.com"
-          echo "Time: $(date)"
-          echo "Expected: 136 signals from 343 stocks"
-      
-      - name: Wake backend
-        run: |
-          echo "⏰ Waking backend (if sleeping)..."
-          curl -f https://ai-advisor1-staging.onrender.com/health || sleep 30
-          curl -f https://ai-advisor1-staging.onrender.com/health
-          echo "✅ Backend is awake"
-      
-      - name: Trigger signal scanner
-        run: |
-          echo "🚀 Triggering scanner..."
-          response=$(curl -s -X POST https://ai-advisor1-staging.onrender.com/api/scan -w "\nHTTP_CODE:%{http_code}")
-          echo "$response"
-          
-          http_code=$(echo "$response" | grep "HTTP_CODE" | cut -d':' -f2)
-          
-          if [ "$http_code" = "202" ]; then
-            echo "✅ Scanner started successfully"
+          if [ "${{ github.event.inputs.environment }}" == "staging" ]; then
+            echo "url=https://ai-advisor1-staging.onrender.com" >> $GITHUB_OUTPUT
           else
-            echo "❌ Scanner failed to start (HTTP $http_code)"
+            echo "url=https://ai-advisor1-backend.onrender.com" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Wake up backend
+        if: github.event.inputs.environment == 'staging'
+        run: |
+          curl -f -s "${{ steps.backend.outputs.url }}/health" || true
+          sleep 10
+      
+      - name: Check backend health
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" "${{ steps.backend.outputs.url }}/health")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Backend not healthy!"
             exit 1
           fi
-      
-      - name: Wait for scanner to complete
-        run: |
-          echo "⏳ Waiting for scanner to complete (343 stocks, ~25 minutes)..."
           
-          for i in {1..30}; do
-            sleep 60
+          echo "✅ Backend is healthy"
+      
+      - name: Trigger scanner
+        run: |
+          echo "🚀 Triggering scanner..."
+          
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${{ steps.backend.outputs.url }}/api/scan")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          
+          if [ "$HTTP_CODE" != "202" ]; then
+            echo "Failed to trigger scanner!"
+            exit 1
+          fi
+          
+          echo "✅ Scanner triggered"
+      
+      - name: Monitor progress
+        run: |
+          echo "⏰ Monitoring for 30 minutes..."
+          
+          MAX_ATTEMPTS=15
+          ATTEMPT=1
+          
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Check #$ATTEMPT/$MAX_ATTEMPTS"
             
-            status=$(curl -s https://ai-advisor1-staging.onrender.com/api/scan/status)
-            echo "[$i/30] Status check: $status"
+            RESPONSE=$(curl -s "${{ steps.backend.outputs.url }}/api/scan/status")
+            SIGNALS=$(echo "$RESPONSE" | grep -o '"signals_count":[0-9]*' | grep -o '[0-9]*' || echo "0")
             
-            signals=$(echo "$status" | grep -o '"signals_count":[0-9]*' | cut -d':' -f2)
-            scan_status=$(echo "$status" | grep -o '"status":"[^"]*' | cut -d'"' -f4)
+            echo "Signals found: $SIGNALS"
             
-            if [ ! -z "$signals" ] && [ "$signals" -gt 0 ]; then
-              echo "✅ Scanner complete! Found $signals signals"
-              break
+            if [ "$SIGNALS" -gt 100 ]; then
+              echo "🎉 Scanner complete! Found $SIGNALS signals!"
+              exit 0
             fi
             
-            echo "   Waiting 60 seconds... (Total: $((i)) minutes)"
+            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+              sleep 120
+            fi
+            
+            ATTEMPT=$((ATTEMPT + 1))
           done
+          
+          echo "⚠️ Scanner did not complete in 30 minutes"
       
-      - name: Verify signals generated
+      - name: Get results
+        if: always()
         run: |
-          echo "📊 Verifying signals..."
-          
-          status=$(curl -s https://ai-advisor1-staging.onrender.com/api/scan/status)
-          echo "Scan status: $status"
-          
-          signals=$(echo "$status" | grep -o '"signals_count":[0-9]*' | cut -d':' -f2)
-          
-          if [ -z "$signals" ]; then
-            echo "⚠️ Could not parse signals count"
-            signals=0
-          fi
-          
-          echo ""
-          echo "========================================"
-          echo "✅ SCAN COMPLETE"
-          echo "========================================"
-          echo "Signals generated: $signals"
-          echo "Expected: ~136 signals"
-          echo ""
-          
-          if [ "$signals" -gt 0 ]; then
-            echo "✅ SUCCESS: Found $signals signals!"
-          else
-            echo "⚠️ WARNING: No signals found (may be database reset issue)"
-          fi
-      
-      - name: Display top signals
-        run: |
-          echo "⭐ Fetching top 5 signals..."
-          curl -s https://ai-advisor1-staging.onrender.com/api/signals | head -100
-      
-      - name: Send notification on failure
-        if: failure()
-        run: |
-          echo "❌ Workflow failed!"
-          echo "Check logs above for errors"
-          echo "Backend: https://ai-advisor1-staging.onrender.com"
+          echo "📊 FINAL RESULTS"
+          curl -s "${{ steps.backend.outputs.url }}/api/scan/status"
