@@ -1,18 +1,23 @@
 """
 AI Advisor - Daily Signal Scanner
 Uses vnstock 3.3.1 Quote API
+UPDATED: PostgreSQL support for production deployment
 """
 
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import sqlite3
 import time
 import logging
-import random  # For random delay jitter
+import random
+import os
 
 # CORRECT vnstock 3.3.1 API
 from vnstock import Quote
+
+# SQLAlchemy for database (works with both SQLite and PostgreSQL)
+from sqlalchemy import create_engine, text, Table, Column, Integer, String, Float, DateTime, MetaData
+from sqlalchemy.orm import sessionmaker
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,7 +25,31 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DB_PATH = '../signals.db'  # Use parent directory
+# ============================================================
+# DATABASE SETUP - Works with SQLite (local) or PostgreSQL (production)
+# ============================================================
+
+# Get DATABASE_URL from environment (production) or use SQLite (local dev)
+DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///signals.db')
+
+# Fix PostgreSQL URL format if needed (Render uses postgresql://, but SQLAlchemy needs postgresql+psycopg://)
+if DATABASE_URL and DATABASE_URL.startswith('postgresql://'):
+    DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
+
+# Create engine
+try:
+    engine = create_engine(DATABASE_URL)
+    logger.info(f"✓ Database connected: {DATABASE_URL.split('@')[0]}...")  # Log without password
+except Exception as e:
+    logger.error(f"✗ Database connection failed: {e}")
+    raise
+
+# Create session maker
+Session = sessionmaker(bind=engine)
+
+# ============================================================
+# STOCK LIST
+# ============================================================
 
 # 343 Cổ phiếu có thanh khoản cao nhất HOSE + HNX
 # Updated: 2026-01-27
@@ -144,7 +173,7 @@ def get_stock_data(ticker, days=100, max_retries=3):
                     logger.info(f"🔄 Retrying {ticker}...")
                     continue  # Retry
                 else:
-                    logger.error(f"❌ Max retries reached for {ticker}")
+                    logger.error(f"✗ Max retries reached for {ticker}")
                     return None
             else:
                 # Other errors - don't retry
@@ -364,32 +393,30 @@ def check_ema_cross_strategy(df, ticker):
     return signals
 
 def init_database():
-    """Initialize database"""
+    """Initialize database using SQLAlchemy (works with SQLite and PostgreSQL)"""
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
+        with engine.connect() as conn:
+            # Create table if not exists
+            conn.execute(text('''
+                CREATE TABLE IF NOT EXISTS signals (
+                    id SERIAL PRIMARY KEY,
+                    ticker TEXT NOT NULL,
+                    strategy TEXT NOT NULL,
+                    entry_price REAL NOT NULL,
+                    stop_loss REAL NOT NULL,
+                    take_profit REAL NOT NULL,
+                    risk_reward REAL,
+                    strength REAL,
+                    is_priority INTEGER DEFAULT 0,
+                    stock_type TEXT,
+                    rsi REAL,
+                    date TEXT,
+                    action TEXT DEFAULT 'BUY',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            '''))
+            conn.commit()
         
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS signals (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticker TEXT NOT NULL,
-                strategy TEXT NOT NULL,
-                entry_price REAL NOT NULL,
-                stop_loss REAL NOT NULL,
-                take_profit REAL NOT NULL,
-                risk_reward REAL,
-                strength REAL,
-                is_priority INTEGER DEFAULT 0,
-                stock_type TEXT,
-                rsi REAL,
-                date TEXT,
-                action TEXT DEFAULT 'BUY',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
         logger.info("✓ Database initialized")
         return True
         
@@ -398,28 +425,38 @@ def init_database():
         return False
 
 def save_signals_to_db(signals):
-    """Save signals"""
+    """Save signals using SQLAlchemy (works with SQLite and PostgreSQL)"""
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        cursor.execute('DELETE FROM signals')
-        
-        for signal in signals:
-            cursor.execute('''
-                INSERT INTO signals (
-                    ticker, strategy, entry_price, stop_loss, take_profit,
-                    risk_reward, strength, is_priority, stock_type, rsi, date, action
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                signal['ticker'], signal['strategy'], signal['entry_price'],
-                signal['stop_loss'], signal['take_profit'], signal['risk_reward'],
-                signal['strength'], signal['is_priority'], signal['stock_type'],
-                signal['rsi'], signal['date'], signal['action']
-            ))
-        
-        conn.commit()
-        conn.close()
+        with engine.connect() as conn:
+            # Delete old signals
+            conn.execute(text('DELETE FROM signals'))
+            
+            # Insert new signals
+            for signal in signals:
+                conn.execute(text('''
+                    INSERT INTO signals (
+                        ticker, strategy, entry_price, stop_loss, take_profit,
+                        risk_reward, strength, is_priority, stock_type, rsi, date, action
+                    ) VALUES (
+                        :ticker, :strategy, :entry_price, :stop_loss, :take_profit,
+                        :risk_reward, :strength, :is_priority, :stock_type, :rsi, :date, :action
+                    )
+                '''), {
+                    'ticker': signal['ticker'],
+                    'strategy': signal['strategy'],
+                    'entry_price': signal['entry_price'],
+                    'stop_loss': signal['stop_loss'],
+                    'take_profit': signal['take_profit'],
+                    'risk_reward': signal['risk_reward'],
+                    'strength': signal['strength'],
+                    'is_priority': signal['is_priority'],
+                    'stock_type': signal['stock_type'],
+                    'rsi': signal['rsi'],
+                    'date': signal['date'],
+                    'action': signal['action']
+                })
+            
+            conn.commit()
         
         logger.info(f"✓ Saved {len(signals)} signals")
         return True
