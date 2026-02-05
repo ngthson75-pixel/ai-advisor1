@@ -1,15 +1,14 @@
-name: Hourly SELL Signal Scanner
+name: Hourly SELL Signal Scanner - Backend API
 
 on:
   schedule:
     # Vietnam trading hours: 9:00-15:00 (UTC+7)
-    # Scan every hour: 9:00, 10:00, 11:00, 13:00, 14:00
-    # Cron times in UTC (subtract 7 hours from Vietnam time)
+    # Scan every hour during trading
     
     - cron: '0 2 * * 1-5'   # 9:00 AM Vietnam (Mon-Fri)
     - cron: '0 3 * * 1-5'   # 10:00 AM Vietnam
     - cron: '0 4 * * 1-5'   # 11:00 AM Vietnam
-    - cron: '0 6 * * 1-5'   # 1:00 PM Vietnam (after lunch break)
+    - cron: '0 6 * * 1-5'   # 1:00 PM Vietnam (after lunch)
     - cron: '0 7 * * 1-5'   # 2:00 PM Vietnam
   
   workflow_dispatch:  # Manual trigger
@@ -20,20 +19,13 @@ env:
 jobs:
   scan-sell-signals:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15  # Shorter timeout for API calls
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      
-      - name: Install dependencies
+      - name: Set timezone
         run: |
-          pip install --break-system-packages vnstock pandas requests python-dotenv
+          echo "🌏 Current time (UTC): $(date)"
+          echo "🌏 Vietnam time: $(TZ=Asia/Ho_Chi_Minh date)"
       
       - name: Wake backend (if sleeping)
         run: |
@@ -46,53 +38,112 @@ jobs:
       - name: Check backend health
         run: |
           echo "🏥 Checking backend health..."
-          curl -s "${{ env.API_URL }}/../health"
+          HEALTH=$(curl -s "${{ env.API_URL }}/../health")
+          echo "Response: $HEALTH"
       
       - name: Get current signal count
         id: before
         run: |
-          BEFORE=$(curl -s "${{ env.API_URL }}/signals" | jq -r '.count // 0')
+          echo "📊 Getting current signal count..."
+          RESPONSE=$(curl -s "${{ env.API_URL }}/signals")
+          BEFORE=$(echo "$RESPONSE" | jq -r '.count // 0')
           echo "count=$BEFORE" >> $GITHUB_OUTPUT
-          echo "📊 Current signals: $BEFORE"
+          echo "Current total signals: $BEFORE"
       
-      - name: Run SELL signal scanner
+      - name: Trigger SELL scanner on backend
+        id: trigger
         run: |
-          echo "🔍 Starting SELL signal scanner..."
+          echo "🔍 Triggering SELL signal scanner on backend..."
           echo "⏰ Time: $(date +'%Y-%m-%d %H:%M:%S %Z')"
-          echo "🌏 Vietnam time: $(TZ=Asia/Ho_Chi_Minh date +'%Y-%m-%d %H:%M:%S')"
+          echo "🌏 Vietnam: $(TZ=Asia/Ho_Chi_Minh date +'%Y-%m-%d %H:%M:%S')"
           
-          python sell_signal_scanner_v2.py --days 2 --delay 2.0
+          RESPONSE=$(curl -s -X POST "${{ env.API_URL }}/scan-sell" \
+            -H "Content-Type: application/json" \
+            -d '{"days": 2}')
+          
+          echo "Response: $RESPONSE"
+          
+          # Check if successful
+          if echo "$RESPONSE" | jq -e '.success' > /dev/null; then
+            echo "✅ Scanner triggered successfully"
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Failed to trigger scanner"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
       
-      - name: Get final signal count
+      - name: Wait for scanner to complete
+        if: steps.trigger.outputs.status == 'success'
+        run: |
+          echo "⏳ Waiting for scanner to complete (2-5 minutes)..."
+          
+          # Wait and check status every 30 seconds
+          for i in {1..10}; do
+            sleep 30
+            
+            # Check scan status
+            STATUS=$(curl -s "${{ env.API_URL }}/scan-sell/status")
+            echo "Check $i: $STATUS"
+            
+            # Get SELL count for today
+            SELL_COUNT=$(echo "$STATUS" | jq -r '.total_sell_signals // 0')
+            
+            if [ "$SELL_COUNT" -gt 0 ]; then
+              echo "✅ Found $SELL_COUNT SELL signals"
+              break
+            fi
+          done
+      
+      - name: Get scan results
         id: after
         run: |
-          AFTER=$(curl -s "${{ env.API_URL }}/signals" | jq -r '.count // 0')
+          echo "📊 Getting scan results..."
+          
+          # Get updated signal count
+          RESPONSE=$(curl -s "${{ env.API_URL }}/signals")
+          AFTER=$(echo "$RESPONSE" | jq -r '.count // 0')
           echo "count=$AFTER" >> $GITHUB_OUTPUT
-          echo "📊 Final signals: $AFTER"
+          
+          # Get SELL scan status
+          SELL_STATUS=$(curl -s "${{ env.API_URL }}/scan-sell/status")
+          SELL_COUNT=$(echo "$SELL_STATUS" | jq -r '.total_sell_signals // 0')
+          echo "sell_count=$SELL_COUNT" >> $GITHUB_OUTPUT
+          
+          echo "Final total signals: $AFTER"
+          echo "SELL signals today: $SELL_COUNT"
       
-      - name: Calculate new signals
+      - name: Display results
         run: |
           BEFORE=${{ steps.before.outputs.count }}
           AFTER=${{ steps.after.outputs.count }}
+          SELL_COUNT=${{ steps.after.outputs.sell_count }}
           NEW=$((AFTER - BEFORE))
           
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "📊 SCAN RESULTS"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Before: $BEFORE signals"
-          echo "After:  $AFTER signals"
-          echo "New:    $NEW signals"
+          echo "Before:       $BEFORE signals"
+          echo "After:        $AFTER signals"
+          echo "New:          $NEW signals"
+          echo "SELL today:   $SELL_COUNT signals"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           
-          if [ $NEW -gt 0 ]; then
-            echo "✅ Generated $NEW new SELL signals"
+          if [ $SELL_COUNT -gt 0 ]; then
+            echo "✅ Generated $SELL_COUNT SELL signals today"
+            
+            # Show breakdown by reason
+            SELL_STATUS=$(curl -s "${{ env.API_URL }}/scan-sell/status")
+            echo ""
+            echo "By reason:"
+            echo "$SELL_STATUS" | jq -r '.by_reason | to_entries[] | "  \(.key): \(.value)"'
           else
-            echo "ℹ️  No new SELL signals (market conditions)"
+            echo "ℹ️  No SELL signals (market conditions normal)"
           fi
       
       - name: Notify on failure
         if: failure()
         run: |
           echo "❌ SELL scanner failed!"
-          echo "Check logs for details"
           echo "Time: $(date +'%Y-%m-%d %H:%M:%S %Z')"
+          echo "Check backend logs for details"
