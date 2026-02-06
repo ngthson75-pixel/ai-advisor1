@@ -1,198 +1,226 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-BACKEND API INTEGRATION FOR SELL SIGNALS
-
-Add these routes to your backend_api.py
+BACKEND SELL API - SELL Signal Routes
+Separate module for SELL signal endpoints
 """
 
-from flask import jsonify, Blueprint
-from datetime import datetime
-import sys
+from flask import request, jsonify
+import threading
 import os
-
-# Add scripts to path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'scripts'))
-
-from sell_signal_generator import SellSignalGenerator
-
-# Create blueprint
-sell_bp = Blueprint('sell_signals', __name__)
-
-
-@sell_bp.route('/api/sell-signals', methods=['GET'])
-def get_sell_signals():
-    """
-    Get all SELL signals for display
-    
-    GET /api/sell-signals
-    
-    Returns:
-        {
-            "success": true,
-            "signals": [
-                {
-                    "ticker": "TCB",
-                    "type": "Cắt lỗ",
-                    "price": 34500,
-                    "quantity": 100,
-                    "date": "2026-01-15"
-                }
-            ],
-            "count": 1
-        }
-    """
-    try:
-        generator = SellSignalGenerator()
-        signals = generator.get_sell_signals_for_display()
-        
-        return jsonify({
-            'success': True,
-            'signals': signals,
-            'count': len(signals)
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@sell_bp.route('/api/generate-sell-signals', methods=['POST'])
-def generate_sell_signals():
-    """
-    Manually trigger SELL signal generation
-    
-    POST /api/generate-sell-signals
-    
-    Returns:
-        {
-            "success": true,
-            "created": 3,
-            "message": "Created 3 SELL signals"
-        }
-    """
-    try:
-        generator = SellSignalGenerator()
-        sell_count = generator.generate_sell_signals()
-        
-        return jsonify({
-            'success': True,
-            'created': sell_count,
-            'message': f'Created {sell_count} SELL signals',
-            'timestamp': datetime.now().isoformat()
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@sell_bp.route('/api/signal-status/<ticker>', methods=['GET'])
-def get_signal_status(ticker):
-    """
-    Get status of BUY signal for a specific ticker
-    
-    GET /api/signal-status/TCB
-    
-    Returns:
-        {
-            "success": true,
-            "ticker": "TCB",
-            "status": "PARTIAL_SOLD",
-            "quantity_sold": 50,
-            "entry_price": 36650,
-            "current_status": "Holding 50%"
-        }
-    """
-    try:
-        import sqlite3
-        
-        conn = sqlite3.connect('signals.db')
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT ticker, entry_price, stop_loss, take_profit, 
-                   signal_status, quantity_sold, date
-            FROM signals 
-            WHERE ticker = ? 
-            AND action = 'BUY'
-            ORDER BY date DESC
-            LIMIT 1
-        """, (ticker.upper(),))
-        
-        row = cursor.fetchone()
-        conn.close()
-        
-        if not row:
-            return jsonify({
-                'success': False,
-                'error': f'No BUY signal found for {ticker}'
-            }), 404
-        
-        # Parse data
-        status_labels = {
-            'ACTIVE': 'Active - Holding 100%',
-            'PARTIAL_SOLD': f'Partial - Sold {row[5]:.0f}%',
-            'FULLY_SOLD': 'Fully Sold - Closed'
-        }
-        
-        return jsonify({
-            'success': True,
-            'ticker': row[0],
-            'entry_price': row[1],
-            'stop_loss': row[2],
-            'take_profit': row[3],
-            'status': row[4],
-            'quantity_sold': row[5],
-            'buy_date': row[6],
-            'current_status': status_labels.get(row[4], 'Unknown')
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-# ============================================================================
-# INTEGRATION INSTRUCTIONS
-# ============================================================================
 
 def register_sell_routes(app):
     """
-    Register SELL signal routes with Flask app
+    Register SELL signal routes to Flask app
     
-    Usage in backend_api.py:
-    
-        from backend_sell_api import register_sell_routes
-        
-        # After creating Flask app
-        register_sell_routes(app)
+    Args:
+        app: Flask application instance
     """
-    app.register_blueprint(sell_bp)
-    print("✅ SELL signal routes registered")
-
-
-# ============================================================================
-# EXAMPLE USAGE IN backend_api.py
-# ============================================================================
-
-"""
-Add to backend_api.py:
-
-# At top of file
-from backend_sell_api import register_sell_routes
-
-# After app = Flask(__name__)
-register_sell_routes(app)
-
-# That's it! Routes are now available:
-# GET  /api/sell-signals
-# POST /api/generate-sell-signals
-# GET  /api/signal-status/<ticker>
-"""
+    
+    from sell_signal_scanner_v2 import SellSignalScannerV2
+    
+    @app.route('/api/scan-sell', methods=['POST'])
+    def scan_sell_signals():
+        """
+        Trigger SELL signal scanner
+        
+        Request body (optional):
+            {
+                "days": 7,  // Look back N days
+                "delay": 2.0  // Delay between requests
+            }
+        
+        Returns:
+            202 Accepted - Scanner started in background
+        """
+        
+        def run_scanner():
+            try:
+                data = request.json or {}
+                days = data.get('days', 7)
+                delay = data.get('delay', 2.0)
+                
+                print(f"🔍 Starting SELL scanner (days={days}, delay={delay}s)...")
+                
+                # Use PRODUCTION database URL from environment
+                db_url = os.getenv('DATABASE_URL')
+                
+                if not db_url:
+                    print("❌ ERROR: DATABASE_URL not set in environment!")
+                    print("❌ Cannot run SELL scanner without database connection")
+                    return
+                
+                # Run scanner with PRODUCTION database
+                scanner = SellSignalScannerV2(db_url=db_url)
+                sell_signals = scanner.scan(days=days, delay=delay)
+                
+                print(f"✅ Generated {len(sell_signals)} SELL signals")
+                
+            except Exception as e:
+                print(f"❌ Scanner error: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        try:
+            # Run in background thread
+            thread = threading.Thread(target=run_scanner)
+            thread.daemon = True
+            thread.start()
+            
+            return jsonify({
+                'success': True,
+                'message': 'SELL scanner started. This will take 5-15 minutes depending on number of stocks.',
+                'status': 'scanning'
+            }), 202
+            
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
+    
+    @app.route('/api/scan-sell/status', methods=['GET'])
+    def get_sell_scan_status():
+        """
+        Get SELL scanner status
+        
+        Returns:
+            Current status including:
+            - Total SELL signals today
+            - Count by exit_reason (STOP_LOSS, TAKE_PROFIT)
+        """
+        
+        try:
+            from datetime import datetime
+            from sqlalchemy import text
+            
+            today = datetime.now().strftime('%Y-%m-%d')
+            
+            # Query SELL signals today
+            query = text("""
+                SELECT 
+                    exit_reason,
+                    COUNT(*) as count
+                FROM signals
+                WHERE action = 'SELL'
+                  AND exit_date = :today
+                GROUP BY exit_reason
+            """)
+            
+            # Get database engine from app context
+            from backend_api import engine
+            
+            with engine.connect() as conn:
+                result = conn.execute(query, {'today': today})
+                rows = result.fetchall()
+            
+            by_reason = {}
+            total = 0
+            
+            for row in rows:
+                reason = row[0] or 'UNKNOWN'
+                count = row[1]
+                by_reason[reason] = count
+                total += count
+            
+            return jsonify({
+                'success': True,
+                'date': today,
+                'total_sell_signals': total,
+                'by_reason': by_reason,
+                'breakdown': {
+                    'stop_loss': by_reason.get('STOP_LOSS', 0),
+                    'take_profit': by_reason.get('TAKE_PROFIT', 0)
+                }
+            }), 200
+            
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
+    
+    @app.route('/api/signals/sell', methods=['GET'])
+    def get_sell_signals_only():
+        """
+        Get only SELL signals with exit_reason
+        
+        Query params:
+            - limit: Number of signals (default 50)
+            - exit_reason: Filter by STOP_LOSS or TAKE_PROFIT
+        
+        Returns:
+            List of SELL signals with exit details
+        """
+        
+        try:
+            limit = request.args.get('limit', 50, type=int)
+            exit_reason = request.args.get('exit_reason', None)
+            
+            from sqlalchemy import text
+            from backend_api import engine
+            
+            query = text("""
+                SELECT 
+                    id,
+                    ticker,
+                    entry_price,
+                    exit_price,
+                    exit_reason,
+                    exit_date,
+                    stop_loss,
+                    take_profit,
+                    strength,
+                    created_at
+                FROM signals
+                WHERE action = 'SELL'
+                  AND (:exit_reason IS NULL OR exit_reason = :exit_reason)
+                ORDER BY exit_date DESC, created_at DESC
+                LIMIT :limit
+            """)
+            
+            with engine.connect() as conn:
+                result = conn.execute(query, {
+                    'exit_reason': exit_reason,
+                    'limit': limit
+                })
+                rows = result.fetchall()
+            
+            signals = []
+            for row in rows:
+                # Calculate P/L
+                pl = row[3] - row[2] if row[3] and row[2] else 0
+                pl_pct = (pl / row[2] * 100) if row[2] > 0 else 0
+                
+                signals.append({
+                    'id': row[0],
+                    'ticker': row[1],
+                    'entry_price': row[2],
+                    'exit_price': row[3],
+                    'exit_reason': row[4],
+                    'exit_date': row[5],
+                    'stop_loss': row[6],
+                    'take_profit': row[7],
+                    'strength': row[8],
+                    'profit_loss': pl,
+                    'profit_loss_pct': pl_pct,
+                    'created_at': row[9].isoformat() if row[9] else None
+                })
+            
+            return jsonify({
+                'success': True,
+                'signals': signals,
+                'count': len(signals)
+            }), 200
+            
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
+    print("✅ SELL signal routes registered:")
+    print("   POST /api/scan-sell - Trigger scanner")
+    print("   GET  /api/scan-sell/status - Get status")
+    print("   GET  /api/signals/sell - Get SELL signals")

@@ -1,385 +1,340 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-SELL SIGNAL SCANNER V2 - PRODUCTION VERSION
-
-Owner: Nguyễn Thanh Sơn
-Email: ngthson75@gmail.com
-Phone: +84938127666
-
-HOURLY SCAN: Every 1 hour during trading hours (9:00-15:00)
-FLOW: Tickers → VCI → Check 4 conditions → Save SELL signals
-
-RULES:
-  1. SL: Price <= Stop Loss → SELL 100%
-  2. TP: Price >= Take Profit → SELL 50%
-  3. MA20_CONSECUTIVE: 2 days < MA20 → SELL 100%
-  4. MA20_HIGH_VOLUME: < MA20 + Volume spike → SELL 100%
+SELL SIGNAL SCANNER V2 - PRODUCTION MODULE
+Reusable scanner for automated execution
 """
 
-import os
-import sys
 import time
 from datetime import datetime, timedelta
-import sqlite3
-
-try:
-    from vnstock import Vnstock
-except ImportError:
-    from vnstock3 import Vnstock
-
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+from vnstock import Quote
 
 class SellSignalScannerV2:
-    """SELL Signal Scanner for Production"""
+    """
+    Production-ready SELL signal scanner
+    """
     
-    def __init__(self, db_path='signals.db'):
-        self.db_path = db_path
-        self.stock_api = Vnstock()
-    
-    
-    def auto_migrate_database(self):
-        """Auto-add required columns"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute("PRAGMA table_info(signals)")
-        existing_columns = [col[1] for col in cursor.fetchall()]
-        
-        required_columns = {
-            'exit_reason': 'TEXT',
-            'exit_date': 'TEXT',
-            'profit_loss_pct': 'REAL',
-            'exit_quantity_pct': 'REAL DEFAULT 100',
-            'buy_signal_id': 'INTEGER',
-            'volume_ratio': 'REAL'
-        }
-        
-        for column_name, column_type in required_columns.items():
-            if column_name not in existing_columns:
-                try:
-                    cursor.execute(f"ALTER TABLE signals ADD COLUMN {column_name} {column_type}")
-                except:
-                    pass
-        
-        conn.commit()
-        conn.close()
-    
-    
-    def get_unique_tickers(self, days=2):
-        """Get unique tickers from recent BUY signals"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cutoff_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
-        
-        query = """
-        SELECT DISTINCT ticker
-        FROM signals
-        WHERE action = 'BUY' AND date >= ?
-        ORDER BY ticker
+    def __init__(self, db_url=None):
         """
+        Initialize scanner
         
-        cursor.execute(query, (cutoff_date,))
-        tickers = [row[0] for row in cursor.fetchall()]
-        conn.close()
-        
-        return tickers
-    
-    
-    def get_buy_signals_for_ticker(self, ticker):
-        """Get active BUY signals for a ticker"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        query = """
-        SELECT 
-            b.id, b.ticker, b.strategy, b.entry_price,
-            b.stop_loss, b.take_profit, b.date as entry_date,
-            b.strength, b.stock_type,
-            COALESCE(SUM(s.exit_quantity_pct), 0) as total_sold_pct
-        FROM signals b
-        LEFT JOIN signals s 
-            ON s.buy_signal_id = b.id AND s.action = 'SELL'
-        WHERE b.ticker = ? AND b.action = 'BUY'
-        GROUP BY b.id
-        HAVING total_sold_pct < 100
-        ORDER BY b.date DESC
+        Args:
+            db_url: Database URL (if None, use environment variable)
         """
+        if db_url is None:
+            import os
+            db_url = os.getenv('DATABASE_URL')
+            
+            if not db_url:
+                print("⚠️  WARNING: DATABASE_URL not found in environment!")
+                print("⚠️  Using SQLite fallback (LOCAL ONLY - will NOT persist on Render)")
+                db_url = 'sqlite:///signals.db'
         
-        cursor.execute(query, (ticker,))
-        columns = [desc[0] for desc in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        conn.close()
+        # Fix PostgreSQL URL
+        if db_url.startswith('postgresql://'):
+            db_url = db_url.replace('postgresql://', 'postgresql+psycopg://', 1)
         
-        return results
+        self.engine = create_engine(db_url)
+        self.Session = sessionmaker(bind=self.engine)
+        
+        # Warn if using SQLite
+        if 'sqlite' in db_url.lower():
+            print(f"⚠️  Scanner using LOCAL SQLite: {db_url}")
+            print("⚠️  This will NOT work in production!")
+            print("⚠️  Set DATABASE_URL in .env to use PostgreSQL")
+        else:
+            print(f"✅ Scanner using PRODUCTION database: {db_url[:50]}...")
+        
     
-    
-    def get_vci_data(self, ticker):
-        """Get current data from VCI"""
+    def get_unique_buy_signals(self, days=7):
+        """
+        Get unique BUY signals from last N days
+        
+        Args:
+            days: Look back N days for BUY signals
+            
+        Returns:
+            List of (ticker, entry_price, stop_loss, take_profit, date, strategy, strength)
+        """
+        query = text(f"""
+            WITH RankedSignals AS (
+                SELECT 
+                    ticker,
+                    entry_price,
+                    stop_loss,
+                    take_profit,
+                    date,
+                    strategy,
+                    strength,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY ticker 
+                        ORDER BY date DESC, created_at DESC
+                    ) as rn
+                FROM signals
+                WHERE action = 'BUY'
+                  AND date >= CURRENT_DATE - INTERVAL '{days} days'
+            )
+            SELECT 
+                ticker,
+                entry_price,
+                stop_loss,
+                take_profit,
+                date,
+                strategy,
+                strength
+            FROM RankedSignals
+            WHERE rn = 1
+            ORDER BY date DESC
+        """)
+        
         try:
-            stock = self.stock_api.stock(symbol=ticker, source='VCI')
+            with self.engine.connect() as conn:
+                result = conn.execute(query)
+                rows = result.fetchall()
+                
+                print(f"✅ Found {len(rows)} unique BUY signals (last {days} days)")
+                return rows
+                
+        except Exception as e:
+            print(f"❌ Query failed: {e}")
+            return []
+    
+    def check_sell_condition(self, ticker, entry_price, stop_loss, take_profit, retry=True):
+        """
+        Check if ticker meets SELL conditions
+        
+        Args:
+            ticker: Stock code
+            entry_price: Entry price from BUY signal
+            stop_loss: Stop loss price
+            take_profit: Take profit price
+            retry: Retry on rate limit (default True)
             
-            end_date = datetime.now().strftime('%Y-%m-%d')
-            start_date = (datetime.now() - timedelta(days=80)).strftime('%Y-%m-%d')
+        Returns:
+            dict with SELL signal data or None
+        """
+        try:
+            data = Quote(symbol=ticker, source='VCI')
+            today = datetime.now()
+            yesterday = today - timedelta(days=3)
             
-            history = stock.quote.history(start=start_date, end=end_date)
+            df = data.history(
+                start=yesterday.strftime('%Y-%m-%d'),
+                end=today.strftime('%Y-%m-%d')
+            )
             
-            if history is None or len(history) < 20:
+            if df.empty:
                 return None
             
-            # vnstock returns prices in THOUSANDS
-            multiplier = 1000
+            # FIX: VNStock price x1000
+            raw_price = float(df['close'].iloc[-1])
+            current_price = raw_price * 1000
             
-            history['EMA20'] = history['close'].ewm(span=20, adjust=False).mean()
-            history['AvgVolume20'] = history['volume'].rolling(window=20).mean()
+            # Check SELL conditions
+            sell_reason = None
             
-            latest = history.iloc[-1]
-            prev = history.iloc[-2] if len(history) > 1 else latest
+            if current_price <= stop_loss:
+                sell_reason = "STOP_LOSS"
+            elif current_price >= take_profit:
+                sell_reason = "TAKE_PROFIT"
             
-            return {
-                'current_price': float(latest['close']) * multiplier,
-                'prev_close': float(prev['close']) * multiplier,
-                'ema20': float(latest['EMA20']) * multiplier,
-                'prev_ema20': float(prev['EMA20']) * multiplier,
-                'volume': float(latest['volume']),
-                'avg_volume_20': float(latest['AvgVolume20'])
-            }
+            if sell_reason:
+                profit_loss = current_price - entry_price
+                profit_loss_pct = (profit_loss / entry_price) * 100
+                
+                return {
+                    'ticker': ticker,
+                    'entry_price': entry_price,
+                    'exit_price': current_price,
+                    'stop_loss': stop_loss,
+                    'take_profit': take_profit,
+                    'profit_loss': profit_loss,
+                    'profit_loss_pct': profit_loss_pct,
+                    'exit_reason': sell_reason,  # NEW FIELD!
+                    'exit_date': today.strftime('%Y-%m-%d')
+                }
+            
+            return None
             
         except Exception as e:
-            print(f"  ⚠ VCI error: {e}")
+            error_msg = str(e)
+            
+            if 'rate limit' in error_msg.lower() and retry:
+                print(f"  ⚠️  Rate limit - retrying in 35s...")
+                time.sleep(35)
+                return self.check_sell_condition(
+                    ticker, entry_price, stop_loss, take_profit, retry=False
+                )
+            
             return None
     
-    
-    def check_sell_conditions(self, buy_signal, vci_data):
-        """Check SELL conditions"""
-        signals = []
+    def scan(self, days=7, delay=1.0):
+        """
+        Scan all BUY signals for SELL conditions
         
-        ticker = buy_signal['ticker']
-        entry_price = buy_signal['entry_price']
-        stop_loss = buy_signal['stop_loss']
-        take_profit = buy_signal['take_profit']
-        available_pct = 100 - buy_signal['total_sold_pct']
-        
-        current_price = vci_data['current_price']
-        prev_close = vci_data['prev_close']
-        ema20 = vci_data['ema20']
-        prev_ema20 = vci_data['prev_ema20']
-        volume = vci_data['volume']
-        avg_volume_20 = vci_data['avg_volume_20']
-        
-        volume_ratio = volume / avg_volume_20 if avg_volume_20 > 0 else 0
-        
-        # RULE 1: STOP LOSS
-        if current_price <= stop_loss:
-            profit_loss_pct = ((current_price - entry_price) / entry_price) * 100
+        Args:
+            days: Look back N days
+            delay: Delay between requests (seconds)
             
-            signals.append({
-                'buy_signal_id': buy_signal['id'],
-                'ticker': ticker,
-                'strategy': buy_signal['strategy'],
-                'action': 'SELL',
-                'exit_reason': 'SL',
-                'entry_price': entry_price,
-                'stop_loss': stop_loss,
-                'take_profit': take_profit,
-                'exit_price': current_price,
-                'exit_date': datetime.now().strftime('%Y-%m-%d'),
-                'profit_loss_pct': profit_loss_pct,
-                'exit_quantity_pct': available_pct,
-                'volume_ratio': volume_ratio,
-                'stock_type': buy_signal['stock_type'],
-                'strength': buy_signal['strength'],
-                'rsi': 0
-            })
-            return signals
+        Returns:
+            List of SELL signals
+        """
+        print("\n" + "="*70)
+        print("🔍 SCANNING FOR SELL SIGNALS")
+        print("="*70)
         
-        # RULE 2: TAKE PROFIT PARTIAL
-        if current_price >= take_profit and available_pct >= 50:
-            profit_loss_pct = ((current_price - entry_price) / entry_price) * 100
-            
-            signals.append({
-                'buy_signal_id': buy_signal['id'],
-                'ticker': ticker,
-                'strategy': buy_signal['strategy'],
-                'action': 'SELL',
-                'exit_reason': 'TP_PARTIAL',
-                'entry_price': entry_price,
-                'stop_loss': stop_loss,
-                'take_profit': take_profit,
-                'exit_price': current_price,
-                'exit_date': datetime.now().strftime('%Y-%m-%d'),
-                'profit_loss_pct': profit_loss_pct,
-                'exit_quantity_pct': 50,
-                'volume_ratio': volume_ratio,
-                'stock_type': buy_signal['stock_type'],
-                'strength': buy_signal['strength'],
-                'rsi': 0
-            })
-            return signals
+        buy_signals = self.get_unique_buy_signals(days=days)
         
-        # RULE 3: MA20 CONSECUTIVE
-        if current_price < ema20 and prev_close < prev_ema20:
-            profit_loss_pct = ((current_price - entry_price) / entry_price) * 100
-            
-            signals.append({
-                'buy_signal_id': buy_signal['id'],
-                'ticker': ticker,
-                'strategy': buy_signal['strategy'],
-                'action': 'SELL',
-                'exit_reason': 'MA20_CONSECUTIVE',
-                'entry_price': entry_price,
-                'stop_loss': stop_loss,
-                'take_profit': take_profit,
-                'exit_price': current_price,
-                'exit_date': datetime.now().strftime('%Y-%m-%d'),
-                'profit_loss_pct': profit_loss_pct,
-                'exit_quantity_pct': available_pct,
-                'volume_ratio': volume_ratio,
-                'stock_type': buy_signal['stock_type'],
-                'strength': buy_signal['strength'],
-                'rsi': 0
-            })
-            return signals
-        
-        # RULE 4: MA20 HIGH VOLUME
-        if current_price < ema20 and volume_ratio > 1.5:
-            profit_loss_pct = ((current_price - entry_price) / entry_price) * 100
-            
-            signals.append({
-                'buy_signal_id': buy_signal['id'],
-                'ticker': ticker,
-                'strategy': buy_signal['strategy'],
-                'action': 'SELL',
-                'exit_reason': 'MA20_HIGH_VOLUME',
-                'entry_price': entry_price,
-                'stop_loss': stop_loss,
-                'take_profit': take_profit,
-                'exit_price': current_price,
-                'exit_date': datetime.now().strftime('%Y-%m-%d'),
-                'profit_loss_pct': profit_loss_pct,
-                'exit_quantity_pct': available_pct,
-                'volume_ratio': volume_ratio,
-                'stock_type': buy_signal['stock_type'],
-                'strength': buy_signal['strength'],
-                'rsi': 0
-            })
-            return signals
-        
-        return signals
-    
-    
-    def save_sell_signal(self, sell_signal):
-        """Save SELL signal to database"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-            INSERT INTO signals (
-                ticker, strategy, entry_price, stop_loss, take_profit,
-                action, exit_reason, exit_date, profit_loss_pct,
-                exit_quantity_pct, buy_signal_id, volume_ratio,
-                stock_type, strength, rsi, date, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                sell_signal['ticker'],
-                sell_signal['strategy'],
-                sell_signal['entry_price'],
-                sell_signal['stop_loss'],
-                sell_signal['take_profit'],
-                sell_signal['action'],
-                sell_signal['exit_reason'],
-                sell_signal['exit_date'],
-                sell_signal['profit_loss_pct'],
-                sell_signal['exit_quantity_pct'],
-                sell_signal['buy_signal_id'],
-                sell_signal.get('volume_ratio'),
-                sell_signal['stock_type'],
-                sell_signal['strength'],
-                sell_signal['rsi'],
-                sell_signal['exit_date'],
-                datetime.now().isoformat()
-            ))
-            
-            conn.commit()
-            conn.close()
-            return True
-            
-        except Exception as e:
-            print(f"  ⚠ Save error: {e}")
-            return False
-    
-    
-    def scan(self, days=2, delay=2.0):
-        """Main scan function"""
-        
-        print(f"🔍 SELL SCANNER - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        
-        # Migrate database
-        self.auto_migrate_database()
-        
-        # Get tickers
-        tickers = self.get_unique_tickers(days)
-        
-        if not tickers:
-            print("⚠ No tickers")
+        if not buy_signals:
+            print("⚠️  No BUY signals found")
             return []
         
-        print(f"✓ Scanning {len(tickers)} tickers...")
+        print(f"\nProcessing {len(buy_signals)} tickers...")
+        print(f"⏱️  Delay: {delay}s between requests")
+        print(f"⏱️  ETA: ~{len(buy_signals) * delay / 60:.1f} minutes")
         
-        # Scan
-        all_sell_signals = []
+        sell_signals = []
+        start_time = time.time()
         
-        for i, ticker in enumerate(tickers, 1):
+        for i, signal in enumerate(buy_signals):
+            ticker = signal[0]
+            entry_price = float(signal[1])
+            stop_loss = float(signal[2])
+            take_profit = float(signal[3])
             
-            # Delay
-            if i > 1:
+            if i % 10 == 0 and i > 0:
+                elapsed = time.time() - start_time
+                avg_time = elapsed / i
+                remaining = (len(buy_signals) - i) * avg_time
+                print(f"\nProgress: {i}/{len(buy_signals)} ({i*100//len(buy_signals)}%) - ETA: {remaining/60:.1f} min")
+            
+            sell_signal = self.check_sell_condition(
+                ticker, entry_price, stop_loss, take_profit
+            )
+            
+            if sell_signal:
+                sell_signals.append(sell_signal)
+                print(f"  ✅ SELL: {ticker} ({sell_signal['exit_reason']}) P/L: {sell_signal['profit_loss_pct']:+.2f}%")
+            
+            if i < len(buy_signals) - 1:
                 time.sleep(delay)
+        
+        elapsed = time.time() - start_time
+        print(f"\n" + "="*70)
+        print(f"📊 RESULTS: {len(sell_signals)} SELL signals found")
+        print(f"⏱️  Time: {elapsed/60:.1f} minutes")
+        print("="*70)
+        
+        # Save to database
+        if sell_signals:
+            saved = self.save_sell_signals(sell_signals)
+            print(f"\n✅ Saved {saved}/{len(sell_signals)} signals to database")
+        
+        return sell_signals
+    
+    def save_sell_signals(self, sell_signals):
+        """
+        Save SELL signals to database with proper exit fields
+        
+        Args:
+            sell_signals: List of SELL signal dicts
             
-            # Get VCI data
-            vci_data = None
-            for retry in range(3):
-                try:
-                    vci_data = self.get_vci_data(ticker)
-                    if vci_data:
-                        break
-                except Exception as e:
-                    if 'rate limit' in str(e).lower() or 'quá nhiều' in str(e).lower():
-                        time.sleep(15 * (retry + 1))
-                    else:
-                        break
-            
-            if not vci_data:
-                continue
-            
-            # Get BUY signals
-            buy_signals = self.get_buy_signals_for_ticker(ticker)
-            
-            if not buy_signals:
-                continue
-            
-            # Check each BUY signal
-            for buy_signal in buy_signals:
-                sell_signals = self.check_sell_conditions(buy_signal, vci_data)
+        Returns:
+            Number of signals saved
+        """
+        if not sell_signals:
+            return 0
+        
+        # NEW: Use dedicated exit fields
+        insert_query = text("""
+            INSERT INTO signals (
+                ticker,
+                strategy,
+                entry_price,
+                exit_price,
+                exit_reason,
+                exit_date,
+                stop_loss,
+                take_profit,
+                risk_reward,
+                strength,
+                stock_type,
+                date,
+                action,
+                created_at
+            ) VALUES (
+                :ticker,
+                :strategy,
+                :entry_price,
+                :exit_price,
+                :exit_reason,
+                :exit_date,
+                :stop_loss,
+                :take_profit,
+                :risk_reward,
+                :strength,
+                :stock_type,
+                :date,
+                'SELL',
+                NOW()
+            )
+            ON CONFLICT DO NOTHING
+        """)
+        
+        saved = 0
+        
+        try:
+            with self.engine.begin() as conn:
+                for signal in sell_signals:
+                    conn.execute(insert_query, {
+                        'ticker': signal['ticker'],
+                        'strategy': 'SELL_SIGNAL',  # Strategy for SELL
+                        'entry_price': signal['entry_price'],
+                        'exit_price': signal['exit_price'],  # NEW!
+                        'exit_reason': signal['exit_reason'],  # NEW!
+                        'exit_date': signal['exit_date'],  # NEW!
+                        'stop_loss': signal['stop_loss'],
+                        'take_profit': signal['take_profit'],
+                        'risk_reward': abs(signal['profit_loss_pct'] / 5.0) if signal['profit_loss_pct'] != 0 else 0,
+                        'strength': 100 if signal['exit_reason'] == 'STOP_LOSS' else 80,
+                        'stock_type': 'Unknown',
+                        'date': signal['exit_date']
+                    })
+                    saved += 1
                 
-                for sell_signal in sell_signals:
-                    if self.save_sell_signal(sell_signal):
-                        all_sell_signals.append(sell_signal)
-                        
-                        reason = sell_signal['exit_reason']
-                        pl = sell_signal['profit_loss_pct']
-                        emoji = "🟢" if pl > 0 else "🔴"
-                        
-                        print(f"{emoji} {ticker} - {reason} - {pl:+.2f}%")
-        
-        # Summary
-        print(f"\n✓ Generated {len(all_sell_signals)} SELL signals")
-        
-        return all_sell_signals
+            return saved
+            
+        except Exception as e:
+            print(f"❌ Save failed: {e}")
+            return 0
 
 
 if __name__ == '__main__':
-    scanner = SellSignalScannerV2(db_path='signals.db')
-    sell_signals = scanner.scan(days=2, delay=2.0)
+    """
+    Test scanner locally
+    """
+    import os
+    from dotenv import load_dotenv
     
-    sys.exit(0 if sell_signals is not None else 1)
+    load_dotenv()
+    
+    print("\n" + "="*70)
+    print("🧪 SELL SCANNER V2 - TEST")
+    print("="*70)
+    
+    # Use environment database or default
+    db_url = os.getenv('DATABASE_URL', 'sqlite:///signals.db')
+    
+    scanner = SellSignalScannerV2(db_url=db_url)
+    
+    # Scan last 7 days
+    sell_signals = scanner.scan(days=7, delay=2.0)
+    
+    if sell_signals:
+        print("\n✅ Test complete!")
+        print(f"Found {len(sell_signals)} SELL signals")
+    else:
+        print("\n⚠️  No SELL signals found")
+    
+    print("\n" + "="*70)
