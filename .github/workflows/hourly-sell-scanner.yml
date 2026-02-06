@@ -2,9 +2,9 @@ name: Hourly SELL Signal Scanner
 
 on:
   schedule:
-    # Run every hour at :05 (e.g., 1:05, 2:05, 3:05...)
+    # Run every 2 hours at :05 (e.g., 1:05, 2:05, 3:05...)
     # Format: minute hour day month weekday
-    - cron: '5 * * * *'
+    - cron: '5 */2 * * *'
   
   # Allow manual trigger
   workflow_dispatch:
