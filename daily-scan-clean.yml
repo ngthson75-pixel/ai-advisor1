@@ -1,0 +1,100 @@
+name: Daily Signal Scanner
+
+# Run daily at 15:30 Vietnam time (08:30 UTC)
+on:
+  schedule:
+    - cron: '30 8 * * *'  # 08:30 UTC = 15:30 Vietnam
+  
+  workflow_dispatch:  # Allow manual trigger
+    inputs:
+      environment:
+        description: 'Environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  scan-signals:
+    name: Scan 343 Stocks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    steps:
+      - name: Set backend URL
+        id: backend
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "staging" ]; then
+            echo "url=https://ai-advisor1-staging.onrender.com" >> $GITHUB_OUTPUT
+          else
+            echo "url=https://ai-advisor1-backend.onrender.com" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Wake up backend
+        if: github.event.inputs.environment == 'staging'
+        run: |
+          curl -f -s "${{ steps.backend.outputs.url }}/health" || true
+          sleep 10
+      
+      - name: Check backend health
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" "${{ steps.backend.outputs.url }}/health")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Backend not healthy!"
+            exit 1
+          fi
+          
+          echo "✅ Backend is healthy"
+      
+      - name: Trigger scanner
+        run: |
+          echo "🚀 Triggering scanner..."
+          
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${{ steps.backend.outputs.url }}/api/scan")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          
+          if [ "$HTTP_CODE" != "202" ]; then
+            echo "Failed to trigger scanner!"
+            exit 1
+          fi
+          
+          echo "✅ Scanner triggered"
+      
+      - name: Monitor progress
+        run: |
+          echo "⏰ Monitoring for 30 minutes..."
+          
+          MAX_ATTEMPTS=15
+          ATTEMPT=1
+          
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Check #$ATTEMPT/$MAX_ATTEMPTS"
+            
+            RESPONSE=$(curl -s "${{ steps.backend.outputs.url }}/api/scan/status")
+            SIGNALS=$(echo "$RESPONSE" | grep -o '"signals_count":[0-9]*' | grep -o '[0-9]*' || echo "0")
+            
+            echo "Signals found: $SIGNALS"
+            
+            if [ "$SIGNALS" -gt 100 ]; then
+              echo "🎉 Scanner complete! Found $SIGNALS signals!"
+              exit 0
+            fi
+            
+            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+              sleep 120
+            fi
+            
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+          
+          echo "⚠️ Scanner did not complete in 30 minutes"
+      
+      - name: Get results
+        if: always()
+        run: |
+          echo "📊 FINAL RESULTS"
+          curl -s "${{ steps.backend.outputs.url }}/api/scan/status"

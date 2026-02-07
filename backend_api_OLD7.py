@@ -386,52 +386,6 @@ def health():
 # ========================================================================
 # SIGNALS ENDPOINTS
 # ========================================================================
-@app.route('/api/signals', methods=['GET'])
-def get_signals():
-    action = request.args.get('action')  # 'BUY' or 'SELL'
-    
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            if action:
-                query = """
-                    SELECT 
-                        ticker, strategy, entry_price, stop_loss, 
-                        take_profit, date, action, created_at
-                    FROM signals
-                    WHERE action = %s
-                    ORDER BY created_at DESC
-                """
-                cur.execute(query, (action,))
-            else:
-                query = """
-                    SELECT 
-                        ticker, strategy, entry_price, stop_loss, 
-                        take_profit, date, action, created_at
-                    FROM signals
-                    ORDER BY created_at DESC
-                """
-                cur.execute(query)
-            
-            rows = cur.fetchall()
-            
-            signals = []
-            for row in rows:
-                signals.append({
-                    'ticker': row[0],
-                    'strategy': row[1],        # ← IMPORTANT: Include strategy!
-                    'entry_price': float(row[2]) if row[2] else None,
-                    'stop_loss': float(row[3]) if row[3] else None,
-                    'take_profit': float(row[4]) if row[4] else None,
-                    'date': row[5].isoformat() if row[5] else None,
-                    'action': row[6],
-                    'created_at': row[7].isoformat() if row[7] else None
-                })
-            
-            return jsonify({
-                'success': True,
-                'count': len(signals),
-                'signals': signals
-            }), 200
 
 @app.route('/api/signals', methods=['GET', 'POST'])
 def signals_endpoint():
@@ -441,12 +395,11 @@ def signals_endpoint():
     """
     
     if request.method == 'GET':
-        # GET: Return all signals with rounding and deduplication
+        # GET: Return all signals (original functionality)
         session = Session()
         try:
             signals = session.query(Signal).order_by(Signal.created_at.desc()).all()
             
-            # Build signals with rounded prices
             signals_data = []
             for s in signals:
                 signals_data.append({
@@ -454,45 +407,22 @@ def signals_endpoint():
                     'ticker': s.ticker,
                     'code': s.ticker,
                     'strategy': s.strategy,
-                    'entry_price': round(s.entry_price / 100) * 100,  # Round to nearest 100 VND
-                    'stop_loss': round(s.stop_loss / 100) * 100,      # Round to nearest 100 VND
-                    'take_profit': round(s.take_profit / 100) * 100,  # Round to nearest 100 VND
-                    'risk_reward': round(s.risk_reward, 2) if s.risk_reward else None,
+                    'entry_price': round(s.entry_price / 100) * 100,
+                    'stop_loss': round(s.stop_loss / 100) * 100,
+                    'take_profit': round(s.take_profit / 100) * 100,
+                    'risk_reward': s.risk_reward,
                     'strength': s.strength or 0,
                     'stock_type': s.stock_type,
-                    'rsi': round(s.rsi, 1) if s.rsi else None,
+                    'rsi': s.rsi,
                     'date': s.date or (s.created_at.strftime('%Y-%m-%d') if s.created_at else None),
                     'action': s.action,
                     'created_at': s.created_at.isoformat() if s.created_at else None
                 })
             
-            # Deduplicate: Keep BEST signal per ticker per date (highest strength)
-            seen = {}  # Track: ticker_date → signal
-            deduplicated = []
-            
-            for signal in signals_data:
-                key = f"{signal['ticker']}_{signal['date']}"
-                
-                if key not in seen:
-                    # First signal for this ticker+date → Keep it
-                    seen[key] = signal
-                    deduplicated.append(signal)
-                else:
-                    # Duplicate found → Keep signal with HIGHER strength
-                    existing_strength = seen[key].get('strength', 0)
-                    new_strength = signal.get('strength', 0)
-                    
-                    if new_strength > existing_strength:
-                        # Replace with better signal
-                        deduplicated.remove(seen[key])
-                        seen[key] = signal
-                        deduplicated.append(signal)
-            
             return jsonify({
                 'success': True,
-                'signals': deduplicated,
-                'count': len(deduplicated),
-                'total_before_dedup': len(signals_data)
+                'signals': signals_data,
+                'count': len(signals_data)
             })
             
         except Exception as e:
@@ -553,6 +483,26 @@ def signals_endpoint():
             return jsonify({'success': False, 'error': str(e)}), 500
         finally:
             session.close()
+
+# Logic: Keep ONLY the BEST signal per ticker per date
+
+seen = {}  # Track: ticker_date → signal
+deduplicated = []
+
+for signal in signals_data:
+    key = f"{signal['ticker']}_{signal['date']}"
+    
+    if key not in seen:
+        # First signal for this ticker+date → Keep it
+        seen[key] = signal
+        deduplicated.append(signal)
+    else:
+        # Duplicate found → Keep signal with HIGHER strength
+        if signal['strength'] > seen[key]['strength']:
+            # Replace with better signal
+            deduplicated.remove(seen[key])
+            seen[key] = signal
+            deduplicated.append(signal)
 
 # ========================================================================
 # AUTOMATION ENDPOINTS (GitHub Actions)

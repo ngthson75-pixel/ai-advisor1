@@ -1,0 +1,1 @@
+postgresql://ai_advisor_user:OPmx1O1UTpXknFgW0UakvlZFlfYM8wfo@dpg-d5npf8fgi27c73eplem0-a.singapore-postgres.render.com/ai_advisor_ilm5

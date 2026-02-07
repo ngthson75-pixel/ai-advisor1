@@ -1,0 +1,329 @@
+/**
+ * SELL SIGNALS TABLE CSS
+ * Dùng nếu không có Tailwind CSS
+ * 
+ * Add to: src/styles/sell-signals.css
+ */
+
+/* ============================================================================
+   TABLE CONTAINER
+   ============================================================================ */
+
+.sell-signals-container {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+/* ============================================================================
+   TABLE HEADER
+   ============================================================================ */
+
+.sell-signals-header {
+  padding: 1.5rem;
+  background: linear-gradient(to right, #3b82f6, #2563eb);
+  color: white;
+}
+
+.sell-signals-header h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem 0;
+}
+
+.sell-signals-header p {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin: 0;
+}
+
+/* ============================================================================
+   TABLE
+   ============================================================================ */
+
+.sell-signals-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sell-signals-table thead {
+  background-color: #f9fafb;
+}
+
+.sell-signals-table th {
+  padding: 0.75rem 1.5rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.sell-signals-table td {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.sell-signals-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.sell-signals-table tbody tr:hover {
+  background-color: #f9fafb;
+}
+
+/* ============================================================================
+   EXIT REASON BADGE
+   ============================================================================ */
+
+.exit-reason-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid;
+}
+
+.exit-reason-badge .icon {
+  margin-right: 0.375rem;
+  font-size: 1rem;
+}
+
+/* Stop Loss Badge */
+.exit-reason-stop-loss {
+  background-color: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+/* Take Profit Badge */
+.exit-reason-take-profit {
+  background-color: #f0fdf4;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+/* Other Badge */
+.exit-reason-other {
+  background-color: #f9fafb;
+  color: #374151;
+  border-color: #d1d5db;
+}
+
+/* ============================================================================
+   P/L STYLING
+   ============================================================================ */
+
+.pl-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.pl-value {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.pl-percent {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.pl-profit .pl-value {
+  color: #16a34a;
+}
+
+.pl-profit .pl-percent {
+  color: #22c55e;
+}
+
+.pl-loss .pl-value {
+  color: #dc2626;
+}
+
+.pl-loss .pl-percent {
+  color: #ef4444;
+}
+
+/* ============================================================================
+   TICKER STYLING
+   ============================================================================ */
+
+.ticker-cell {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+/* ============================================================================
+   PRICE CELLS
+   ============================================================================ */
+
+.price-value {
+  font-size: 0.875rem;
+  color: #111827;
+}
+
+.price-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.125rem;
+}
+
+.exit-price {
+  font-weight: 600;
+}
+
+/* ============================================================================
+   FOOTER STATISTICS
+   ============================================================================ */
+
+.sell-signals-footer {
+  padding: 1rem 1.5rem;
+  background-color: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.stat-value.stop-loss {
+  color: #dc2626;
+}
+
+.stat-value.take-profit {
+  color: #16a34a;
+}
+
+.stat-value.total {
+  color: #111827;
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.empty-state {
+  padding: 3rem;
+  text-align: center;
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.empty-state-icon {
+  font-size: 1.25rem;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.empty-state-text {
+  color: #6b7280;
+  font-size: 1.125rem;
+}
+
+.empty-state-subtext {
+  color: #9ca3af;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+/* ============================================================================
+   LOADING STATE
+   ============================================================================ */
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 3rem;
+}
+
+.loading-spinner {
+  width: 3rem;
+  height: 3rem;
+  border: 2px solid #e5e7eb;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================================
+   RESPONSIVE - MOBILE
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .sell-signals-table {
+    display: none;
+  }
+
+  .sell-signals-header {
+    padding: 1rem;
+  }
+
+  .sell-signals-header h2 {
+    font-size: 1.125rem;
+  }
+
+  /* Show card layout on mobile */
+  .sell-signal-card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-left: 4px solid;
+  }
+
+  .sell-signal-card.stop-loss {
+    border-left-color: #ef4444;
+  }
+
+  .sell-signal-card.take-profit {
+    border-left-color: #22c55e;
+  }
+}
+
+/* ============================================================================
+   PRINT STYLES
+   ============================================================================ */
+
+@media print {
+  .sell-signals-container {
+    box-shadow: none;
+  }
+
+  .sell-signals-table tbody tr:hover {
+    background-color: transparent;
+  }
+
+  .exit-reason-badge {
+    border: 1px solid #000;
+  }
+}
