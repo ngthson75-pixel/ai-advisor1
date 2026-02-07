@@ -395,11 +395,12 @@ def signals_endpoint():
     """
     
     if request.method == 'GET':
-        # GET: Return all signals (original functionality)
+        # GET: Return all signals with rounding and deduplication
         session = Session()
         try:
             signals = session.query(Signal).order_by(Signal.created_at.desc()).all()
             
+            # Build signals with rounded prices
             signals_data = []
             for s in signals:
                 signals_data.append({
@@ -407,22 +408,45 @@ def signals_endpoint():
                     'ticker': s.ticker,
                     'code': s.ticker,
                     'strategy': s.strategy,
-                    'entry_price': s.entry_price,
-                    'stop_loss': s.stop_loss,
-                    'take_profit': s.take_profit,
-                    'risk_reward': s.risk_reward,
+                    'entry_price': round(s.entry_price / 100) * 100,  # Round to nearest 100 VND
+                    'stop_loss': round(s.stop_loss / 100) * 100,      # Round to nearest 100 VND
+                    'take_profit': round(s.take_profit / 100) * 100,  # Round to nearest 100 VND
+                    'risk_reward': round(s.risk_reward, 2) if s.risk_reward else None,
                     'strength': s.strength or 0,
                     'stock_type': s.stock_type,
-                    'rsi': s.rsi,
+                    'rsi': round(s.rsi, 1) if s.rsi else None,
                     'date': s.date or (s.created_at.strftime('%Y-%m-%d') if s.created_at else None),
                     'action': s.action,
                     'created_at': s.created_at.isoformat() if s.created_at else None
                 })
             
+            # Deduplicate: Keep BEST signal per ticker per date (highest strength)
+            seen = {}  # Track: ticker_date → signal
+            deduplicated = []
+            
+            for signal in signals_data:
+                key = f"{signal['ticker']}_{signal['date']}"
+                
+                if key not in seen:
+                    # First signal for this ticker+date → Keep it
+                    seen[key] = signal
+                    deduplicated.append(signal)
+                else:
+                    # Duplicate found → Keep signal with HIGHER strength
+                    existing_strength = seen[key].get('strength', 0)
+                    new_strength = signal.get('strength', 0)
+                    
+                    if new_strength > existing_strength:
+                        # Replace with better signal
+                        deduplicated.remove(seen[key])
+                        seen[key] = signal
+                        deduplicated.append(signal)
+            
             return jsonify({
                 'success': True,
-                'signals': signals_data,
-                'count': len(signals_data)
+                'signals': deduplicated,
+                'count': len(deduplicated),
+                'total_before_dedup': len(signals_data)
             })
             
         except Exception as e:
@@ -483,7 +507,6 @@ def signals_endpoint():
             return jsonify({'success': False, 'error': str(e)}), 500
         finally:
             session.close()
-
 
 # ========================================================================
 # AUTOMATION ENDPOINTS (GitHub Actions)
