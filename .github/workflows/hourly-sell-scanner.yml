@@ -2,189 +2,159 @@ name: Hourly SELL Signal Scanner
 
 on:
   schedule:
-    # Run every 2 hours at :05 (e.g., 1:05, 2:05, 3:05...)
-    # Format: minute hour day month weekday
-    - cron: '5 */2 * * *'
+    # Chạy mỗi giờ từ 9 AM - 3 PM Vietnam time - CHỈ T2-T6
+    # Vietnam time = UTC + 7
+    # 9 AM VN = 2 AM UTC
+    # 3 PM VN = 8 AM UTC
+    - cron: '0 2-8 * * 1-5'   # Mỗi giờ từ 2-8 AM UTC (9 AM - 3 PM VN), T2-T6
   
-  # Allow manual trigger
-  workflow_dispatch:
-    inputs:
-      days:
-        description: 'Look back N days for BUY signals'
-        required: false
-        default: '7'
-      delay:
-        description: 'Delay between requests (seconds)'
-        required: false
-        default: '2.0'
+  workflow_dispatch:  # Manual trigger
 
 jobs:
   scan-sell-signals:
-    name: Scan for SELL Signals
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     
     steps:
-      - name: 🔍 Start SELL Scanner
-        run: |
-          echo "============================================================"
-          echo "🔍 SELL SIGNAL SCANNER - HOURLY RUN"
-          echo "============================================================"
-          echo "Time: $(date '+%Y-%m-%d %H:%M:%S')"
-          echo "API: $API_URL"
-          echo ""
-        env:
-          API_URL: https://ai-advisor1-backend.onrender.com/api
+      - name: Checkout code
+        uses: actions/checkout@v3
       
-      # 1. Wake backend (may be sleeping)
-      - name: ⏰ Wake Backend
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
         run: |
-          echo "Waking backend..."
+          python -m pip install --upgrade pip
+          pip install requests vnstock --break-system-packages
+      
+      - name: Check if trading day
+        id: check_trading_day
+        run: |
+          echo "🗓️ Checking if today is a trading day..."
+          
+          # Download holiday calendar
+          curl -s https://raw.githubusercontent.com/${{ github.repository }}/main/vietnam_holidays.json > vietnam_holidays.json || echo '{"holidays":{}}' > vietnam_holidays.json
+          
+          # Download check script
+          curl -s https://raw.githubusercontent.com/${{ github.repository }}/main/check_trading_day.py > check_trading_day.py
+          
+          # Run check
+          if python check_trading_day.py --quiet; then
+            echo "trading_day=true" >> $GITHUB_OUTPUT
+            echo "✅ Today is a trading day - Proceeding with scan"
+          else
+            echo "trading_day=false" >> $GITHUB_OUTPUT
+            echo "❌ Today is NOT a trading day - Skipping scan"
+            exit 0  # Exit gracefully
+          fi
+      
+      - name: Check if during trading hours
+        if: steps.check_trading_day.outputs.trading_day == 'true'
+        id: check_trading_hours
+        run: |
+          echo "⏰ Checking trading hours..."
+          
+          # Get current Vietnam time (UTC+7)
+          VN_HOUR=$(TZ='Asia/Ho_Chi_Minh' date +%H)
+          VN_MINUTE=$(TZ='Asia/Ho_Chi_Minh' date +%M)
+          VN_TIME="${VN_HOUR}:${VN_MINUTE}"
+          
+          echo "Current Vietnam time: $VN_TIME"
+          
+          # Trading hours: 9:00-11:30, 13:00-15:00
+          if [ $VN_HOUR -ge 9 -a $VN_HOUR -lt 12 ] || [ $VN_HOUR -ge 13 -a $VN_HOUR -lt 15 ]; then
+            echo "trading_hours=true" >> $GITHUB_OUTPUT
+            echo "✅ Within trading hours"
+          else
+            echo "trading_hours=false" >> $GITHUB_OUTPUT
+            echo "⏸️ Outside trading hours - Skipping scan"
+            exit 0  # Exit gracefully
+          fi
+      
+      - name: Wake backend (if sleeping)
+        if: steps.check_trading_day.outputs.trading_day == 'true' && steps.check_trading_hours.outputs.trading_hours == 'true'
+        run: |
+          echo "⏰ Waking up backend..."
+          curl -f https://ai-advisor1-backend.onrender.com/api/health || true
+          sleep 5
+      
+      - name: Check backend health
+        if: steps.check_trading_day.outputs.trading_day == 'true' && steps.check_trading_hours.outputs.trading_hours == 'true'
+        run: |
+          echo "🏥 Checking backend health..."
           for i in {1..3}; do
-            echo "  Attempt $i/3..."
-            curl -s "$API_URL/../health" > /dev/null && break
+            if curl -f https://ai-advisor1-backend.onrender.com/api/health; then
+              echo "✅ Backend is healthy"
+              exit 0
+            fi
+            echo "⚠️ Attempt $i failed, retrying..."
             sleep 10
           done
-          echo "✅ Backend awake"
-        env:
-          API_URL: https://ai-advisor1-backend.onrender.com/api
+          echo "❌ Backend health check failed"
+          exit 1
       
-      # 2. Check health
-      - name: 🏥 Health Check
+      - name: Get current SELL signal count
+        if: steps.check_trading_day.outputs.trading_day == 'true' && steps.check_trading_hours.outputs.trading_hours == 'true'
+        id: before_scan
         run: |
-          echo "Checking backend health..."
-          HEALTH=$(curl -s "$API_URL/../health")
-          echo "Response: $HEALTH"
-          
-          if echo "$HEALTH" | grep -q '"status":"healthy"'; then
-            echo "✅ Backend healthy"
-          else
-            echo "⚠️  Backend may not be fully ready"
-          fi
-        env:
-          API_URL: https://ai-advisor1-backend.onrender.com/api
+          echo "📊 Getting SELL signal count..."
+          COUNT=$(curl -s "https://ai-advisor1-backend.onrender.com/api/signals?action=SELL" | jq -r '.count // 0')
+          echo "current_count=$COUNT" >> $GITHUB_OUTPUT
+          echo "Current SELL signals: $COUNT"
       
-      # 3. Get current SELL count (before scan)
-      - name: 📊 Before Scan
-        id: before
+      - name: Run SELL signal scanner
+        if: steps.check_trading_day.outputs.trading_day == 'true' && steps.check_trading_hours.outputs.trading_hours == 'true'
         run: |
-          echo "Getting current SELL signal count..."
+          echo "🔍 Starting SELL signal scanner..."
           
-          BEFORE=$(curl -s "$API_URL/scan-sell/status" | grep -o '"total_sell_signals":[0-9]*' | grep -o '[0-9]*')
-          
-          if [ -z "$BEFORE" ]; then
-            BEFORE=0
-          fi
-          
-          echo "before_count=$BEFORE" >> $GITHUB_OUTPUT
-          echo "📊 Current SELL signals: $BEFORE"
-        env:
-          API_URL: https://ai-advisor1-backend.onrender.com/api
-      
-      # 4. Trigger SELL scanner
-      - name: 🚀 Trigger Scanner
-        run: |
-          echo "Triggering SELL scanner..."
-          
-          DAYS="${{ github.event.inputs.days || '7' }}"
-          DELAY="${{ github.event.inputs.delay || '2.0' }}"
-          
-          echo "  Days: $DAYS"
-          echo "  Delay: $DELAY s"
-          
-          RESPONSE=$(curl -s -X POST "$API_URL/scan-sell" \
+          # Call backend SELL scan endpoint
+          RESPONSE=$(curl -X POST https://ai-advisor1-backend.onrender.com/api/scan-sell \
             -H "Content-Type: application/json" \
-            -d "{\"days\": $DAYS, \"delay\": $DELAY}")
+            -w "\n%{http_code}" \
+            -s)
           
-          echo "Response: $RESPONSE"
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
           
-          if echo "$RESPONSE" | grep -q '"success":true'; then
-            echo "✅ Scanner triggered successfully"
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+          
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✅ SELL scan completed successfully"
+            echo "$BODY" | jq '.' || echo "$BODY"
           else
-            echo "⚠️  Scanner may not have started properly"
+            echo "❌ SELL scan failed with status $HTTP_CODE"
+            exit 1
           fi
-        env:
-          API_URL: https://ai-advisor1-backend.onrender.com/api
       
-      # 5. Monitor progress (check every 30s for up to 30 min)
-      - name: ⏱️  Monitor Scan Progress
+      - name: Get final SELL signal count
+        if: steps.check_trading_day.outputs.trading_day == 'true' && steps.check_trading_hours.outputs.trading_hours == 'true'
+        id: after_scan
         run: |
-          echo "Monitoring scan progress..."
-          echo "Will check every 30s for up to 30 minutes"
-          echo ""
-          
-          BEFORE_COUNT=${{ steps.before.outputs.before_count }}
-          
-          for i in {1..60}; do
-            sleep 30
-            
-            # Get current count
-            CURRENT=$(curl -s "$API_URL/scan-sell/status" | grep -o '"total_sell_signals":[0-9]*' | grep -o '[0-9]*')
-            
-            if [ -z "$CURRENT" ]; then
-              CURRENT=$BEFORE_COUNT
-            fi
-            
-            # Progress indicator every 2 minutes
-            if [ $((i % 4)) -eq 0 ]; then
-              ELAPSED=$((i / 2))
-              echo "Check $ELAPSED/30 min - SELL signals: $CURRENT (was $BEFORE_COUNT)"
-            fi
-            
-            # If count increased significantly, scanner likely done
-            DIFF=$((CURRENT - BEFORE_COUNT))
-            if [ $DIFF -ge 3 ]; then
-              echo "✅ New signals detected: +$DIFF"
-              break
-            fi
-          done
-          
-          echo ""
-          echo "Monitoring complete"
-        env:
-          API_URL: https://ai-advisor1-backend.onrender.com/api
+          echo "📊 Getting final SELL signal count..."
+          sleep 3
+          COUNT=$(curl -s "https://ai-advisor1-backend.onrender.com/api/signals?action=SELL" | jq -r '.count // 0')
+          echo "final_count=$COUNT" >> $GITHUB_OUTPUT
+          echo "Final SELL signals: $COUNT"
       
-      # 6. Get results
-      - name: 📊 Scan Results
+      - name: Calculate new SELL signals
+        if: steps.check_trading_day.outputs.trading_day == 'true' && steps.check_trading_hours.outputs.trading_hours == 'true'
         run: |
-          echo "============================================================"
-          echo "📊 SCAN RESULTS"
-          echo "============================================================"
+          BEFORE=${{ steps.before_scan.outputs.current_count }}
+          AFTER=${{ steps.after_scan.outputs.final_count }}
+          NEW=$((AFTER - BEFORE))
           
-          BEFORE=${{ steps.before.outputs.before_count }}
-          
-          STATUS=$(curl -s "$API_URL/scan-sell/status")
-          echo "Status: $STATUS"
-          
-          AFTER=$(echo "$STATUS" | grep -o '"total_sell_signals":[0-9]*' | grep -o '[0-9]*')
-          
-          if [ -z "$AFTER" ]; then
-            AFTER=$BEFORE
-          fi
-          
-          STOP_LOSS=$(echo "$STATUS" | grep -o '"stop_loss":[0-9]*' | grep -o '[0-9]*')
-          TAKE_PROFIT=$(echo "$STATUS" | grep -o '"take_profit":[0-9]*' | grep -o '[0-9]*')
-          
-          [ -z "$STOP_LOSS" ] && STOP_LOSS=0
-          [ -z "$TAKE_PROFIT" ] && TAKE_PROFIT=0
-          
-          echo ""
-          echo "Before:  $BEFORE signals"
-          echo "After:   $AFTER signals"
-          echo "New:     $((AFTER - BEFORE)) signals"
-          echo ""
-          echo "Breakdown:"
-          echo "  🔴 Stop Loss:   $STOP_LOSS"
-          echo "  🟢 Take Profit: $TAKE_PROFIT"
-          echo ""
-          echo "============================================================"
-        env:
-          API_URL: https://ai-advisor1-backend.onrender.com/api
+          echo "=================================="
+          echo "📊 SELL SCAN RESULTS"
+          echo "=================================="
+          echo "Before: $BEFORE SELL signals"
+          echo "After:  $AFTER SELL signals"
+          echo "New:    $NEW SELL signals"
+          echo "=================================="
       
-      # 7. Summary
-      - name: ✅ Complete
+      - name: Notify on failure
+        if: failure() && steps.check_trading_day.outputs.trading_day == 'true'
         run: |
-          echo "✅ Hourly SELL signal scan complete"
-          echo "Time: $(date '+%Y-%m-%d %H:%M:%S')"
-          echo ""
-          echo "Next run: Next hour at :05"
+          echo "❌ Hourly SELL scan failed!"
+          echo "Check logs for details"

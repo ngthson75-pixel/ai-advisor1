@@ -1,0 +1,98 @@
+name: Hourly SELL Signal Scanner
+
+on:
+  schedule:
+    # Vietnam trading hours: 9:00-15:00 (UTC+7)
+    # Scan every hour: 9:00, 10:00, 11:00, 13:00, 14:00
+    # Cron times in UTC (subtract 7 hours from Vietnam time)
+    
+    - cron: '0 2 * * 1-5'   # 9:00 AM Vietnam (Mon-Fri)
+    - cron: '0 3 * * 1-5'   # 10:00 AM Vietnam
+    - cron: '0 4 * * 1-5'   # 11:00 AM Vietnam
+    - cron: '0 6 * * 1-5'   # 1:00 PM Vietnam (after lunch break)
+    - cron: '0 7 * * 1-5'   # 2:00 PM Vietnam
+  
+  workflow_dispatch:  # Manual trigger
+
+env:
+  API_URL: https://ai-advisor1-backend.onrender.com/api
+
+jobs:
+  scan-sell-signals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          pip install --break-system-packages vnstock pandas requests python-dotenv
+      
+      - name: Wake backend (if sleeping)
+        run: |
+          echo "🔄 Waking up backend..."
+          for i in {1..3}; do
+            curl -s "${{ env.API_URL }}/signals" > /dev/null && break
+            sleep 10
+          done
+      
+      - name: Check backend health
+        run: |
+          echo "🏥 Checking backend health..."
+          curl -s "${{ env.API_URL }}/../health"
+      
+      - name: Get current signal count
+        id: before
+        run: |
+          BEFORE=$(curl -s "${{ env.API_URL }}/signals" | jq -r '.count // 0')
+          echo "count=$BEFORE" >> $GITHUB_OUTPUT
+          echo "📊 Current signals: $BEFORE"
+      
+      - name: Run SELL signal scanner
+        run: |
+          echo "🔍 Starting SELL signal scanner..."
+          echo "⏰ Time: $(date +'%Y-%m-%d %H:%M:%S %Z')"
+          echo "🌏 Vietnam time: $(TZ=Asia/Ho_Chi_Minh date +'%Y-%m-%d %H:%M:%S')"
+          
+          python sell_signal_scanner_v2.py --days 2 --delay 2.0
+      
+      - name: Get final signal count
+        id: after
+        run: |
+          AFTER=$(curl -s "${{ env.API_URL }}/signals" | jq -r '.count // 0')
+          echo "count=$AFTER" >> $GITHUB_OUTPUT
+          echo "📊 Final signals: $AFTER"
+      
+      - name: Calculate new signals
+        run: |
+          BEFORE=${{ steps.before.outputs.count }}
+          AFTER=${{ steps.after.outputs.count }}
+          NEW=$((AFTER - BEFORE))
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📊 SCAN RESULTS"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Before: $BEFORE signals"
+          echo "After:  $AFTER signals"
+          echo "New:    $NEW signals"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          if [ $NEW -gt 0 ]; then
+            echo "✅ Generated $NEW new SELL signals"
+          else
+            echo "ℹ️  No new SELL signals (market conditions)"
+          fi
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ SELL scanner failed!"
+          echo "Check logs for details"
+          echo "Time: $(date +'%Y-%m-%d %H:%M:%S %Z')"
