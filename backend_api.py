@@ -386,52 +386,6 @@ def health():
 # ========================================================================
 # SIGNALS ENDPOINTS
 # ========================================================================
-@app.route('/api/signals', methods=['GET'])
-def get_signals():
-    action = request.args.get('action')  # 'BUY' or 'SELL'
-    
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            if action:
-                query = """
-                    SELECT 
-                        ticker, strategy, entry_price, stop_loss, 
-                        take_profit, date, action, created_at
-                    FROM signals
-                    WHERE action = %s
-                    ORDER BY created_at DESC
-                """
-                cur.execute(query, (action,))
-            else:
-                query = """
-                    SELECT 
-                        ticker, strategy, entry_price, stop_loss, 
-                        take_profit, date, action, created_at
-                    FROM signals
-                    ORDER BY created_at DESC
-                """
-                cur.execute(query)
-            
-            rows = cur.fetchall()
-            
-            signals = []
-            for row in rows:
-                signals.append({
-                    'ticker': row[0],
-                    'strategy': row[1],        # ← IMPORTANT: Include strategy!
-                    'entry_price': float(row[2]) if row[2] else None,
-                    'stop_loss': float(row[3]) if row[3] else None,
-                    'take_profit': float(row[4]) if row[4] else None,
-                    'date': row[5].isoformat() if row[5] else None,
-                    'action': row[6],
-                    'created_at': row[7].isoformat() if row[7] else None
-                })
-            
-            return jsonify({
-                'success': True,
-                'count': len(signals),
-                'signals': signals
-            }), 200
 
 @app.route('/api/signals', methods=['GET', 'POST'])
 def signals_endpoint():
