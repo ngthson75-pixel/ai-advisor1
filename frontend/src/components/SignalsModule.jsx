@@ -55,6 +55,33 @@ export default function SignalsModule() {
   const sellSignals = signals.filter(s => s.action === 'SELL');
   const displaySignals = activeTab === 'buy' ? buySignals : sellSignals;
 
+  // ============================================================================
+  // NEW: Helper function - Format exit reason for SELL signals
+  // ============================================================================
+  const getExitReasonDisplay = (strategy) => {
+    if (strategy === 'STOP_LOSS') {
+      return {
+        text: 'Cắt lỗ (SL)',
+        icon: '🔴',
+        color: '#ef4444',
+        bgColor: '#fee2e2'
+      };
+    } else if (strategy === 'TAKE_PROFIT') {
+      return {
+        text: 'Chốt lời (TP)',
+        icon: '🟢',
+        color: '#10b981',
+        bgColor: '#dcfce7'
+      };
+    }
+    return {
+      text: 'Khác',
+      icon: '⚪',
+      color: '#6b7280',
+      bgColor: '#f3f4f6'
+    };
+  };
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '50px' }}>
@@ -231,63 +258,106 @@ export default function SignalsModule() {
               <tr>
                 <th>Mã CK</th>
                 <th>Giá vào</th>
-                <th>Stop Loss</th>
-                <th>Take Profit</th>
+                {/* UPDATED: Different headers for BUY vs SELL */}
+                {activeTab === 'buy' ? (
+                  <>
+                    <th>Stop Loss</th>
+                    <th>Take Profit</th>
+                  </>
+                ) : (
+                  <>
+                    <th>Giá ra</th>
+                    <th>Lý do bán</th>
+                  </>
+                )}
                 <th>Score</th>
-                <th>Loại</th>
                 <th>Ngày</th>
               </tr>
             </thead>
             <tbody>
-              {displaySignals.map((signal, idx) => (
-                <tr key={signal.id || idx}>
-                  <td>
-                    <strong style={{ 
-                      color: signal.action === 'SELL' ? '#ef4444' : '#3b82f6', 
-                      fontSize: '16px' 
-                    }}>
-                      {signal.ticker || signal.code}
-                    </strong>
-                  </td>
-                  <td>{signal.entry_price?.toLocaleString()}</td>
-                  <td style={{ color: '#ef4444' }}>
-                    {signal.stop_loss?.toLocaleString()}
-                  </td>
-                  <td style={{ color: '#10b981' }}>
-                    {signal.take_profit?.toLocaleString()}
-                  </td>
-                  <td>
-                    <span style={{
-                      padding: '4px 12px',
-                      background: (signal.strength || 0) >= 70 ? '#10b981' : 
-                                 (signal.strength || 0) >= 50 ? '#3b82f6' :
-                                 (signal.strength || 0) > 0 ? '#f59e0b' : '#6b7280',
-                      color: 'white',
-                      borderRadius: '12px',
-                      fontSize: '12px',
-                      fontWeight: 'bold'
-                    }}>
-                      {(signal.strength || 0) > 0 ? `${(signal.strength || 0).toFixed(0)}%` : 'N/A'}
-                    </span>
-                  </td>
-                  <td>
-                    <span style={{
-                      padding: '4px 8px',
-                      background: signal.stock_type === 'Blue Chip' ? '#3b82f6' :
-                                 signal.stock_type === 'Mid Cap' ? '#8b5cf6' : '#6b7280',
-                      borderRadius: '6px',
-                      fontSize: '11px',
-                      color: 'white',
-                      fontWeight: '500'
-                    }}>
-                      {signal.stock_type || 'N/A'}
-                    </span>
-                  </td>
-                  <td style={{ color: '#94a3b8', fontSize: '13px' }}>
-                    {signal.date ? new Date(signal.date).toLocaleDateString('vi-VN') : 'N/A'}
-                  </td>
-                </tr>
-              ))}
+              {displaySignals.map((signal, idx) => {
+                // Calculate exit reason for SELL signals
+                const exitReason = getExitReasonDisplay(signal.strategy);
+                const exitPrice = signal.strategy === 'STOP_LOSS' 
+                  ? signal.stop_loss 
+                  : signal.take_profit;
+
+                return (
+                  <tr key={signal.id || idx}>
+                    {/* Ticker */}
+                    <td>
+                      <strong style={{ 
+                        color: signal.action === 'SELL' ? '#ef4444' : '#3b82f6', 
+                        fontSize: '16px' 
+                      }}>
+                        {signal.ticker || signal.code}
+                      </strong>
+                    </td>
+
+                    {/* Entry Price */}
+                    <td>{signal.entry_price?.toLocaleString()}</td>
+
+                    {/* UPDATED: Different cells for BUY vs SELL */}
+                    {activeTab === 'buy' ? (
+                      <>
+                        {/* BUY: Show Stop Loss */}
+                        <td style={{ color: '#ef4444' }}>
+                          {signal.stop_loss?.toLocaleString()}
+                        </td>
+                        {/* BUY: Show Take Profit */}
+                        <td style={{ color: '#10b981' }}>
+                          {signal.take_profit?.toLocaleString()}
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        {/* SELL: Show Exit Price */}
+                        <td style={{ fontWeight: '600' }}>
+                          {exitPrice?.toLocaleString()}
+                        </td>
+                        {/* SELL: Show Exit Reason Badge */}
+                        <td>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '6px 12px',
+                            borderRadius: '16px',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            backgroundColor: exitReason.bgColor,
+                            color: exitReason.color,
+                            gap: '6px'
+                          }}>
+                            <span>{exitReason.icon}</span>
+                            {exitReason.text}
+                          </span>
+                        </td>
+                      </>
+                    )}
+
+                    {/* Score */}
+                    <td>
+                      <span style={{
+                        padding: '4px 12px',
+                        background: (signal.strength || 0) >= 70 ? '#10b981' : 
+                                   (signal.strength || 0) >= 50 ? '#3b82f6' :
+                                   (signal.strength || 0) > 0 ? '#f59e0b' : '#6b7280',
+                        color: 'white',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: 'bold'
+                      }}>
+                        {(signal.strength || 0) > 0 ? `${(signal.strength || 0).toFixed(0)}%` : 'N/A'}
+                      </span>
+                    </td>
+
+                    {/* Date */}
+                    <td style={{ color: '#94a3b8', fontSize: '13px' }}>
+                      {signal.date ? new Date(signal.date).toLocaleDateString('vi-VN') : 'N/A'}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
