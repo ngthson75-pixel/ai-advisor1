@@ -466,14 +466,11 @@ def save_signals_to_db(signals):
         return False
 
 def scan_all_stocks():
-    """Scan stocks"""
+    """Scan stocks - PRIORITY SIGNALS ONLY"""
     logger.info("=" * 60)
     logger.info("Starting scan...")
     logger.info(f"Date: {get_last_trading_day()}")
-    
-    # Get top stocks by liquidity (343 stocks as per system design)
-    stocks_to_scan = get_top_343_stocks()
-    logger.info(f"Stocks: {len(stocks_to_scan)}")
+    logger.info(f"Stocks: {len(TOP_343_STOCKS)}")
     logger.info("=" * 60)
     
     init_database()
@@ -482,43 +479,41 @@ def scan_all_stocks():
     processed = 0
     failed = 0
     
-    for ticker in stocks_to_scan:
+    for ticker in TOP_343_STOCKS:
         try:
-            logger.info(f"Processing {ticker} ({processed + 1}/{len(stocks_to_scan)})...")
+            logger.info(f"Processing {ticker} ({processed + 1}/{len(TOP_343_STOCKS)})...")
             
             df = get_stock_data(ticker, days=100)
             
             if df is None or len(df) < 50:
                 logger.warning(f"Skip {ticker}")
                 failed += 1
-                # Wait before next stock (even on skip)
-                # INCREASED from 1.5-2s to 2.5-3.5s to avoid VCI rate limit
-                time.sleep(2.5 + random.uniform(0, 1.0))  # 2.5-3.5s
+                time.sleep(2)
                 continue
             
             pullback = check_pullback_strategy(df, ticker)
             ema_cross = check_ema_cross_strategy(df, ticker)
             
-            all_signals.extend(pullback)
-            all_signals.extend(ema_cross)
+            # Priority only filter
+            for signal in pullback:
+                if signal['is_priority'] == 1:
+                    all_signals.append(signal)
+                    
+            for signal in ema_cross:
+                if signal['is_priority'] == 1:
+                    all_signals.append(signal)
             
             processed += 1
-            
-            # IMPORTANT: Wait between requests to avoid rate limit
-            # INCREASED from 1.5-2s to 2.5-3.5s for better rate limit handling
-            # Base delay 2.5s + random 0-1s = 2.5-3.5s per stock
-            delay = 2.5 + random.uniform(0, 1.0)
-            time.sleep(delay)
+            time.sleep(2)
             
         except Exception as e:
             logger.error(f"Error {ticker}: {str(e)}")
             failed += 1
-            # Wait before next even on error
-            time.sleep(2.5 + random.uniform(0, 1.0))
+            time.sleep(2)
     
     logger.info("=" * 60)
     logger.info("COMPLETE")
-    logger.info(f"Processed: {processed}/{len(stocks_to_scan)}")
+    logger.info(f"Processed: {processed}/{len(TOP_343_STOCKS)}")
     logger.info(f"Failed: {failed}")
     logger.info(f"Signals: {len(all_signals)}")
     logger.info("=" * 60)
@@ -542,6 +537,7 @@ def scan_all_stocks():
         logger.warning("No signals")
     
     return all_signals
+
 
 if __name__ == "__main__":
     signals = scan_all_stocks()
