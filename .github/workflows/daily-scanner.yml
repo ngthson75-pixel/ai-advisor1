@@ -93,13 +93,13 @@ jobs:
           echo "HTTP Status: $HTTP_CODE"
           echo "Response: $BODY"
           
-          if [ "$HTTP_CODE" -eq 200 ]; then
+          if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 202 ]; then
             echo "✅ Scan completed successfully"
           else
             echo "❌ Scan failed with status $HTTP_CODE"
             exit 1
           fi
-      
+
       - name: Get final signal count
         if: steps.check_trading_day.outputs.trading_day == 'true'
         id: after_scan
