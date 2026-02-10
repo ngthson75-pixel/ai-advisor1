@@ -17,7 +17,7 @@ import json
 import subprocess
 import sqlite3
 from openai import OpenAI
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, func
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, func, Boolean, and_, not_, exists
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from vnstock import Vnstock
@@ -218,6 +218,15 @@ class ChatHistory(Base):
     portfolio_context = Column(Text)
     created_at = Column(DateTime, default=datetime.now)
 
+class TickerBlacklist(Base):
+    __tablename__ = 'ticker_blacklist'
+    
+    id = Column(Integer, primary_key=True)
+    ticker = Column(String(10), unique=True, nullable=False)
+    reason = Column(String(255))
+    added_by = Column(String(50))
+    added_at = Column(DateTime, default=datetime.now)
+    is_active = Column(Boolean, default=True)
 
 # ========================================================================
 # HELPER FUNCTIONS
@@ -398,7 +407,17 @@ def signals_endpoint():
         # GET: Return all signals with rounding and deduplication
         session = Session()
         try:
-            signals = session.query(Signal).order_by(Signal.created_at.desc()).all()
+            signals = session.query(Signal)\
+              .filter(
+              ~exists().where(
+                and_(
+                TickerBlacklist.ticker == Signal.ticker,
+                TickerBlacklist.is_active == True
+                     )
+                  )
+               )\
+              .order_by(Signal.created_at.desc())\
+              .all()
             
             # Build signals with rounded prices
             signals_data = []
