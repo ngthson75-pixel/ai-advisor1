@@ -49,13 +49,32 @@ else:
     print("⚠️ OPENAI_API_KEY not set")
     openai_client = None
 
-# Database Configuration
-DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///signals.db')
+# ========================================================================
+# DATABASE CONFIGURATION - ENVIRONMENT-AWARE 🌍
+# ========================================================================
+
+ENVIRONMENT = os.getenv('ENVIRONMENT', 'production').lower()
+print(f"\n{'='*70}")
+print(f"🌍 Environment: {ENVIRONMENT.upper()}")
+print(f"{'='*70}")
+
+# Choose database based on environment
+if ENVIRONMENT == 'staging':
+    DATABASE_URL = os.getenv('DATABASE_URL_STAGING') or os.getenv('DATABASE_URL', 'sqlite:///signals.db')
+    print("📊 Using STAGING database (Supabase)")
+else:
+    DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///signals.db')
+    print("📊 Using PRODUCTION database (Render Postgres)")
 
 # Fix PostgreSQL URL for psycopg3 (Python 3.13 compatible)
 if DATABASE_URL and DATABASE_URL.startswith('postgresql://'):
     DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
     print(f"✅ Using PostgreSQL with psycopg (v3) driver")
+
+# Print database URL (first 50 chars for security)
+db_url_display = DATABASE_URL[:50] + "..." if len(DATABASE_URL) > 50 else DATABASE_URL
+print(f"🔗 Database URL: {db_url_display}")
+print(f"{'='*70}\n")
 
 # EOD file settings
 EOD_FILE = 'latest_prices_all.json'
