@@ -1,13 +1,11 @@
-import { defineConfig } from 'vite'
+﻿import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  server: {
-    port: 5173,
-  },
-  build: {
-    outDir: 'dist',
-  },
+  define: {
+    'import.meta.env.VITE_API_URL': JSON.stringify('https://ai-advisor1-backend.onrender.com/api'),
+    'import.meta.env.VITE_ENVIRONMENT': JSON.stringify('production'),
+    'import.meta.env.VITE_APP_NAME': JSON.stringify('AI Advisor')
+  }
 })
