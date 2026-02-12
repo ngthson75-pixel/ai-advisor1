@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api';
+const API_BASE = 'https://ai-advisor1-backend.onrender.com/api'
 
 export default function LandingPage({ onLogin }) {
   const [showAuth, setShowAuth] = useState(false)

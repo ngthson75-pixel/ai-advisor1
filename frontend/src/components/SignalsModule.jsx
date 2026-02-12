@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, AlertCircle, RefreshCw } from 'lucide-react';
 
-const API_BASE = 'https://ai-advisor1-backend.onrender.com/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api';
 
 export default function SignalsModule() {
   const [signals, setSignals] = useState([]);
