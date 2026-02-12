@@ -1,7 +1,11 @@
 // config.js - API Configuration
 // Place this in: frontend/src/config.js
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
+const config = {
+  // API Base URL - change based on environment
+  API_BASE_URL: import.meta.env.PROD 
+    ? 'https://ai-advisor1-backend.onrender.com/api'  // Production backend on Render
+    : 'http://localhost:10000/api',  // Local development
   
   // Frontend URL
   FRONTEND_URL: import.meta.env.PROD
