@@ -16,6 +16,7 @@ export default function LandingPage({ onLogin }) {
   // Fetch recommendations from API + historical data
   const [recommendations, setRecommendations] = useState([])
   const [loading, setLoading] = useState(true)
+  const [marketRisk, setMarketRisk] = useState(null)
 
   // Historical signals from 06/01/2026
   const historicalSignals = [
@@ -95,6 +96,18 @@ export default function LandingPage({ onLogin }) {
 
   useEffect(() => {
     fetchRecommendations()
+  }, [])
+
+  // Fetch market risk data
+  useEffect(() => {
+    fetch(`${API_BASE}/market-risk`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.data) {
+          setMarketRisk(data.data)
+        }
+      })
+      .catch(err => console.error('Market risk fetch error:', err))
   }, [])
 
   // Format date from various formats to DD/MM/YYYY
@@ -288,28 +301,122 @@ export default function LandingPage({ onLogin }) {
                     <span></span>
                     <span></span>
                   </div>
-                  <div className="preview-title">AI Advisor Dashboard</div>
+                  <div className="preview-title">AI Advisor Market Dashboard</div>
                 </div>
-                <div className="preview-content">
-                  <div className="preview-card">
-                    <div className="preview-card-header">
-                      <span className="preview-badge buy">MUA</span>
-                      <span className="preview-ticker">VCB</span>
+
+                {/* Market Risk Widget */}
+                {marketRisk ? (
+                  <div style={{
+                    padding: '20px',
+                    background: 'linear-gradient(135deg, #0B0F1A 0%, #1a1f3a 100%)',
+                    borderRadius: '0 0 12px 12px',
+                  }}>
+                    {/* Market Mode Header */}
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      marginBottom: '16px', flexWrap: 'wrap', gap: '12px',
+                    }}>
+                      <div>
+                        <div style={{
+                          fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase',
+                          letterSpacing: '1px', marginBottom: '4px',
+                        }}>Market Mode</div>
+                        <div style={{
+                          fontSize: '22px', fontWeight: '800',
+                          color: marketRisk.market_mode === 'BULL' ? '#00E676'
+                               : marketRisk.market_mode === 'BEAR' ? '#FF1744' : '#FFD600',
+                        }}>
+                          {marketRisk.market_mode === 'BULL' ? '🟢' : marketRisk.market_mode === 'BEAR' ? '🔴' : '🟡'}{' '}
+                          {marketRisk.mode_label}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '12px', color: '#94a3b8' }}>Risk Score</div>
+                        <div style={{
+                          fontSize: '28px', fontWeight: '800',
+                          fontFamily: "'JetBrains Mono', monospace",
+                          color: marketRisk.risk_score <= 35 ? '#00E676'
+                               : marketRisk.risk_score <= 65 ? '#FFD600' : '#FF1744',
+                        }}>{marketRisk.risk_score}<span style={{ fontSize: '14px', color: '#64748b' }}>/100</span></div>
+                      </div>
                     </div>
-                    <div className="preview-price">88,500</div>
-                    <div className="preview-target">Target: 95,000 (+7.3%)</div>
-                  </div>
-                  <div className="preview-card">
-                    <div className="preview-card-header">
-                      <span className="preview-badge buy">MUA</span>
-                      <span className="preview-ticker">MBB</span>
+
+                    {/* Description */}
+                    <div style={{
+                      fontSize: '13px', color: '#94a3b8', marginBottom: '16px',
+                      padding: '10px 14px', background: 'rgba(255,255,255,0.04)',
+                      borderRadius: '8px', borderLeft: '3px solid',
+                      borderLeftColor: marketRisk.market_mode === 'BULL' ? '#00E676'
+                                     : marketRisk.market_mode === 'BEAR' ? '#FF1744' : '#FFD600',
+                    }}>
+                      {marketRisk.description}
                     </div>
-                    <div className="preview-price">23,800</div>
-                    <div className="preview-target">Target: 26,000 (+9.2%)</div>
+
+                    {/* Allocation Bar */}
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        fontSize: '12px', color: '#94a3b8', marginBottom: '6px',
+                      }}>
+                        <span>Tỷ trọng CP: <strong style={{ color: '#e2e8f0' }}>{marketRisk.allocation}%</strong></span>
+                        <span>Tiền mặt: <strong style={{ color: '#e2e8f0' }}>{100 - marketRisk.allocation}%</strong></span>
+                      </div>
+                      <div style={{
+                        height: '8px', background: 'rgba(255,255,255,0.1)',
+                        borderRadius: '4px', overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          height: '100%', borderRadius: '4px',
+                          width: `${marketRisk.allocation}%`,
+                          background: marketRisk.market_mode === 'BULL'
+                            ? 'linear-gradient(90deg, #00E676, #00C853)'
+                            : marketRisk.market_mode === 'BEAR'
+                            ? 'linear-gradient(90deg, #FF1744, #D50000)'
+                            : 'linear-gradient(90deg, #FFD600, #FFC107)',
+                          transition: 'width 1s ease',
+                        }}></div>
+                      </div>
+                    </div>
+
+                    {/* Factors */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {(marketRisk.factors || []).map((factor, i) => (
+                        <div key={i} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '8px 12px', background: 'rgba(255,255,255,0.03)',
+                          borderRadius: '6px', fontSize: '13px',
+                          opacity: factor.isRef ? 0.5 : 1,
+                          fontStyle: factor.isRef ? 'italic' : 'normal',
+                        }}>
+                          <span style={{ color: '#94a3b8' }}>{factor.label}</span>
+                          <span style={{
+                            color: factor.isRef ? '#64748b' : factor.positive ? '#00E676' : '#FF6B6B',
+                            fontWeight: '600',
+                          }}>
+                            {!factor.isRef && (factor.positive ? '▲ ' : '▼ ')}
+                            {factor.value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Timestamp */}
+                    <div style={{
+                      marginTop: '12px', fontSize: '11px', color: '#475569', textAlign: 'right',
+                    }}>
+                      Cập nhật: {marketRisk.analyzed_at ? new Date(marketRisk.analyzed_at).toLocaleString('vi-VN') : 'N/A'}
+                    </div>
                   </div>
-                  <div className="preview-stats">
-                    <div>📊 15 tín hiệu mới</div>
-                    <div>✅ 78.5% thành công</div>
+                ) : (
+                  <div style={{
+                    padding: '40px 20px', textAlign: 'center',
+                    background: 'linear-gradient(135deg, #0B0F1A 0%, #1a1f3a 100%)',
+                    borderRadius: '0 0 12px 12px',
+                  }}>
+                    <div style={{ fontSize: '32px', marginBottom: '12px' }}>📊</div>
+                    <div style={{ color: '#64748b', fontSize: '14px' }}>Đang tải phân tích thị trường...</div>
+                  </div>
+                )}
                   </div>
                 </div>
               </div>
