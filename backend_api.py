@@ -567,10 +567,7 @@ def signals_endpoint():
 
 @app.route('/api/scan', methods=['POST'])
 def trigger_scan():
-    """
-    """Trigger signal scanner + market risk analysis"""
-    Used by GitHub Actions automation
-    """
+    """Trigger signal scanner + market risk analysis. Used by GitHub Actions automation."""
     try:
         scanner_path = os.path.join(
             os.path.dirname(__file__), 

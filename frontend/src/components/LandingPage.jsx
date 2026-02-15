@@ -417,8 +417,6 @@ export default function LandingPage({ onLogin }) {
                     <div style={{ color: '#64748b', fontSize: '14px' }}>Đang tải phân tích thị trường...</div>
                   </div>
                 )}
-                  </div>
-                </div>
               </div>
             </div>
           </div>
