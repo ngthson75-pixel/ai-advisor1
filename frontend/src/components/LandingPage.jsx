@@ -390,10 +390,15 @@ export default function LandingPage({ onLogin }) {
                         }}>
                           <span style={{ color: '#94a3b8' }}>{factor.label}</span>
                           <span style={{
-                            color: factor.isRef ? '#64748b' : factor.positive ? '#00E676' : '#FF6B6B',
+                            color: factor.isRef ? '#64748b'
+                                 : factor.value?.includes('Chưa có') ? '#64748b'
+                                 : factor.positive ? '#00E676' : '#FF6B6B',
                             fontWeight: '600',
                           }}>
-                            {!factor.isRef && (factor.positive ? '▲ ' : '▼ ')}
+                            {!factor.isRef && (
+                              factor.value?.includes('Chưa có') ? '— '
+                              : factor.positive ? '▲ ' : '▼ '
+                            )}
                             {factor.value}
                           </span>
                         </div>
