@@ -11,6 +11,8 @@ import time
 import logging
 import random
 import os
+import sys
+import json
 
 # CORRECT vnstock 3.3.1 API
 from vnstock import Quote
@@ -480,6 +482,7 @@ def scan_all_stocks():
     all_signals = []
     processed = 0
     failed = 0
+    breadth_data = []  # Thu thập dữ liệu breadth cho Market Risk Analysis
     
     for ticker in TOP_343_STOCKS:
         try:
@@ -495,6 +498,14 @@ def scan_all_stocks():
             
             pullback = check_pullback_strategy(df, ticker)
             ema_cross = check_ema_cross_strategy(df, ticker)
+            
+            # Thu thập closes cho Market Breadth Analysis
+            try:
+                closes_list = df['Close'].tolist()
+                if len(closes_list) >= 2:
+                    breadth_data.append({'ticker': ticker, 'closes': closes_list})
+            except:
+                pass
             
             # Priority only filter
             for signal in pullback:
@@ -519,6 +530,48 @@ def scan_all_stocks():
     logger.info(f"Failed: {failed}")
     logger.info(f"Signals: {len(all_signals)}")
     logger.info("=" * 60)
+    
+    # ── Thu thập Market Breadth Data ──
+    if breadth_data:
+        try:
+            logger.info(f"\n📊 Collecting breadth data from {len(breadth_data)} stocks...")
+            # Import here to avoid circular import issues
+            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from market_risk_analysis import collect_breadth_data
+            collect_breadth_data(breadth_data)
+        except ImportError:
+            # Fallback: save breadth data directly if module not found
+            logger.warning("market_risk_analysis module not found, saving breadth directly...")
+            advance = decline = unchanged = above_ma20 = total = 0
+            for item in breadth_data:
+                closes = item.get('closes', [])
+                if len(closes) < 2:
+                    continue
+                total += 1
+                if closes[-1] > closes[-2]:
+                    advance += 1
+                elif closes[-1] < closes[-2]:
+                    decline += 1
+                else:
+                    unchanged += 1
+                if len(closes) >= 20:
+                    ma20 = sum(closes[-20:]) / 20
+                    if closes[-1] > ma20:
+                        above_ma20 += 1
+            
+            breadth_result = {
+                'date': get_last_trading_day(),
+                'total': total, 'advance': advance, 'decline': decline,
+                'unchanged': unchanged, 'above_ma20': above_ma20,
+                'above_ma20_pct': round(above_ma20 / total * 100, 1) if total > 0 else 0,
+                'generated_at': datetime.now().isoformat(),
+            }
+            breadth_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'market_breadth_eod.json')
+            with open(breadth_path, 'w', encoding='utf-8') as f:
+                json.dump(breadth_result, f, ensure_ascii=False, indent=2)
+            logger.info(f"📊 Breadth saved: {advance} tăng / {decline} giảm / MA20: {above_ma20}/{total}")
+        except Exception as e:
+            logger.error(f"Breadth collection error: {e}")
     
     if len(all_signals) > 0:
         save_signals_to_db(all_signals)

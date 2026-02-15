@@ -34,7 +34,7 @@ CORS(app)
 
 # Register SELL Signal Routes
 register_sell_routes(app)
-print("✅ SELL signal routes registered")
+print("âœ… SELL signal routes registered")
 
 # ========================================================================
 # CONFIGURATION
@@ -44,36 +44,36 @@ print("✅ SELL signal routes registered")
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 if OPENAI_API_KEY:
     openai_client = OpenAI(api_key=OPENAI_API_KEY)
-    print("✅ OpenAI configured")
+    print("âœ… OpenAI configured")
 else:
-    print("⚠️ OPENAI_API_KEY not set")
+    print("âš ï¸ OPENAI_API_KEY not set")
     openai_client = None
 
 # ========================================================================
-# DATABASE CONFIGURATION - ENVIRONMENT-AWARE 🌍
+# DATABASE CONFIGURATION - ENVIRONMENT-AWARE ðŸŒ
 # ========================================================================
 
 ENVIRONMENT = os.getenv('ENVIRONMENT', 'production').lower()
 print(f"\n{'='*70}")
-print(f"🌍 Environment: {ENVIRONMENT.upper()}")
+print(f"ðŸŒ Environment: {ENVIRONMENT.upper()}")
 print(f"{'='*70}")
 
 # Choose database based on environment
 if ENVIRONMENT == 'staging':
     DATABASE_URL = os.getenv('DATABASE_URL_STAGING') or os.getenv('DATABASE_URL', 'sqlite:///signals.db')
-    print("📊 Using STAGING database (Supabase)")
+    print("ðŸ“Š Using STAGING database (Supabase)")
 else:
     DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///signals.db')
-    print("📊 Using PRODUCTION database (Render Postgres)")
+    print("ðŸ“Š Using PRODUCTION database (Render Postgres)")
 
 # Fix PostgreSQL URL for psycopg3 (Python 3.13 compatible)
 if DATABASE_URL and DATABASE_URL.startswith('postgresql://'):
     DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
-    print(f"✅ Using PostgreSQL with psycopg (v3) driver")
+    print(f"âœ… Using PostgreSQL with psycopg (v3) driver")
 
 # Print database URL (first 50 chars for security)
 db_url_display = DATABASE_URL[:50] + "..." if len(DATABASE_URL) > 50 else DATABASE_URL
-print(f"🔗 Database URL: {db_url_display}")
+print(f"ðŸ”— Database URL: {db_url_display}")
 print(f"{'='*70}\n")
 
 # EOD file settings
@@ -247,6 +247,21 @@ class TickerBlacklist(Base):
     added_at = Column(DateTime, default=datetime.now)
     is_active = Column(Boolean, default=True)
 
+class MarketRisk(Base):
+    __tablename__ = 'market_risk'
+    
+    id = Column(Integer, primary_key=True)
+    date = Column(String(20), nullable=False, unique=True)
+    market_mode = Column(String(20), nullable=False)
+    mode_label = Column(String(50))
+    risk_score = Column(Integer)
+    allocation = Column(Integer)
+    description = Column(Text)
+    factors_json = Column(Text)
+    vnindex_value = Column(Float)
+    raw_scores_json = Column(Text)
+    analyzed_at = Column(DateTime, default=datetime.now)
+
 # ========================================================================
 # HELPER FUNCTIONS
 # ========================================================================
@@ -256,7 +271,7 @@ def load_eod_prices():
     global PRICES_CACHE, CACHE_LOADED
     
     if not os.path.exists(EOD_FILE):
-        print(f"⚠️ EOD file not found: {EOD_FILE}")
+        print(f"âš ï¸ EOD file not found: {EOD_FILE}")
         PRICES_CACHE = {}
         CACHE_LOADED = True
         return False
@@ -266,12 +281,12 @@ def load_eod_prices():
             data = json.load(f)
         
         PRICES_CACHE = data.get('prices', {})
-        print(f"✅ Loaded {len(PRICES_CACHE)} prices from EOD file")
+        print(f"âœ… Loaded {len(PRICES_CACHE)} prices from EOD file")
         CACHE_LOADED = True
         return True
         
     except Exception as e:
-        print(f"❌ Error loading EOD file: {e}")
+        print(f"âŒ Error loading EOD file: {e}")
         PRICES_CACHE = {}
         CACHE_LOADED = True
         return False
@@ -305,12 +320,12 @@ def get_portfolio_context(user_id):
         signal_tickers = set([s.ticker for s in signals])
         
         if not portfolios and cash == 0:
-            return "Danh mục: Trống", signal_tickers
+            return "Danh má»¥c: Trá»‘ng", signal_tickers
         
-        context = "DANH MỤC ĐẦU TƯ:\n\n"
+        context = "DANH Má»¤C Äáº¦U TÆ¯:\n\n"
         
         if portfolios:
-            context += "CỔ PHIẾU:\n"
+            context += "Cá»” PHIáº¾U:\n"
             total_cost = 0
             total_value = 0
             
@@ -328,33 +343,33 @@ def get_portfolio_context(user_id):
                 pl = current_value - cost
                 pl_pct = (pl / cost * 100) if cost > 0 else 0
                 
-                in_signal = "✅ [IN BUYSELL SIGNAL]" if p.ticker in signal_tickers else "⚠️ [NOT IN SIGNAL LIST]"
+                in_signal = "âœ… [IN BUYSELL SIGNAL]" if p.ticker in signal_tickers else "âš ï¸ [NOT IN SIGNAL LIST]"
                 
                 context += f"- {p.ticker} {in_signal}: {p.quantity} CP @ {p.avg_price:,.0f} VND\n"
-                context += f"  Giá hiện tại: {current_price:,.0f} VND\n"
+                context += f"  GiÃ¡ hiá»‡n táº¡i: {current_price:,.0f} VND\n"
                 context += f"  P&L: {pl:+,.0f} VND ({pl_pct:+.1f}%)\n"
             
-            context += f"\nTổng giá trị CP: {total_value:,.0f} VND\n"
-            context += f"Lãi/Lỗ: {total_value - total_cost:+,.0f} VND\n"
+            context += f"\nTá»•ng giÃ¡ trá»‹ CP: {total_value:,.0f} VND\n"
+            context += f"LÃ£i/Lá»—: {total_value - total_cost:+,.0f} VND\n"
         
         if cash > 0:
-            context += f"\nTIỀN MẶT: {cash:,.0f} VND\n"
+            context += f"\nTIá»€N Máº¶T: {cash:,.0f} VND\n"
         
         total_assets = (total_value if portfolios else 0) + cash
         if total_assets > 0:
             stock_pct = ((total_value if portfolios else 0) / total_assets * 100)
             cash_pct = (cash / total_assets * 100)
-            context += f"\nTỔNG TÀI SẢN: {total_assets:,.0f} VND\n"
-            context += f"Phân bổ: {stock_pct:.1f}% CP / {cash_pct:.1f}% TM\n"
+            context += f"\nTá»”NG TÃ€I Sáº¢N: {total_assets:,.0f} VND\n"
+            context += f"PhÃ¢n bá»•: {stock_pct:.1f}% CP / {cash_pct:.1f}% TM\n"
         
-        context += f"\n\nCỔ PHIẾU TRONG BUYSELL SIGNAL SYSTEM:\n"
-        context += ", ".join(sorted(signal_tickers)) if signal_tickers else "Chưa có signal nào"
+        context += f"\n\nCá»” PHIáº¾U TRONG BUYSELL SIGNAL SYSTEM:\n"
+        context += ", ".join(sorted(signal_tickers)) if signal_tickers else "ChÆ°a cÃ³ signal nÃ o"
         
         return context, signal_tickers
         
     except Exception as e:
         print(f"Error: {e}")
-        return "Danh mục: Lỗi", set()
+        return "Danh má»¥c: Lá»—i", set()
     finally:
         session.close()
 
@@ -362,7 +377,7 @@ def get_portfolio_context(user_id):
 def chat_with_gpt(message, portfolio_context, signal_tickers):
     """Chat with OpenAI using strict system prompt"""
     if not openai_client:
-        return "Xin lỗi, AI chưa được cấu hình."
+        return "Xin lá»—i, AI chÆ°a Ä‘Æ°á»£c cáº¥u hÃ¬nh."
     
     try:
         system_message = AI_SYSTEM_PROMPT + f"\n\n{portfolio_context}"
@@ -379,7 +394,7 @@ def chat_with_gpt(message, portfolio_context, signal_tickers):
         return response.choices[0].message.content
     except Exception as e:
         print(f"OpenAI error: {e}")
-        return "Xin lỗi, AI không phản hồi được."
+        return "Xin lá»—i, AI khÃ´ng pháº£n há»“i Ä‘Æ°á»£c."
 
 
 # ========================================================================
@@ -459,18 +474,18 @@ def signals_endpoint():
                 })
             
             # Deduplicate: Keep BEST signal per ticker per date (highest strength)
-            seen = {}  # Track: ticker_date → signal
+            seen = {}  # Track: ticker_date â†’ signal
             deduplicated = []
             
             for signal in signals_data:
                 key = f"{signal['ticker']}_{signal['date']}"
                 
                 if key not in seen:
-                    # First signal for this ticker+date → Keep it
+                    # First signal for this ticker+date â†’ Keep it
                     seen[key] = signal
                     deduplicated.append(signal)
                 else:
-                    # Duplicate found → Keep signal with HIGHER strength
+                    # Duplicate found â†’ Keep signal with HIGHER strength
                     existing_strength = seen[key].get('strength', 0)
                     new_strength = signal.get('strength', 0)
                     
@@ -530,7 +545,7 @@ def signals_endpoint():
             session.add(signal)
             session.commit()
             
-            print(f"✅ Signal created: {signal.ticker} ({signal.strategy}) - {signal.date}")
+            print(f"âœ… Signal created: {signal.ticker} ({signal.strategy}) - {signal.date}")
             
             return jsonify({
                 'success': True,
@@ -541,7 +556,7 @@ def signals_endpoint():
             
         except Exception as e:
             session.rollback()
-            print(f"❌ Error creating signal: {e}")
+            print(f"âŒ Error creating signal: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
         finally:
             session.close()
@@ -553,7 +568,7 @@ def signals_endpoint():
 @app.route('/api/scan', methods=['POST'])
 def trigger_scan():
     """
-    Trigger signal scanner manually
+    """Trigger signal scanner + market risk analysis"""
     Used by GitHub Actions automation
     """
     try:
@@ -593,6 +608,54 @@ def trigger_scan():
             'traceback': traceback.format_exc()
         }), 500
 
+        import threading
+        
+        def run_market_risk_after_scan():
+            """Wait for signal scan to finish, then run market risk"""
+            import time
+            time.sleep(60)  # Äá»£i signal scan cháº¡y 1 phÃºt
+            
+            try:
+                from market_risk_analysis import run_market_analysis
+                result = run_market_analysis()
+                
+                # Save to DB
+                session = Session()
+                today = datetime.now().strftime('%Y-%m-%d')
+                existing = session.query(MarketRisk).filter_by(date=today).first()
+                
+                if existing:
+                    existing.market_mode = result['market_mode']
+                    existing.risk_score = result['risk_score']
+                    existing.allocation = result['allocation']
+                    existing.factors_json = json.dumps(result['factors'], ensure_ascii=False)
+                    existing.analyzed_at = datetime.now()
+                else:
+                    session.add(MarketRisk(
+                        date=today,
+                        market_mode=result['market_mode'],
+                        mode_label=result['mode_label'],
+                        risk_score=result['risk_score'],
+                        allocation=result['allocation'],
+                        description=result['description'],
+                        factors_json=json.dumps(result['factors'], ensure_ascii=False),
+                        vnindex_value=result.get('vnindex_detail', {}).get('vnindex'),
+                        raw_scores_json=json.dumps(result['raw_scores']),
+                    ))
+                
+                session.commit()
+                session.close()
+                print("âœ… Market risk analysis saved!")
+                
+            except Exception as e:
+                print(f"âš ï¸ Market risk analysis failed: {e}")
+        
+        # Start market risk in background
+        thread = threading.Thread(target=run_market_risk_after_scan)
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({...}), 202
 
 @app.route('/api/scan/status', methods=['GET'])
 def scan_status():
@@ -855,7 +918,7 @@ def chat():
         return jsonify({
             'success': False,
             'error': str(e),
-            'response': 'Xin lỗi, có lỗi xảy ra.'
+            'response': 'Xin lá»—i, cÃ³ lá»—i xáº£y ra.'
         }), 500
     finally:
         session.close()
@@ -1047,7 +1110,7 @@ def migrate():
         return jsonify({
             'success': True,
             'message': 'Migration successful',
-            'tables': ['signals', 'portfolios', 'cash_positions', 'chat_history']
+            'tables': ['signals', 'portfolios', 'cash_positions', 'chat_history', 'ticker_blacklist', 'market_risk']
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1063,27 +1126,158 @@ def migrate():
 import threading
 from sell_signal_scanner_v2 import SellSignalScannerV2
 
+# ========================================================================
+# MARKET RISK ENDPOINTS
+# ========================================================================
+
+@app.route('/api/market-risk', methods=['GET'])
+def get_market_risk():
+    """Get latest market risk analysis"""
+    session = Session()
+    try:
+        latest = session.query(MarketRisk).order_by(
+            MarketRisk.date.desc()
+        ).first()
+        
+        if not latest:
+            return jsonify({
+                'success': True,
+                'data': None,
+                'message': 'No market analysis available yet'
+            })
+        
+        factors = json.loads(latest.factors_json) if latest.factors_json else []
+        raw_scores = json.loads(latest.raw_scores_json) if latest.raw_scores_json else {}
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'date': latest.date,
+                'market_mode': latest.market_mode,
+                'mode_label': latest.mode_label,
+                'risk_score': latest.risk_score,
+                'allocation': latest.allocation,
+                'description': latest.description,
+                'factors': factors,
+                'vnindex_value': latest.vnindex_value,
+                'raw_scores': raw_scores,
+                'analyzed_at': latest.analyzed_at.isoformat() if latest.analyzed_at else None,
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/market-risk/scan', methods=['POST'])
+def trigger_market_risk_scan():
+    """Trigger market risk analysis"""
+    try:
+        from market_risk_analysis import run_market_analysis
+        
+        result = run_market_analysis()
+        
+        # Save to database
+        session = Session()
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        existing = session.query(MarketRisk).filter_by(date=today).first()
+        
+        if existing:
+            existing.market_mode = result['market_mode']
+            existing.mode_label = result['mode_label']
+            existing.risk_score = result['risk_score']
+            existing.allocation = result['allocation']
+            existing.description = result['description']
+            existing.factors_json = json.dumps(result['factors'], ensure_ascii=False)
+            existing.vnindex_value = result.get('vnindex_detail', {}).get('vnindex')
+            existing.raw_scores_json = json.dumps(result['raw_scores'])
+            existing.analyzed_at = datetime.now()
+        else:
+            new_record = MarketRisk(
+                date=today,
+                market_mode=result['market_mode'],
+                mode_label=result['mode_label'],
+                risk_score=result['risk_score'],
+                allocation=result['allocation'],
+                description=result['description'],
+                factors_json=json.dumps(result['factors'], ensure_ascii=False),
+                vnindex_value=result.get('vnindex_detail', {}).get('vnindex'),
+                raw_scores_json=json.dumps(result['raw_scores']),
+                analyzed_at=datetime.now(),
+            )
+            session.add(new_record)
+        
+        session.commit()
+        
+        return jsonify({
+            'success': True,
+            'data': result,
+            'message': 'Market risk analysis completed'
+        }), 201
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+    finally:
+        try:
+            session.close()
+        except:
+            pass
+
+
+@app.route('/api/market-risk/history', methods=['GET'])
+def get_market_risk_history():
+    """Get market risk history (last N days)"""
+    session = Session()
+    try:
+        days = request.args.get('days', 7, type=int)
+        
+        records = session.query(MarketRisk).order_by(
+            MarketRisk.date.desc()
+        ).limit(days).all()
+        
+        history = []
+        for r in records:
+            history.append({
+                'date': r.date,
+                'market_mode': r.market_mode,
+                'risk_score': r.risk_score,
+                'allocation': r.allocation,
+            })
+        
+        return jsonify({'success': True, 'data': history})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        session.close()
+
 if __name__ == '__main__':
     # Initialize database
     try:
-        print("\n🚀 Starting AI Advisor Backend v3.3 - FIXED...")
+        print("\nðŸš€ Starting AI Advisor Backend v3.3 - FIXED...")
         Base.metadata.create_all(engine)
-        print("✅ Database initialized")
+        print("âœ… Database initialized")
         
         # Load EOD prices
         load_eod_prices()
         
     except Exception as e:
-        print(f"⚠️ Warning: {e}")
+        print(f"âš ï¸ Warning: {e}")
     
     # Get port from environment (CRITICAL for Render!)
     port = int(os.getenv('PORT', 10000))
     
     print(f"\n{'='*70}")
-    print("🚀 AI ADVISOR BACKEND v3.3 - FIXED VERSION")
+    print("ðŸš€ AI ADVISOR BACKEND v3.3 - FIXED VERSION")
     print(f"{'='*70}")
-    print(f"AI: {'✅ GPT-4o-mini (Strict Rules)' if openai_client else '❌ Not configured'}")
-    print(f"EOD File: {'✅ Loaded' if CACHE_LOADED and PRICES_CACHE else '⚠️ Not found'}")
+    print(f"AI: {'âœ… GPT-4o-mini (Strict Rules)' if openai_client else 'âŒ Not configured'}")
+    print(f"EOD File: {'âœ… Loaded' if CACHE_LOADED and PRICES_CACHE else 'âš ï¸ Not found'}")
     print(f"Tickers: {len(PRICES_CACHE)}")
     print(f"Database: {DATABASE_URL}")
     print(f"Host: 0.0.0.0 (Render-ready)")
