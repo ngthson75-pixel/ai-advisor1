@@ -204,10 +204,6 @@ class Signal(Base):
     date = Column(String(20))
     action = Column(String(10), default='BUY')
     created_at = Column(DateTime, default=datetime.now)
-    
-    # Signal code tracking (Hybrid FIFO) - PATCHED
-    signal_code = Column(String(50), unique=True)  # e.g., VCB-1001
-    buy_signal_code = Column(String(50))  # For SELL signals to link to BUY
 
 
 class Portfolio(Base):
@@ -474,10 +470,7 @@ def signals_endpoint():
                     'rsi': round(s.rsi, 1) if s.rsi else None,
                     'date': s.date or (s.created_at.strftime('%Y-%m-%d') if s.created_at else None),
                     'action': s.action,
-                    'created_at': s.created_at.isoformat() if s.created_at else None,
-                    # Signal code fields (NEW)
-                    'signal_code': s.signal_code,
-                    'buy_signal_code': s.buy_signal_code
+                    'created_at': s.created_at.isoformat() if s.created_at else None
                 })
             
             # Deduplicate: Keep BEST signal per ticker per date (highest strength)
@@ -550,12 +543,6 @@ def signals_endpoint():
             
             # Save to database
             session.add(signal)
-            session.flush()  # Get ID
-            
-            # Generate signal_code for BUY
-            if signal.action == 'BUY' and not signal.signal_code:
-                signal.signal_code = f"{signal.ticker}-{signal.id}"
-            
             session.commit()
             
             print(f"âœ… Signal created: {signal.ticker} ({signal.strategy}) - {signal.date}")
@@ -563,7 +550,6 @@ def signals_endpoint():
             return jsonify({
                 'success': True,
                 'id': signal.id,
-                'signal_code': signal.signal_code,  # NEW
                 'ticker': signal.ticker,
                 'message': 'Signal created successfully'
             }), 201
@@ -578,157 +564,6 @@ def signals_endpoint():
 # ========================================================================
 # AUTOMATION ENDPOINTS (GitHub Actions)
 # ========================================================================
-
-
-# ========================================================================
-# SIGNAL CODE ENDPOINTS (HYBRID FIFO) - NEW
-# ========================================================================
-
-@app.route('/api/signals/open-buys/<ticker>', methods=['GET'])
-def get_open_buy_signals(ticker):
-    """
-    Get all open/partial BUY signals for a ticker
-    Used in SELL form dropdown for manual signal selection
-    """
-    session = Session()
-    try:
-        ticker = ticker.upper().strip()
-        
-        # Get open/partial BUY signals, ordered by FIFO (oldest first)
-        signals = session.query(Signal).filter(
-            Signal.ticker == ticker,
-            Signal.action == 'BUY'
-        ).order_by(
-            Signal.date.asc(),
-            Signal.created_at.asc()
-        ).all()
-        
-        result = []
-        for s in signals:
-            result.append({
-                'id': s.id,
-                'signal_code': s.signal_code,
-                'ticker': s.ticker,
-                'strategy': s.strategy,
-                'entry_price': round(s.entry_price / 100) * 100,
-                'date': s.date,
-                'display_text': f"{s.signal_code or f'#{s.id}'} @ {round(s.entry_price/1000, 1)}k ({s.strategy})"
-            })
-        
-        return jsonify({
-            'success': True,
-            'signals': result,
-            'count': len(result)
-        })
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        session.close()
-
-
-@app.route('/api/signals/sell', methods=['POST'])
-def create_sell_signal():
-    """
-    Create SELL signal with HYBRID approach:
-    - If buy_signal_code provided → Use that specific signal (Manual)
-    - If not provided → Auto-match oldest open signal (FIFO)
-    
-    Request body:
-    {
-        "ticker": "VCB",
-        "sell_price": 95000,
-        "sell_reason": "TAKE_PROFIT",  // or "STOP_LOSS", "MANUAL"
-        "sell_pct": 100,  // Optional: 0-100, default 100
-        "buy_signal_code": "VCB-1001"  // OPTIONAL - for manual selection
-    }
-    """
-    session = Session()
-    try:
-        data = request.json
-        
-        ticker = data.get('ticker')
-        sell_price = data.get('sell_price')
-        sell_reason = data.get('sell_reason', 'MANUAL')
-        sell_pct = data.get('sell_pct', 100)
-        buy_signal_code = data.get('buy_signal_code')  # OPTIONAL
-        
-        # Validate
-        if not ticker or not sell_price:
-            return jsonify({'error': 'Missing ticker or sell_price'}), 400
-        
-        if sell_pct < 0 or sell_pct > 100:
-            return jsonify({'error': 'sell_pct must be 0-100'}), 400
-        
-        ticker = ticker.upper().strip()
-        
-        # HYBRID APPROACH: Find BUY signal
-        if buy_signal_code:
-            # MANUAL: User specified signal code
-            buy_signal = session.query(Signal).filter_by(
-                signal_code=buy_signal_code,
-                action='BUY'
-            ).first()
-            
-            if not buy_signal:
-                return jsonify({'error': f'Signal {buy_signal_code} not found'}), 404
-            
-            selection_method = 'manual'
-        else:
-            # AUTO FIFO: Find oldest open signal for this ticker
-            buy_signal = session.query(Signal).filter(
-                Signal.ticker == ticker,
-                Signal.action == 'BUY'
-            ).order_by(
-                Signal.date.asc(),
-                Signal.created_at.asc()
-            ).first()
-            
-            if not buy_signal:
-                return jsonify({'error': f'No BUY signal found for {ticker}'}), 404
-            
-            selection_method = 'auto_fifo'
-        
-        # Create SELL signal
-        sell_signal = Signal(
-            ticker=ticker,
-            strategy=sell_reason,
-            entry_price=buy_signal.entry_price,
-            stop_loss=sell_price,
-            take_profit=sell_price,
-            risk_reward=0,
-            strength=100 if sell_reason == 'STOP_LOSS' else 80,
-            stock_type=buy_signal.stock_type,
-            date=datetime.now().strftime('%Y-%m-%d'),
-            action='SELL',
-            buy_signal_code=buy_signal.signal_code  # Link to BUY signal
-        )
-        
-        session.add(sell_signal)
-        session.commit()
-        
-        return jsonify({
-            'success': True,
-            'selection_method': selection_method,
-            'sell_signal': {
-                'id': sell_signal.id,
-                'ticker': ticker,
-                'sell_price': sell_price,
-                'sell_reason': sell_reason,
-                'sell_pct': sell_pct
-            },
-            'buy_signal_linked': {
-                'id': buy_signal.id,
-                'signal_code': buy_signal.signal_code
-            }
-        }), 201
-        
-    except Exception as e:
-        session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        session.close()
-
 
 @app.route('/api/scan', methods=['POST'])
 def trigger_scan():
