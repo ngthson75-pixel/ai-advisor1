@@ -477,7 +477,10 @@ def signals_endpoint():
                     'created_at': s.created_at.isoformat() if s.created_at else None,
                     # Signal code fields (NEW)
                     'signal_code': s.signal_code,
-                    'buy_signal_code': s.buy_signal_code
+                    'buy_signal_code': s.buy_signal_code,
+                    # ADD THESE 2 LINES:
+                    'status': getattr(s, 'status', 'open'),
+                    'position_pct': getattr(s, 'position_pct', 100)
                 })
             
             # Deduplicate: Keep BEST signal per ticker per date (highest strength)
