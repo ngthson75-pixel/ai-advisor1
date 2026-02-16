@@ -8,7 +8,7 @@ export default function SignalsModule() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [scanning, setScanning] = useState(false);
-  const [activeTab, setActiveTab] = useState('buy');
+  const [activeTab, setActiveTab] = useState('buy'); // NEW: Tab state
 
   const fetchSignals = async () => {
     try {
@@ -37,7 +37,7 @@ export default function SignalsModule() {
       
       if (data.success) {
         alert('Đã bắt đầu quét! Vui lòng đợi 2-3 phút và refresh lại.');
-        setTimeout(fetchSignals, 180000);
+        setTimeout(fetchSignals, 180000); // Auto refresh sau 3 phút
       }
     } catch (err) {
       alert('Lỗi khi quét: ' + err.message);
@@ -55,26 +55,31 @@ export default function SignalsModule() {
   const sellSignals = signals.filter(s => s.action === 'SELL');
   const displaySignals = activeTab === 'buy' ? buySignals : sellSignals;
 
-  // Helper function - Format exit reason for SELL signals
+  // ============================================================================
+  // NEW: Helper function - Format exit reason for SELL signals
+  // ============================================================================
   const getExitReasonDisplay = (strategy) => {
     if (strategy === 'STOP_LOSS') {
-      return { text: 'Cắt lỗ (SL)', icon: '🔴', color: '#ef4444', bgColor: '#fee2e2' };
+      return {
+        text: 'Cắt lỗ (SL)',
+        icon: '🔴',
+        color: '#ef4444',
+        bgColor: '#fee2e2'
+      };
     } else if (strategy === 'TAKE_PROFIT') {
-      return { text: 'Chốt lời (TP)', icon: '🟢', color: '#10b981', bgColor: '#dcfce7' };
+      return {
+        text: 'Chốt lời (TP)',
+        icon: '🟢',
+        color: '#10b981',
+        bgColor: '#dcfce7'
+      };
     }
-    return { text: 'Khác', icon: '⚪', color: '#6b7280', bgColor: '#f3f4f6' };
-  };
-
-  // NEW: Helper function - Format status display
-  const getStatusDisplay = (status) => {
-    if (status === 'open') {
-      return { text: 'Mở', icon: '🟢', color: '#10b981', bgColor: '#dcfce7' };
-    } else if (status === 'closed') {
-      return { text: 'Đóng', icon: '🔴', color: '#ef4444', bgColor: '#fee2e2' };
-    } else if (status === 'partial') {
-      return { text: 'Bán 1 phần', icon: '🟡', color: '#f59e0b', bgColor: '#fef3c7' };
-    }
-    return { text: 'Mở', icon: '🟢', color: '#10b981', bgColor: '#dcfce7' };
+    return {
+      text: 'Khác',
+      icon: '⚪',
+      color: '#6b7280',
+      bgColor: '#f3f4f6'
+    };
   };
 
   if (loading) {
@@ -120,7 +125,7 @@ export default function SignalsModule() {
         </button>
       </div>
 
-      {/* Tabs */}
+      {/* NEW: Tabs */}
       <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         <button
           onClick={() => setActiveTab('buy')}
@@ -253,6 +258,7 @@ export default function SignalsModule() {
               <tr>
                 <th>Mã CK</th>
                 <th>Giá vào</th>
+                {/* UPDATED: Different headers for BUY vs SELL */}
                 {activeTab === 'buy' ? (
                   <>
                     <th>Stop Loss</th>
@@ -266,22 +272,15 @@ export default function SignalsModule() {
                 )}
                 <th>Score</th>
                 <th>Ngày</th>
-                {/* NEW: Position tracking columns at the END (BUY only) */}
-                {activeTab === 'buy' && (
-                  <>
-                    <th>Mã Tín Hiệu</th>
-                    <th>Trạng Thái</th>
-                    <th>Vị Thế</th>
-                  </>
-                )}
               </tr>
             </thead>
             <tbody>
               {displaySignals.map((signal, idx) => {
+                // Calculate exit reason for SELL signals
                 const exitReason = getExitReasonDisplay(signal.strategy);
-                const exitPrice = signal.strategy === 'STOP_LOSS' ? signal.stop_loss : signal.take_profit;
-                const statusDisplay = getStatusDisplay(signal.status);
-                const positionPct = signal.position_pct || 100;
+                const exitPrice = signal.strategy === 'STOP_LOSS' 
+                  ? signal.stop_loss 
+                  : signal.take_profit;
 
                 return (
                   <tr key={signal.id || idx}>
@@ -298,21 +297,25 @@ export default function SignalsModule() {
                     {/* Entry Price */}
                     <td>{signal.entry_price?.toLocaleString()}</td>
 
-                    {/* Different cells for BUY vs SELL */}
+                    {/* UPDATED: Different cells for BUY vs SELL */}
                     {activeTab === 'buy' ? (
                       <>
+                        {/* BUY: Show Stop Loss */}
                         <td style={{ color: '#ef4444' }}>
                           {signal.stop_loss?.toLocaleString()}
                         </td>
+                        {/* BUY: Show Take Profit */}
                         <td style={{ color: '#10b981' }}>
                           {signal.take_profit?.toLocaleString()}
                         </td>
                       </>
                     ) : (
                       <>
+                        {/* SELL: Show Exit Price */}
                         <td style={{ fontWeight: '600' }}>
                           {exitPrice?.toLocaleString()}
                         </td>
+                        {/* SELL: Show Exit Reason Badge */}
                         <td>
                           <span style={{
                             display: 'inline-flex',
@@ -352,79 +355,6 @@ export default function SignalsModule() {
                     <td style={{ color: '#94a3b8', fontSize: '13px' }}>
                       {signal.date ? new Date(signal.date).toLocaleDateString('vi-VN') : 'N/A'}
                     </td>
-
-                    {/* NEW: Position tracking columns at the END (BUY only) */}
-                    {activeTab === 'buy' && (
-                      <>
-                        {/* Signal Code */}
-                        <td>
-                          <span style={{
-                            fontFamily: 'monospace',
-                            fontSize: '13px',
-                            padding: '6px 10px',
-                            backgroundColor: '#0f172a',
-                            color: '#60a5fa',
-                            borderRadius: '6px',
-                            border: '1px solid #1e40af',
-                            fontWeight: '600',
-                            letterSpacing: '0.5px'
-                          }}>
-                            {signal.signal_code || `#${signal.id}`}
-                          </span>
-                        </td>
-
-                        {/* Status */}
-                        <td>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            padding: '6px 12px',
-                            borderRadius: '16px',
-                            fontSize: '13px',
-                            fontWeight: '600',
-                            backgroundColor: statusDisplay.bgColor,
-                            color: statusDisplay.color,
-                            gap: '6px'
-                          }}>
-                            <span>{statusDisplay.icon}</span>
-                            {statusDisplay.text}
-                          </span>
-                        </td>
-
-                        {/* Position */}
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {/* Progress bar */}
-                            <div style={{
-                              width: '80px',
-                              height: '8px',
-                              backgroundColor: '#1e293b',
-                              borderRadius: '4px',
-                              overflow: 'hidden',
-                              border: '1px solid #334155'
-                            }}>
-                              <div style={{
-                                width: `${positionPct}%`,
-                                height: '100%',
-                                backgroundColor: positionPct === 100 ? '#10b981' :
-                                               positionPct === 0 ? '#6b7280' : '#f59e0b',
-                                transition: 'width 0.3s ease'
-                              }} />
-                            </div>
-                            {/* Percentage */}
-                            <span style={{
-                              fontWeight: '600',
-                              fontSize: '13px',
-                              color: positionPct === 100 ? '#10b981' :
-                                     positionPct === 0 ? '#6b7280' : '#f59e0b',
-                              minWidth: '45px'
-                            }}>
-                              {positionPct}%
-                            </span>
-                          </div>
-                        </td>
-                      </>
-                    )}
                   </tr>
                 );
               })}
@@ -436,7 +366,7 @@ export default function SignalsModule() {
       <style jsx>{`
         .signals-module {
           padding: 20px;
-          max-width: 1600px;
+          max-width: 1400px;
           margin: 0 auto;
         }
 
