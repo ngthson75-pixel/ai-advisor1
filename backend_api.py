@@ -478,6 +478,11 @@ def signals_endpoint():
                     # Signal code fields (NEW)
                     'signal_code': s.signal_code,
                     'buy_signal_code': s.buy_signal_code
+                     # --- THÊM MỚI: Signal tracking fields ---
+                    'signal_code': getattr(s, 'signal_code', None) or f"{s.ticker}-{s.id}",
+                    'buy_signal_code': getattr(s, 'buy_signal_code', None),
+                    'status': getattr(s, 'status', None) or ('open' if s.action == 'BUY' else 'closed'),
+                    'position_pct': getattr(s, 'position_pct', None) or (100 if s.action == 'BUY' else 0),
                 })
             
             # Deduplicate: Keep BEST signal per ticker per date (highest strength)
@@ -548,33 +553,107 @@ def signals_endpoint():
                 action=data.get('action', 'BUY')
             )
             
-            # Save to database
+           # Save to database
             session.add(signal)
-            session.flush()  # Get ID
+            session.flush()  # Get ID trước khi commit
             
-            # Generate signal_code for BUY
-            if signal.action == 'BUY' and not signal.signal_code:
-                signal.signal_code = f"{signal.ticker}-{signal.id}"
+            # Auto-generate signal_code và set defaults cho BUY
+            if signal.action == 'BUY':
+                from sqlalchemy import text as _text
+                session.execute(
+                    _text("UPDATE signals SET signal_code = :code, status = 'open', position_pct = 100 WHERE id = :id"),
+                    {'code': f"{signal.ticker}-{signal.id}", 'id': signal.id}
+                )
+            
+            # --- MỚI: Auto-update BUY status khi tạo SELL signal ---
+            buy_update_info = None
+            if signal.action == 'SELL':
+                from sqlalchemy import text as _text
+                # Set SELL defaults
+                session.execute(
+                    _text("UPDATE signals SET status = 'closed', position_pct = 0 WHERE id = :id"),
+                    {'id': signal.id}
+                )
+                # Update BUY signal tương ứng (FIFO)
+                buy_update_info = auto_update_buy_status(signal.ticker, session)
+                # Link SELL → BUY
+                if buy_update_info:
+                    session.execute(
+                        _text("UPDATE signals SET buy_signal_code = :code WHERE id = :id"),
+                        {'code': buy_update_info['buy_signal_code'], 'id': signal.id}
+                    )
+            # --- KẾT THÚC ---
             
             session.commit()
             
-            print(f"âœ… Signal created: {signal.ticker} ({signal.strategy}) - {signal.date}")
+            print(f"✅ Signal created: {signal.ticker} ({signal.action}) - {signal.date}")
+            if buy_update_info:
+                print(f"   └─ BUY {buy_update_info['buy_signal_code']} → closed")
             
-            return jsonify({
+            response_data = {
                 'success': True,
                 'id': signal.id,
-                'signal_code': signal.signal_code,  # NEW
                 'ticker': signal.ticker,
+                'action': signal.action,
                 'message': 'Signal created successfully'
-            }), 201
+            }
+            if buy_update_info:
+                response_data['buy_signal_updated'] = buy_update_info
             
-        except Exception as e:
-            session.rollback()
-            print(f"âŒ Error creating signal: {e}")
-            return jsonify({'success': False, 'error': str(e)}), 500
-        finally:
-            session.close()
+            return jsonify(response_data), 201
 
+# ========================================================================
+# HELPER: AUTO-UPDATE BUY STATUS KHI CÓ SELL SIGNAL
+# ========================================================================
+
+def auto_update_buy_status(ticker, session):
+    """
+    Tự động update BUY signal cũ nhất (FIFO) sang closed khi có SELL signal mới.
+    """
+    try:
+        from sqlalchemy import text
+        
+        # Tìm BUY signal cũ nhất còn mở (FIFO)
+        find_sql = text("""
+            SELECT id, ticker, signal_code, status, position_pct
+            FROM signals
+            WHERE ticker = :ticker
+              AND action = 'BUY'
+              AND (status = 'open' OR status = 'partial' OR status IS NULL)
+            ORDER BY date ASC, created_at ASC
+            LIMIT 1
+        """)
+        
+        row = session.execute(find_sql, {'ticker': ticker}).fetchone()
+        
+        if not row:
+            print(f"⚠️  No open BUY signal found for {ticker}")
+            return None
+        
+        buy_id = row[0]
+        buy_signal_code = row[2] or f"{ticker}-{buy_id}"
+        old_status = row[3] or 'open'
+        
+        # Update BUY → closed
+        update_sql = text("""
+            UPDATE signals SET status = 'closed', position_pct = 0
+            WHERE id = :buy_id
+        """)
+        session.execute(update_sql, {'buy_id': buy_id})
+        
+        print(f"✅ BUY {buy_signal_code}: {old_status} → closed")
+        
+        return {
+            'buy_id': buy_id,
+            'buy_signal_code': buy_signal_code,
+            'old_status': old_status,
+            'new_status': 'closed',
+            'new_pct': 0
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in auto_update_buy_status for {ticker}: {e}")
+        return None
 # ========================================================================
 # AUTOMATION ENDPOINTS (GitHub Actions)
 # ========================================================================
