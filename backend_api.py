@@ -475,14 +475,11 @@ def signals_endpoint():
                     'date': s.date or (s.created_at.strftime('%Y-%m-%d') if s.created_at else None),
                     'action': s.action,
                     'created_at': s.created_at.isoformat() if s.created_at else None,
-                    # Signal code fields (NEW)
-                    'signal_code': s.signal_code,
-                    'buy_signal_code': s.buy_signal_code
-                     # --- THÊM MỚI: Signal tracking fields ---
+                    # Signal tracking fields
                     'signal_code': getattr(s, 'signal_code', None) or f"{s.ticker}-{s.id}",
                     'buy_signal_code': getattr(s, 'buy_signal_code', None),
                     'status': getattr(s, 'status', None) or ('open' if s.action == 'BUY' else 'closed'),
-                    'position_pct': getattr(s, 'position_pct', None) or (100 if s.action == 'BUY' else 0),
+                    'position_pct': getattr(s, 'position_pct', None) if getattr(s, 'position_pct', None) is not None else (100 if s.action == 'BUY' else 0),
                 })
             
             # Deduplicate: Keep BEST signal per ticker per date (highest strength)
@@ -553,7 +550,7 @@ def signals_endpoint():
                 action=data.get('action', 'BUY')
             )
             
-           # Save to database
+            # Save to database
             session.add(signal)
             session.flush()  # Get ID trước khi commit
             
@@ -601,6 +598,14 @@ def signals_endpoint():
                 response_data['buy_signal_updated'] = buy_update_info
             
             return jsonify(response_data), 201
+            
+        except Exception as e:
+            session.rollback()
+            print(f"❌ Error creating signal: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+        finally:
+            session.close()
+
 
 # ========================================================================
 # HELPER: AUTO-UPDATE BUY STATUS KHI CÓ SELL SIGNAL
