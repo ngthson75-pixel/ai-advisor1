@@ -22,8 +22,13 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from vnstock import Vnstock
 
-# SELL Signal Integration
-from backend_sell_api import register_sell_routes
+# SELL Signal Integration (graceful import)
+try:
+    from backend_sell_api import register_sell_routes
+    _has_sell_api = True
+except ImportError:
+    _has_sell_api = False
+    print('⚠️  backend_sell_api not found - using built-in sell routes')
 
 # ========================================================================
 # FLASK APP INITIALIZATION
@@ -32,9 +37,10 @@ from backend_sell_api import register_sell_routes
 app = Flask(__name__)
 CORS(app)
 
-# Register SELL Signal Routes
-register_sell_routes(app)
-print("âœ… SELL signal routes registered")
+# Register SELL Signal Routes (only if external file exists)
+if _has_sell_api:
+    register_sell_routes(app)
+    print("✅ SELL signal routes registered from backend_sell_api")
 
 # ========================================================================
 # CONFIGURATION
@@ -208,6 +214,9 @@ class Signal(Base):
     # Signal code tracking (Hybrid FIFO) - PATCHED
     signal_code = Column(String(50), unique=True)  # e.g., VCB-1001
     buy_signal_code = Column(String(50))  # For SELL signals to link to BUY
+    # Position tracking - MUST be in model for ORM to load from DB
+    status = Column(String(20), default='open')       # open / partial / closed
+    position_pct = Column(Integer, default=100)        # 0-100%
 
 
 class Portfolio(Base):
@@ -475,12 +484,11 @@ def signals_endpoint():
                     'date': s.date or (s.created_at.strftime('%Y-%m-%d') if s.created_at else None),
                     'action': s.action,
                     'created_at': s.created_at.isoformat() if s.created_at else None,
-                    # Signal code fields (NEW)
-                    'signal_code': s.signal_code,
+                    # Signal tracking fields (status/position_pct now in model)
+                    'signal_code': s.signal_code or f"{s.ticker}-{s.id}",
                     'buy_signal_code': s.buy_signal_code,
-                    # ADD THESE 2 LINES:
-                    'status': getattr(s, 'status', 'open'),
-                    'position_pct': getattr(s, 'position_pct', 100)
+                    'status': s.status or ('open' if s.action == 'BUY' else 'closed'),
+                    'position_pct': s.position_pct if s.position_pct is not None else (100 if s.action == 'BUY' else 0),
                 })
             
             # Deduplicate: Keep BEST signal per ticker per date (highest strength)
@@ -553,31 +561,107 @@ def signals_endpoint():
             
             # Save to database
             session.add(signal)
-            session.flush()  # Get ID
+            session.flush()  # Get ID trước khi commit
             
-            # Generate signal_code for BUY
-            if signal.action == 'BUY' and not signal.signal_code:
+            # Set signal code và defaults qua ORM (không dùng raw SQL để tránh cache issue)
+            if signal.action == 'BUY':
                 signal.signal_code = f"{signal.ticker}-{signal.id}"
+                signal.status = 'open'
+                signal.position_pct = 100
+            
+            # --- AUTO-UPDATE BUY STATUS khi tạo SELL signal ---
+            buy_update_info = None
+            if signal.action == 'SELL':
+                signal.status = 'closed'
+                signal.position_pct = 0
+                # Update BUY signal tương ứng (FIFO)
+                buy_update_info = auto_update_buy_status(signal.ticker, session)
+                # Link SELL → BUY
+                if buy_update_info:
+                    signal.buy_signal_code = buy_update_info['buy_signal_code']
+            # --- KẾT THÚC ---
             
             session.commit()
             
-            print(f"âœ… Signal created: {signal.ticker} ({signal.strategy}) - {signal.date}")
+            print(f"✅ Signal created: {signal.ticker} ({signal.action}) - {signal.date}")
+            if buy_update_info:
+                print(f"   └─ BUY {buy_update_info['buy_signal_code']} → closed")
             
-            return jsonify({
+            response_data = {
                 'success': True,
                 'id': signal.id,
-                'signal_code': signal.signal_code,  # NEW
                 'ticker': signal.ticker,
+                'action': signal.action,
                 'message': 'Signal created successfully'
-            }), 201
+            }
+            if buy_update_info:
+                response_data['buy_signal_updated'] = buy_update_info
+            
+            return jsonify(response_data), 201
             
         except Exception as e:
             session.rollback()
-            print(f"âŒ Error creating signal: {e}")
+            print(f"❌ Error creating signal: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
         finally:
             session.close()
 
+
+# ========================================================================
+# HELPER: AUTO-UPDATE BUY STATUS KHI CÓ SELL SIGNAL
+# ========================================================================
+
+def auto_update_buy_status(ticker, session):
+    """
+    Tự động update BUY signal cũ nhất (FIFO) sang closed khi có SELL signal mới.
+    Dùng ORM query để tránh session cache issue.
+    """
+    try:
+        # Tìm BUY signal cũ nhất còn mở (FIFO) - dùng ORM
+        buy_signal = session.query(Signal).filter(
+            Signal.ticker == ticker,
+            Signal.action == 'BUY',
+            Signal.status.in_(['open', 'partial'])
+        ).order_by(
+            Signal.date.asc(),
+            Signal.created_at.asc()
+        ).first()
+        
+        # Nếu không có status (cũ), tìm không lọc status
+        if not buy_signal:
+            buy_signal = session.query(Signal).filter(
+                Signal.ticker == ticker,
+                Signal.action == 'BUY',
+                Signal.status == None
+            ).order_by(
+                Signal.date.asc(),
+                Signal.created_at.asc()
+            ).first()
+        
+        if not buy_signal:
+            print(f"⚠️  No open BUY signal found for {ticker}")
+            return None
+        
+        old_status = buy_signal.status or 'open'
+        buy_signal_code = buy_signal.signal_code or f"{ticker}-{buy_signal.id}"
+        
+        # Update BUY → closed qua ORM (không raw SQL)
+        buy_signal.status = 'closed'
+        buy_signal.position_pct = 0
+        
+        print(f"✅ BUY {buy_signal_code}: {old_status} → closed")
+        
+        return {
+            'buy_id': buy_signal.id,
+            'buy_signal_code': buy_signal_code,
+            'old_status': old_status,
+            'new_status': 'closed',
+            'new_pct': 0
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in auto_update_buy_status for {ticker}: {e}")
+        return None
 # ========================================================================
 # AUTOMATION ENDPOINTS (GitHub Actions)
 # ========================================================================
@@ -697,8 +781,8 @@ def create_sell_signal():
             ticker=ticker,
             strategy=sell_reason,
             entry_price=buy_signal.entry_price,
-            stop_loss=sell_price,
-            take_profit=sell_price,
+            stop_loss=sell_price if sell_reason == 'STOP_LOSS' else buy_signal.stop_loss,
+            take_profit=sell_price if sell_reason == 'TAKE_PROFIT' else buy_signal.take_profit,
             risk_reward=0,
             strength=100 if sell_reason == 'STOP_LOSS' else 80,
             stock_type=buy_signal.stock_type,
@@ -708,6 +792,22 @@ def create_sell_signal():
         )
         
         session.add(sell_signal)
+        session.flush()  # Get sell_signal.id
+        
+        # Set SELL status qua ORM
+        sell_signal.status = 'closed'
+        sell_signal.position_pct = 0
+        
+        # --- AUTO-UPDATE BUY STATUS (FIFO) qua ORM ---
+        current_pct = buy_signal.position_pct if buy_signal.position_pct is not None else 100
+        new_pct = max(0, current_pct - sell_pct)
+        new_status = 'closed' if new_pct == 0 else 'partial'
+        
+        buy_signal.status = new_status
+        buy_signal.position_pct = new_pct
+        print(f"✅ BUY {buy_signal.signal_code}: {current_pct}% → {new_status} ({new_pct}%)")
+        # --- KẾT THÚC AUTO-UPDATE ---
+        
         session.commit()
         
         return jsonify({
@@ -720,9 +820,12 @@ def create_sell_signal():
                 'sell_reason': sell_reason,
                 'sell_pct': sell_pct
             },
-            'buy_signal_linked': {
+            'buy_signal_updated': {
                 'id': buy_signal.id,
-                'signal_code': buy_signal.signal_code
+                'signal_code': buy_signal.signal_code,
+                'previous_pct': current_pct,
+                'new_status': new_status,
+                'new_pct': new_pct
             }
         }), 201
         
@@ -821,6 +924,69 @@ def trigger_scan():
         thread.start()
         
         return jsonify({...}), 202
+
+@app.route('/api/scan-sell', methods=['POST'])
+def trigger_sell_scan():
+    """
+    Trigger SELL signal scanner. Called by GitHub Actions hourly.
+    Scans all open BUY signals and creates SELL signals if SL/TP hit.
+    """
+    try:
+        scanner_path = os.path.join(
+            os.path.dirname(__file__),
+            'scripts',
+            'sell_signal_scanner.py'
+        )
+        
+        if not os.path.exists(scanner_path):
+            # Fallback: Run inline sell check
+            session = Session()
+            try:
+                # Get all open BUY signals
+                open_buys = session.query(Signal).filter(
+                    Signal.action == 'BUY',
+                    Signal.status.in_(['open', 'partial'])
+                ).all()
+                
+                # Also get BUY signals with no status (legacy)
+                legacy_buys = session.query(Signal).filter(
+                    Signal.action == 'BUY',
+                    Signal.status == None
+                ).all()
+                
+                all_open = open_buys + legacy_buys
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'Sell scanner script not found. {len(all_open)} open BUY signals tracked.',
+                    'open_signals': len(all_open),
+                    'note': 'Deploy sell_signal_scanner.py to scripts/ for full automation'
+                })
+            finally:
+                session.close()
+        
+        process = subprocess.Popen(
+            ['python', scanner_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=os.path.dirname(__file__)
+        )
+        
+        return jsonify({
+            'success': True,
+            'status': 'scanning',
+            'message': 'SELL signal scanner started.',
+            'process_id': process.pid
+        }), 202
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
 
 @app.route('/api/scan/status', methods=['GET'])
 def scan_status():
@@ -1282,14 +1448,89 @@ def migrate():
 
 
 # ========================================================================
-# APPLICATION STARTUP
+# SYNC SELL STATUS - Batch update BUY signals dựa trên SELL signals có sẵn
 # ========================================================================
-# ============================================================================
-# SELL SIGNAL SCANNER ENDPOINT
-# ============================================================================
 
-import threading
-from sell_signal_scanner_v2 import SellSignalScannerV2
+@app.route('/api/signals/sync-sell-status', methods=['POST'])
+def sync_sell_status():
+    """Batch update BUY signals status dua tren SELL signals co san trong DB."""
+    session = Session()
+    try:
+        sell_signals = session.query(Signal).filter(
+            Signal.action == 'SELL'
+        ).order_by(Signal.date.asc()).all()
+
+        updated = []
+        skipped = []
+        errors = []
+
+        for sell in sell_signals:
+            try:
+                buy = session.query(Signal).filter(
+                    Signal.ticker == sell.ticker,
+                    Signal.action == 'BUY',
+                    Signal.status.in_(['open', 'partial'])
+                ).order_by(
+                    Signal.date.asc(),
+                    Signal.created_at.asc()
+                ).first()
+
+                if not buy:
+                    buy = session.query(Signal).filter(
+                        Signal.ticker == sell.ticker,
+                        Signal.action == 'BUY',
+                        Signal.status == None
+                    ).order_by(
+                        Signal.date.asc(),
+                        Signal.created_at.asc()
+                    ).first()
+
+                if not buy:
+                    skipped.append({'ticker': sell.ticker, 'sell_date': sell.date})
+                    continue
+
+                old_status = buy.status or 'open'
+                buy_code = buy.signal_code or f"{buy.ticker}-{buy.id}"
+
+                buy.status = 'closed'
+                buy.position_pct = 0
+
+                if not sell.buy_signal_code:
+                    sell.buy_signal_code = buy_code
+                sell.status = 'closed'
+                sell.position_pct = 0
+
+                updated.append({
+                    'ticker': sell.ticker,
+                    'buy_code': buy_code,
+                    'sell_date': sell.date,
+                    'old_status': old_status
+                })
+
+            except Exception as e:
+                errors.append({'ticker': sell.ticker, 'error': str(e)})
+
+        session.commit()
+
+        return jsonify({
+            'success': True,
+            'summary': {
+                'total_sell_signals': len(sell_signals),
+                'updated': len(updated),
+                'skipped': len(skipped),
+                'errors': len(errors)
+            },
+            'updated': updated,
+            'skipped': skipped[:10],
+            'errors': errors
+        })
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        session.close()
+
 
 # ========================================================================
 # MARKET RISK ENDPOINTS
