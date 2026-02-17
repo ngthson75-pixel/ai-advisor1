@@ -1448,14 +1448,89 @@ def migrate():
 
 
 # ========================================================================
-# APPLICATION STARTUP
+# SYNC SELL STATUS - Batch update BUY signals dựa trên SELL signals có sẵn
 # ========================================================================
-# ============================================================================
-# SELL SIGNAL SCANNER ENDPOINT
-# ============================================================================
 
-import threading
-from sell_signal_scanner_v2 import SellSignalScannerV2
+@app.route('/api/signals/sync-sell-status', methods=['POST'])
+def sync_sell_status():
+    """Batch update BUY signals status dua tren SELL signals co san trong DB."""
+    session = Session()
+    try:
+        sell_signals = session.query(Signal).filter(
+            Signal.action == 'SELL'
+        ).order_by(Signal.date.asc()).all()
+
+        updated = []
+        skipped = []
+        errors = []
+
+        for sell in sell_signals:
+            try:
+                buy = session.query(Signal).filter(
+                    Signal.ticker == sell.ticker,
+                    Signal.action == 'BUY',
+                    Signal.status.in_(['open', 'partial'])
+                ).order_by(
+                    Signal.date.asc(),
+                    Signal.created_at.asc()
+                ).first()
+
+                if not buy:
+                    buy = session.query(Signal).filter(
+                        Signal.ticker == sell.ticker,
+                        Signal.action == 'BUY',
+                        Signal.status == None
+                    ).order_by(
+                        Signal.date.asc(),
+                        Signal.created_at.asc()
+                    ).first()
+
+                if not buy:
+                    skipped.append({'ticker': sell.ticker, 'sell_date': sell.date})
+                    continue
+
+                old_status = buy.status or 'open'
+                buy_code = buy.signal_code or f"{buy.ticker}-{buy.id}"
+
+                buy.status = 'closed'
+                buy.position_pct = 0
+
+                if not sell.buy_signal_code:
+                    sell.buy_signal_code = buy_code
+                sell.status = 'closed'
+                sell.position_pct = 0
+
+                updated.append({
+                    'ticker': sell.ticker,
+                    'buy_code': buy_code,
+                    'sell_date': sell.date,
+                    'old_status': old_status
+                })
+
+            except Exception as e:
+                errors.append({'ticker': sell.ticker, 'error': str(e)})
+
+        session.commit()
+
+        return jsonify({
+            'success': True,
+            'summary': {
+                'total_sell_signals': len(sell_signals),
+                'updated': len(updated),
+                'skipped': len(skipped),
+                'errors': len(errors)
+            },
+            'updated': updated,
+            'skipped': skipped[:10],
+            'errors': errors
+        })
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        session.close()
+
 
 # ========================================================================
 # MARKET RISK ENDPOINTS
