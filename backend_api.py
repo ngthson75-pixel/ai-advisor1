@@ -1637,6 +1637,58 @@ def trigger_market_risk_scan():
             pass
 
 
+@app.route('/api/market-risk/upload', methods=['POST'])
+def upload_market_risk():
+    """Nhận market risk data từ local và lưu vào DB.
+    Dùng khi scanner chạy local → push kết quả lên production."""
+    session = Session()
+    try:
+        result = request.get_json()
+        if not result:
+            return jsonify({'success': False, 'error': 'No JSON data'}), 400
+        
+        today = result.get('date', datetime.now().strftime('%Y-%m-%d'))
+        
+        existing = session.query(MarketRisk).filter_by(date=today).first()
+        
+        risk_data = {
+            'market_mode': result['market_mode'],
+            'mode_label': result['mode_label'],
+            'risk_score': result['risk_score'],
+            'allocation': result['allocation'],
+            'description': result['description'],
+            'factors_json': json.dumps(result.get('factors', []), ensure_ascii=False),
+            'vnindex_value': result.get('vnindex_detail', {}).get('vnindex'),
+            'raw_scores_json': json.dumps(result.get('raw_scores', {})),
+            'analyzed_at': datetime.now(),
+        }
+        
+        if existing:
+            for key, value in risk_data.items():
+                setattr(existing, key, value)
+        else:
+            new_record = MarketRisk(date=today, **risk_data)
+            session.add(new_record)
+        
+        session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Market risk uploaded for {today}',
+            'data': {
+                'date': today,
+                'market_mode': result['market_mode'],
+                'risk_score': result['risk_score'],
+                'allocation': result['allocation'],
+            }
+        }), 201
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 @app.route('/api/market-risk/history', methods=['GET'])
 def get_market_risk_history():
     """Get market risk history (last N days)"""
