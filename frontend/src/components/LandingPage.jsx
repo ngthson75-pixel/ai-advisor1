@@ -378,27 +378,22 @@ export default function LandingPage({ onLogin }) {
                       </div>
                     </div>
 
-                    {/* Factors */}
+                    {/* Factors - chỉ hiện những yếu tố có dữ liệu */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {(marketRisk.factors || []).map((factor, i) => (
+                      {(marketRisk.factors || [])
+                        .filter(factor => !factor.isRef && !factor.value?.includes('Chưa có'))
+                        .map((factor, i) => (
                         <div key={i} style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           padding: '8px 12px', background: 'rgba(255,255,255,0.03)',
                           borderRadius: '6px', fontSize: '13px',
-                          opacity: factor.isRef ? 0.5 : 1,
-                          fontStyle: factor.isRef ? 'italic' : 'normal',
                         }}>
                           <span style={{ color: '#94a3b8' }}>{factor.label}</span>
                           <span style={{
-                            color: factor.isRef ? '#64748b'
-                                 : factor.value?.includes('Chưa có') ? '#64748b'
-                                 : factor.positive ? '#00E676' : '#FF6B6B',
+                            color: factor.positive ? '#00E676' : '#FF6B6B',
                             fontWeight: '600',
                           }}>
-                            {!factor.isRef && (
-                              factor.value?.includes('Chưa có') ? '— '
-                              : factor.positive ? '▲ ' : '▼ '
-                            )}
+                            {factor.positive ? '▲ ' : '▼ '}
                             {factor.value}
                           </span>
                         </div>
