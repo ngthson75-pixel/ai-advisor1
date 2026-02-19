@@ -28,7 +28,7 @@ try:
     _has_sell_api = True
 except ImportError:
     _has_sell_api = False
-    print('⚠️  backend_sell_api not found - using built-in sell routes')
+    print('âš ï¸  backend_sell_api not found - using built-in sell routes')
 
 # ========================================================================
 # FLASK APP INITIALIZATION
@@ -40,7 +40,7 @@ CORS(app)
 # Register SELL Signal Routes (only if external file exists)
 if _has_sell_api:
     register_sell_routes(app)
-    print("✅ SELL signal routes registered from backend_sell_api")
+    print("âœ… SELL signal routes registered from backend_sell_api")
 
 # ========================================================================
 # CONFIGURATION
@@ -50,36 +50,36 @@ if _has_sell_api:
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 if OPENAI_API_KEY:
     openai_client = OpenAI(api_key=OPENAI_API_KEY)
-    print("âœ… OpenAI configured")
+    print("Ã¢Å“â€¦ OpenAI configured")
 else:
-    print("âš ï¸ OPENAI_API_KEY not set")
+    print("Ã¢Å¡ Ã¯Â¸Â OPENAI_API_KEY not set")
     openai_client = None
 
 # ========================================================================
-# DATABASE CONFIGURATION - ENVIRONMENT-AWARE ðŸŒ
+# DATABASE CONFIGURATION - ENVIRONMENT-AWARE Ã°Å¸Å’Â
 # ========================================================================
 
 ENVIRONMENT = os.getenv('ENVIRONMENT', 'production').lower()
 print(f"\n{'='*70}")
-print(f"ðŸŒ Environment: {ENVIRONMENT.upper()}")
+print(f"Ã°Å¸Å’Â Environment: {ENVIRONMENT.upper()}")
 print(f"{'='*70}")
 
 # Choose database based on environment
 if ENVIRONMENT == 'staging':
     DATABASE_URL = os.getenv('DATABASE_URL_STAGING') or os.getenv('DATABASE_URL', 'sqlite:///signals.db')
-    print("ðŸ“Š Using STAGING database (Supabase)")
+    print("Ã°Å¸â€œÅ  Using STAGING database (Supabase)")
 else:
     DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///signals.db')
-    print("ðŸ“Š Using PRODUCTION database (Render Postgres)")
+    print("Ã°Å¸â€œÅ  Using PRODUCTION database (Render Postgres)")
 
 # Fix PostgreSQL URL for psycopg3 (Python 3.13 compatible)
 if DATABASE_URL and DATABASE_URL.startswith('postgresql://'):
     DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
-    print(f"âœ… Using PostgreSQL with psycopg (v3) driver")
+    print(f"Ã¢Å“â€¦ Using PostgreSQL with psycopg (v3) driver")
 
 # Print database URL (first 50 chars for security)
 db_url_display = DATABASE_URL[:50] + "..." if len(DATABASE_URL) > 50 else DATABASE_URL
-print(f"ðŸ”— Database URL: {db_url_display}")
+print(f"Ã°Å¸â€â€” Database URL: {db_url_display}")
 print(f"{'='*70}\n")
 
 # EOD file settings
@@ -99,95 +99,123 @@ Session = sessionmaker(bind=engine)
 # AI SYSTEM PROMPT
 # ========================================================================
 
-AI_SYSTEM_PROMPT = """You are AI ADVISOR, a decision-support system for investors.
+AI_SYSTEM_PROMPT = """You are AI ADVISOR, a decision-support system for Vietnamese investors.
 
 Your primary role:
 - Support investment decision-making through structured analysis.
 - Provide insights that help users understand risk, probability, and scenarios.
 - Guide users toward disciplined, system-based investing.
+- Use Market Dashboard data to provide context-aware allocation advice.
 
-Product rule (critical):
+=== MARKET DASHBOARD (AI ADVISOR MARKET RISK SYSTEM) ===
+
+You will receive real-time Market Dashboard data in the context. This includes:
+
+1. MARKET MODE: Overall market state
+   - BULL (Thị trường tăng): Risk score 0-40, allocation 80-100%
+     → Có thể duy trì hoặc tăng tỷ trọng cổ phiếu theo tín hiệu
+     → Khuyến khích giữ vị thế trong Buysell Signal list
+   - NEUTRAL / THẬN TRỌNG (Thị trường trung tính): Risk score 41-65, allocation 40-70%
+     → Giảm tỷ trọng, ưu tiên bảo toàn vốn
+     → Chỉ giữ cổ phiếu có nền tảng tốt trong Signal list
+     → Tăng tỷ lệ tiền mặt
+   - BEAR (Thị trường giảm): Risk score 66-100, allocation 0-30%
+     → Ưu tiên cắt lỗ và giảm tỷ trọng tối đa
+     → Tăng tiền mặt, phòng thủ là ưu tiên số 1
+     → Không mở vị thế mới dù có tín hiệu
+
+2. RISK SCORE (0-100): Điểm rủi ro thị trường tổng hợp
+   - 0-40: Rủi ro thấp → Có thể tích cực hơn
+   - 41-65: Rủi ro trung bình → Thận trọng
+   - 66-80: Rủi ro cao → Giảm tỷ trọng
+   - 81-100: Rủi ro rất cao → Phòng thủ tối đa
+
+3. ALLOCATION (% tài sản nên đầu tư vào cổ phiếu):
+   - Ví dụ: allocation=50 → Chỉ nên giữ 50% tài sản là cổ phiếu, 50% tiền mặt
+   - So sánh với tỷ lệ hiện tại của user để đưa ra khuyến nghị cụ thể
+
+4. MARKET FACTORS: Các yếu tố chi tiết (VN-Index trend, thanh khoản, AD ratio, MA indicators)
+   - Dùng để giải thích tại sao thị trường đang ở trạng thái đó
+
+=== QUY TẮC SỬ DỤNG MARKET DASHBOARD ===
+
+LUÔN tham chiếu Market Dashboard khi:
+- User hỏi về việc có nên mua/bán không
+- User hỏi về tỷ trọng danh mục
+- User đang FOMO (sợ bỏ lỡ) hoặc PANIC SELLING
+- User hỏi về thị trường chung
+
+Cách sử dụng allocation để tư vấn:
+- Tính tỷ lệ cổ phiếu hiện tại của user = (tổng giá trị CP) / (tổng tài sản) × 100
+- So sánh với allocation được khuyến nghị từ Market Dashboard
+- Nếu user đang giữ nhiều hơn allocation → khuyến nghị giảm tỷ trọng
+- Nếu user đang giữ ít hơn allocation → có thể xem xét tăng (chỉ với Signal stocks)
+
+Ví dụ tư vấn dựa trên Market Dashboard:
+- BEAR + allocation=20%, user đang giữ 80% CP → "Thị trường đang BEAR với rủi ro cao.
+  Hệ thống khuyến nghị chỉ giữ 20% tài sản là cổ phiếu. Danh mục hiện tại của bạn
+  đang ở mức 80% - cao hơn khuyến nghị đáng kể. Cân nhắc giảm tỷ trọng để bảo vệ vốn."
+- BULL + allocation=90%, user đang giữ 60% → "Thị trường đang BULL. Bạn có thể
+  xem xét tăng tỷ trọng với các cổ phiếu trong Buysell Signal list."
+
+=== PRODUCT RULE (CRITICAL) ===
+
 - AI ADVISOR only provides action-oriented guidance (buy/sell considerations)
-  for stocks that are included in the official "Buysell Signal" list
-  within the AI ADVISOR application.
-- For all other stocks, AI ADVISOR may analyze and explain,
-  but must NOT suggest or imply any investment action.
+  for stocks that are included in the official "Buysell Signal" list.
+- For all other stocks: analysis only, NO action guidance.
 
 Core principles:
 1. You do NOT provide direct buy/sell commands outside the Buysell Signal list.
 2. You do NOT promise profits or guaranteed outcomes.
 3. You do NOT encourage speculation, gambling, or impulsive behavior.
 4. You prioritize capital protection, risk management, and discipline.
-5. You clearly distinguish between:
-   - Analysis-only stocks
-   - System-approved Buysell Signal stocks
+5. Market Dashboard data ALWAYS takes precedence — even Signal stocks should not
+   be bought aggressively during BEAR market conditions.
 
 Behavior rules by stock type:
 
 A. If the stock IS in the "Buysell Signal" list:
-- You may discuss:
-  - Signal status (trend, momentum, valuation context)
-  - Risk conditions and invalidation scenarios
-  - Position sizing considerations (conceptual, not numeric)
-- You must still avoid explicit trade commands or price targets.
-- You must emphasize that signals are system-based, not guarantees.
+- Discuss signal context relative to current Market Mode
+- In BULL market: can discuss entry considerations
+- In NEUTRAL/THẬN TRỌNG: emphasize caution and smaller position sizing
+- In BEAR market: advise waiting even for Signal stocks
+- Always include Risk & invalidation conditions
 
 B. If the stock is NOT in the "Buysell Signal" list:
-- You may:
-  - Analyze fundamentals, trends, and risks
-  - Explain why the stock may or may not fit certain strategies
-- You must:
-  - Clearly state that the stock is NOT in the Buysell Signal system
-  - Avoid any form of recommendation, suggestion, or implied action
-  - Redirect the user toward the Buysell Signal list if they seek action
+- Analyze only, no action guidance
+- State clearly: cổ phiếu này không trong hệ thống Buysell Signal
+- Redirect user to Signal list if they want actionable guidance
 
-Mandatory phrasing for non-signal stocks:
-- Explicitly include a sentence equivalent to:
-  "This stock is currently not part of the AI ADVISOR Buysell Signal system.
-   Therefore, the following analysis is for understanding only,
-   not for action guidance."
+=== RESPONSE STYLE ===
 
-Response style:
-- Professional, disciplined, and neutral.
-- No hype, no emotional language, no persuasive tone.
-- Concise by default; expand only if explicitly requested.
-- RESPOND IN VIETNAMESE unless user writes in English.
+- Professional, disciplined, neutral — no hype, no emotional language
+- Concise by default; expand only if requested
+- RESPOND IN VIETNAMESE unless user writes in English
+- Always cite Market Dashboard data when giving allocation advice
+- Use concrete numbers: "Rủi ro hiện tại: X/100", "Khuyến nghị tỷ trọng: Y%"
 
 Default output structure:
-
-For Buysell Signal stocks:
-1. Signal context summary
-2. Supporting analysis
-3. Risk & invalidation conditions
-4. System-based considerations (not advice)
-
-For non-signal stocks:
-1. Analysis summary
-2. Key factors & risks
-3. Why it is outside the Buysell Signal scope
-4. What type of stock typically qualifies for the system (educational)
+1. Trạng thái thị trường hiện tại (từ Market Dashboard)
+2. Đánh giá danh mục so với khuyến nghị allocation
+3. Phân tích cổ phiếu cụ thể (nếu user hỏi)
+4. Khuyến nghị hành động (chỉ cho Signal stocks, tùy market mode)
+5. Cảnh báo rủi ro
 
 User expectation management:
-- Clearly state that AI ADVISOR supports decision-making,
-  but final responsibility belongs to the user.
-- Emphasize that the Buysell Signal list is the only source
-  of system-approved actionable guidance.
+- Clearly state AI ADVISOR supports decision-making, not investment advice
+- Emphasize Buysell Signal list + Market Dashboard are the two pillars
 
 If user pushes for action on non-signal stocks:
-- Politely refuse.
-- Reframe toward analysis or suggest checking the Buysell Signal list.
+- Politely refuse, redirect to Signal list
 
 If user intent is unclear:
-- Ask ONE clarifying question only.
+- Ask ONE clarifying question only
 
-Always act as a disciplined, system-driven investment advisor,
-not a trader, promoter, or discretionary stock picker.
-
-CRITICAL: Help users control FOMO (fear of missing out) and PANIC SELLING by:
-- Reminding them of their investment plan and system rules
-- Encouraging rational analysis over emotional reactions
-- Pointing out when market behavior is driven by emotion vs fundamentals
-- Supporting disciplined decision-making based on data, not fear or greed
+CRITICAL: Help users control FOMO and PANIC SELLING by:
+- Citing Market Dashboard data (objective, not emotional)
+- Reminding them of allocation targets
+- Pointing out when emotions conflict with system data
+- Supporting disciplined, data-driven decisions
 """
 
 # ========================================================================
@@ -284,7 +312,7 @@ def load_eod_prices():
     global PRICES_CACHE, CACHE_LOADED
     
     if not os.path.exists(EOD_FILE):
-        print(f"âš ï¸ EOD file not found: {EOD_FILE}")
+        print(f"Ã¢Å¡ Ã¯Â¸Â EOD file not found: {EOD_FILE}")
         PRICES_CACHE = {}
         CACHE_LOADED = True
         return False
@@ -294,12 +322,12 @@ def load_eod_prices():
             data = json.load(f)
         
         PRICES_CACHE = data.get('prices', {})
-        print(f"âœ… Loaded {len(PRICES_CACHE)} prices from EOD file")
+        print(f"Ã¢Å“â€¦ Loaded {len(PRICES_CACHE)} prices from EOD file")
         CACHE_LOADED = True
         return True
         
     except Exception as e:
-        print(f"âŒ Error loading EOD file: {e}")
+        print(f"Ã¢ÂÅ’ Error loading EOD file: {e}")
         PRICES_CACHE = {}
         CACHE_LOADED = True
         return False
@@ -322,67 +350,135 @@ def get_current_price(ticker):
 
 
 def get_portfolio_context(user_id):
-    """Get portfolio context with P&L"""
+    """Get portfolio context with P&L + Market Dashboard data for AI advisor"""
     session = Session()
     try:
         portfolios = session.query(Portfolio).filter_by(user_id=user_id).all()
         cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
         cash = cash_pos.cash_amount if cash_pos else 0
-        
-        signals = session.query(Signal).all()
+
+        # ALL active BUY signals (for Signal list)
+        signals = session.query(Signal).filter(Signal.action == 'BUY').all()
         signal_tickers = set([s.ticker for s in signals])
-        
+
+        # MARKET DASHBOARD: Inject latest market risk into context
+        market_context = ""
+        try:
+            latest_risk = session.query(MarketRisk).order_by(
+                MarketRisk.date.desc()
+            ).first()
+
+            if latest_risk:
+                mode_emoji = {
+                    'BULL': '🟢', 'NEUTRAL': '🟡', 'THAN TRONG': '🟡', 'BEAR': '🔴'
+                }.get(latest_risk.market_mode, '⚪')
+
+                market_context += "\n=== MARKET DASHBOARD (AI ADVISOR) ===\n"
+                market_context += f"Ngay phan tich: {latest_risk.date}\n"
+                market_context += f"Market Mode: {mode_emoji} {latest_risk.market_mode}"
+                if latest_risk.mode_label:
+                    market_context += f" - {latest_risk.mode_label}"
+                market_context += "\n"
+                market_context += f"Risk Score: {latest_risk.risk_score}/100\n"
+                market_context += f"Khuyen nghi ty trong CP: {latest_risk.allocation}%\n"
+                if latest_risk.vnindex_value:
+                    market_context += f"VN-Index: {latest_risk.vnindex_value:,.2f}\n"
+                if latest_risk.description:
+                    market_context += f"Mo ta: {latest_risk.description}\n"
+
+                # Append key factors
+                try:
+                    factors = json.loads(latest_risk.factors_json) if latest_risk.factors_json else []
+                    if factors:
+                        market_context += "Cac yeu to chinh:\n"
+                        for fac in factors[:4]:
+                            status = fac.get('status', '')
+                            name = fac.get('name', '')
+                            detail = fac.get('detail', '')
+                            market_context += f"  - {name}: {status} - {detail}\n"
+                except Exception:
+                    pass
+
+                market_context += "=== KET THUC MARKET DASHBOARD ===\n"
+            else:
+                market_context = "\n[Market Dashboard: Chua co du lieu phan tich thi truong]\n"
+        except Exception as e:
+            print(f"Market risk context error: {e}")
+            market_context = "\n[Market Dashboard: Loi khi tai du lieu thi truong]\n"
+
+        # Empty portfolio
         if not portfolios and cash == 0:
-            return "Danh má»¥c: Trá»‘ng", signal_tickers
-        
-        context = "DANH Má»¤C Äáº¦U TÆ¯:\n\n"
-        
+            context = f"{market_context}\nDanh muc: Trong\n"
+            context += f"\nCO PHIEU TRONG BUYSELL SIGNAL SYSTEM:\n"
+            context += ", ".join(sorted(signal_tickers)) if signal_tickers else "Chua co signal nao"
+            return context, signal_tickers
+
+        context = f"{market_context}\n"
+        context += "DANH MUC DAU TU:\n\n"
+
+        total_cost = 0
+        total_value = 0
+
         if portfolios:
-            context += "Cá»” PHIáº¾U:\n"
-            total_cost = 0
-            total_value = 0
-            
+            context += "CO PHIEU:\n"
+
             for p in portfolios:
                 cost = p.quantity * p.avg_price
                 total_cost += cost
-                
+
                 current_price = get_current_price(p.ticker)
                 if not current_price:
                     current_price = p.avg_price
-                
+
                 current_value = p.quantity * current_price
                 total_value += current_value
-                
+
                 pl = current_value - cost
                 pl_pct = (pl / cost * 100) if cost > 0 else 0
-                
-                in_signal = "âœ… [IN BUYSELL SIGNAL]" if p.ticker in signal_tickers else "âš ï¸ [NOT IN SIGNAL LIST]"
-                
+
+                in_signal = "[IN BUYSELL SIGNAL]" if p.ticker in signal_tickers else "[NOT IN SIGNAL LIST]"
+
                 context += f"- {p.ticker} {in_signal}: {p.quantity} CP @ {p.avg_price:,.0f} VND\n"
-                context += f"  GiÃ¡ hiá»‡n táº¡i: {current_price:,.0f} VND\n"
+                context += f"  Gia hien tai: {current_price:,.0f} VND\n"
                 context += f"  P&L: {pl:+,.0f} VND ({pl_pct:+.1f}%)\n"
-            
-            context += f"\nTá»•ng giÃ¡ trá»‹ CP: {total_value:,.0f} VND\n"
-            context += f"LÃ£i/Lá»—: {total_value - total_cost:+,.0f} VND\n"
-        
+
+            context += f"\nTong gia tri CP: {total_value:,.0f} VND\n"
+            context += f"Lai/Lo: {total_value - total_cost:+,.0f} VND\n"
+
         if cash > 0:
-            context += f"\nTIá»€N Máº¶T: {cash:,.0f} VND\n"
-        
-        total_assets = (total_value if portfolios else 0) + cash
+            context += f"\nTIEN MAT: {cash:,.0f} VND\n"
+
+        total_assets = total_value + cash
         if total_assets > 0:
-            stock_pct = ((total_value if portfolios else 0) / total_assets * 100)
+            stock_pct = (total_value / total_assets * 100)
             cash_pct = (cash / total_assets * 100)
-            context += f"\nTá»”NG TÃ€I Sáº¢N: {total_assets:,.0f} VND\n"
-            context += f"PhÃ¢n bá»•: {stock_pct:.1f}% CP / {cash_pct:.1f}% TM\n"
-        
-        context += f"\n\nCá»” PHIáº¾U TRONG BUYSELL SIGNAL SYSTEM:\n"
-        context += ", ".join(sorted(signal_tickers)) if signal_tickers else "ChÆ°a cÃ³ signal nÃ o"
-        
+            context += f"\nTONG TAI SAN: {total_assets:,.0f} VND\n"
+            context += f"Phan bo hien tai: {stock_pct:.1f}% CP / {cash_pct:.1f}% TM\n"
+
+            # Compare vs Market Dashboard allocation recommendation
+            try:
+                if latest_risk and latest_risk.allocation is not None:
+                    rec_alloc = latest_risk.allocation
+                    diff = stock_pct - rec_alloc
+                    if diff > 10:
+                        context += f"[CANH BAO] Dang giu {stock_pct:.1f}% CP, he thong khuyen nghi {rec_alloc}%. "
+                        context += f"CAO HON {diff:.1f}% so voi khuyen nghi.\n"
+                    elif diff < -10:
+                        context += f"[INFO] Dang giu {stock_pct:.1f}% CP, he thong khuyen nghi {rec_alloc}%. "
+                        context += f"Con du dia tang {abs(diff):.1f}% neu thi truong phu hop.\n"
+                    else:
+                        context += f"[OK] Ty trong hien tai ({stock_pct:.1f}%) phu hop voi khuyen nghi ({rec_alloc}%).\n"
+            except Exception:
+                pass
+
+        context += f"\n\nCO PHIEU TRONG BUYSELL SIGNAL SYSTEM:\n"
+        context += ", ".join(sorted(signal_tickers)) if signal_tickers else "Chua co signal nao"
+
         return context, signal_tickers
-        
+
     except Exception as e:
         print(f"Error: {e}")
-        return "Danh má»¥c: Lá»—i", set()
+        return "Danh muc: Loi", set()
     finally:
         session.close()
 
@@ -390,7 +486,7 @@ def get_portfolio_context(user_id):
 def chat_with_gpt(message, portfolio_context, signal_tickers):
     """Chat with OpenAI using strict system prompt"""
     if not openai_client:
-        return "Xin lá»—i, AI chÆ°a Ä‘Æ°á»£c cáº¥u hÃ¬nh."
+        return "Xin lÃ¡Â»â€”i, AI chÃ†Â°a Ã„â€˜Ã†Â°Ã¡Â»Â£c cÃ¡ÂºÂ¥u hÃƒÂ¬nh."
     
     try:
         system_message = AI_SYSTEM_PROMPT + f"\n\n{portfolio_context}"
@@ -407,7 +503,7 @@ def chat_with_gpt(message, portfolio_context, signal_tickers):
         return response.choices[0].message.content
     except Exception as e:
         print(f"OpenAI error: {e}")
-        return "Xin lá»—i, AI khÃ´ng pháº£n há»“i Ä‘Æ°á»£c."
+        return "Xin lÃ¡Â»â€”i, AI khÃƒÂ´ng phÃ¡ÂºÂ£n hÃ¡Â»â€œi Ã„â€˜Ã†Â°Ã¡Â»Â£c."
 
 
 # ========================================================================
@@ -492,18 +588,18 @@ def signals_endpoint():
                 })
             
             # Deduplicate: Keep BEST signal per ticker per date (highest strength)
-            seen = {}  # Track: ticker_date â†’ signal
+            seen = {}  # Track: ticker_date Ã¢â€ â€™ signal
             deduplicated = []
             
             for signal in signals_data:
                 key = f"{signal['ticker']}_{signal['date']}"
                 
                 if key not in seen:
-                    # First signal for this ticker+date â†’ Keep it
+                    # First signal for this ticker+date Ã¢â€ â€™ Keep it
                     seen[key] = signal
                     deduplicated.append(signal)
                 else:
-                    # Duplicate found â†’ Keep signal with HIGHER strength
+                    # Duplicate found Ã¢â€ â€™ Keep signal with HIGHER strength
                     existing_strength = seen[key].get('strength', 0)
                     new_strength = signal.get('strength', 0)
                     
@@ -561,31 +657,31 @@ def signals_endpoint():
             
             # Save to database
             session.add(signal)
-            session.flush()  # Get ID trước khi commit
+            session.flush()  # Get ID trÆ°á»›c khi commit
             
-            # Set signal code và defaults qua ORM (không dùng raw SQL để tránh cache issue)
+            # Set signal code vÃ  defaults qua ORM (khÃ´ng dÃ¹ng raw SQL Ä‘á»ƒ trÃ¡nh cache issue)
             if signal.action == 'BUY':
                 signal.signal_code = f"{signal.ticker}-{signal.id}"
                 signal.status = 'open'
                 signal.position_pct = 100
             
-            # --- AUTO-UPDATE BUY STATUS khi tạo SELL signal ---
+            # --- AUTO-UPDATE BUY STATUS khi táº¡o SELL signal ---
             buy_update_info = None
             if signal.action == 'SELL':
                 signal.status = 'closed'
                 signal.position_pct = 0
-                # Update BUY signal tương ứng (FIFO)
+                # Update BUY signal tÆ°Æ¡ng á»©ng (FIFO)
                 buy_update_info = auto_update_buy_status(signal.ticker, session)
-                # Link SELL → BUY
+                # Link SELL â†’ BUY
                 if buy_update_info:
                     signal.buy_signal_code = buy_update_info['buy_signal_code']
-            # --- KẾT THÚC ---
+            # --- Káº¾T THÃšC ---
             
             session.commit()
             
-            print(f"✅ Signal created: {signal.ticker} ({signal.action}) - {signal.date}")
+            print(f"âœ… Signal created: {signal.ticker} ({signal.action}) - {signal.date}")
             if buy_update_info:
-                print(f"   └─ BUY {buy_update_info['buy_signal_code']} → closed")
+                print(f"   â””â”€ BUY {buy_update_info['buy_signal_code']} â†’ closed")
             
             response_data = {
                 'success': True,
@@ -601,23 +697,23 @@ def signals_endpoint():
             
         except Exception as e:
             session.rollback()
-            print(f"❌ Error creating signal: {e}")
+            print(f"âŒ Error creating signal: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
         finally:
             session.close()
 
 
 # ========================================================================
-# HELPER: AUTO-UPDATE BUY STATUS KHI CÓ SELL SIGNAL
+# HELPER: AUTO-UPDATE BUY STATUS KHI CÃ“ SELL SIGNAL
 # ========================================================================
 
 def auto_update_buy_status(ticker, session):
     """
-    Tự động update BUY signal cũ nhất (FIFO) sang closed khi có SELL signal mới.
-    Dùng ORM query để tránh session cache issue.
+    Tá»± Ä‘á»™ng update BUY signal cÅ© nháº¥t (FIFO) sang closed khi cÃ³ SELL signal má»›i.
+    DÃ¹ng ORM query Ä‘á»ƒ trÃ¡nh session cache issue.
     """
     try:
-        # Tìm BUY signal cũ nhất còn mở (FIFO) - dùng ORM
+        # TÃ¬m BUY signal cÅ© nháº¥t cÃ²n má»Ÿ (FIFO) - dÃ¹ng ORM
         buy_signal = session.query(Signal).filter(
             Signal.ticker == ticker,
             Signal.action == 'BUY',
@@ -627,7 +723,7 @@ def auto_update_buy_status(ticker, session):
             Signal.created_at.asc()
         ).first()
         
-        # Nếu không có status (cũ), tìm không lọc status
+        # Náº¿u khÃ´ng cÃ³ status (cÅ©), tÃ¬m khÃ´ng lá»c status
         if not buy_signal:
             buy_signal = session.query(Signal).filter(
                 Signal.ticker == ticker,
@@ -639,17 +735,17 @@ def auto_update_buy_status(ticker, session):
             ).first()
         
         if not buy_signal:
-            print(f"⚠️  No open BUY signal found for {ticker}")
+            print(f"âš ï¸  No open BUY signal found for {ticker}")
             return None
         
         old_status = buy_signal.status or 'open'
         buy_signal_code = buy_signal.signal_code or f"{ticker}-{buy_signal.id}"
         
-        # Update BUY → closed qua ORM (không raw SQL)
+        # Update BUY â†’ closed qua ORM (khÃ´ng raw SQL)
         buy_signal.status = 'closed'
         buy_signal.position_pct = 0
         
-        print(f"✅ BUY {buy_signal_code}: {old_status} → closed")
+        print(f"âœ… BUY {buy_signal_code}: {old_status} â†’ closed")
         
         return {
             'buy_id': buy_signal.id,
@@ -660,7 +756,7 @@ def auto_update_buy_status(ticker, session):
         }
         
     except Exception as e:
-        print(f"❌ Error in auto_update_buy_status for {ticker}: {e}")
+        print(f"âŒ Error in auto_update_buy_status for {ticker}: {e}")
         return None
 # ========================================================================
 # AUTOMATION ENDPOINTS (GitHub Actions)
@@ -718,8 +814,8 @@ def get_open_buy_signals(ticker):
 def create_sell_signal():
     """
     Create SELL signal with HYBRID approach:
-    - If buy_signal_code provided → Use that specific signal (Manual)
-    - If not provided → Auto-match oldest open signal (FIFO)
+    - If buy_signal_code provided â†’ Use that specific signal (Manual)
+    - If not provided â†’ Auto-match oldest open signal (FIFO)
     
     Request body:
     {
@@ -805,8 +901,8 @@ def create_sell_signal():
         
         buy_signal.status = new_status
         buy_signal.position_pct = new_pct
-        print(f"✅ BUY {buy_signal.signal_code}: {current_pct}% → {new_status} ({new_pct}%)")
-        # --- KẾT THÚC AUTO-UPDATE ---
+        print(f"âœ… BUY {buy_signal.signal_code}: {current_pct}% â†’ {new_status} ({new_pct}%)")
+        # --- Káº¾T THÃšC AUTO-UPDATE ---
         
         session.commit()
         
@@ -881,7 +977,7 @@ def trigger_scan():
         def run_market_risk_after_scan():
             """Wait for signal scan to finish, then run market risk"""
             import time
-            time.sleep(60)  # Äá»£i signal scan cháº¡y 1 phÃºt
+            time.sleep(60)  # Ã„ÂÃ¡Â»Â£i signal scan chÃ¡ÂºÂ¡y 1 phÃƒÂºt
             
             try:
                 from market_risk_analysis import run_market_analysis
@@ -913,10 +1009,10 @@ def trigger_scan():
                 
                 session.commit()
                 session.close()
-                print("âœ… Market risk analysis saved!")
+                print("Ã¢Å“â€¦ Market risk analysis saved!")
                 
             except Exception as e:
-                print(f"âš ï¸ Market risk analysis failed: {e}")
+                print(f"Ã¢Å¡ Ã¯Â¸Â Market risk analysis failed: {e}")
         
         # Start market risk in background
         thread = threading.Thread(target=run_market_risk_after_scan)
@@ -1249,7 +1345,7 @@ def chat():
         return jsonify({
             'success': False,
             'error': str(e),
-            'response': 'Xin lá»—i, cÃ³ lá»—i xáº£y ra.'
+            'response': 'Xin lÃ¡Â»â€”i, cÃƒÂ³ lÃ¡Â»â€”i xÃ¡ÂºÂ£y ra.'
         }), 500
     finally:
         session.close()
@@ -1448,7 +1544,7 @@ def migrate():
 
 
 # ========================================================================
-# SYNC SELL STATUS - Batch update BUY signals dựa trên SELL signals có sẵn
+# SYNC SELL STATUS - Batch update BUY signals dá»±a trÃªn SELL signals cÃ³ sáºµn
 # ========================================================================
 
 @app.route('/api/signals/sync-sell-status', methods=['POST'])
@@ -1637,58 +1733,6 @@ def trigger_market_risk_scan():
             pass
 
 
-@app.route('/api/market-risk/upload', methods=['POST'])
-def upload_market_risk():
-    """Nhận market risk data từ local và lưu vào DB.
-    Dùng khi scanner chạy local → push kết quả lên production."""
-    session = Session()
-    try:
-        result = request.get_json()
-        if not result:
-            return jsonify({'success': False, 'error': 'No JSON data'}), 400
-        
-        today = result.get('date', datetime.now().strftime('%Y-%m-%d'))
-        
-        existing = session.query(MarketRisk).filter_by(date=today).first()
-        
-        risk_data = {
-            'market_mode': result['market_mode'],
-            'mode_label': result['mode_label'],
-            'risk_score': result['risk_score'],
-            'allocation': result['allocation'],
-            'description': result['description'],
-            'factors_json': json.dumps(result.get('factors', []), ensure_ascii=False),
-            'vnindex_value': result.get('vnindex_detail', {}).get('vnindex'),
-            'raw_scores_json': json.dumps(result.get('raw_scores', {})),
-            'analyzed_at': datetime.now(),
-        }
-        
-        if existing:
-            for key, value in risk_data.items():
-                setattr(existing, key, value)
-        else:
-            new_record = MarketRisk(date=today, **risk_data)
-            session.add(new_record)
-        
-        session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': f'Market risk uploaded for {today}',
-            'data': {
-                'date': today,
-                'market_mode': result['market_mode'],
-                'risk_score': result['risk_score'],
-                'allocation': result['allocation'],
-            }
-        }), 201
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        session.close()
-
-
 @app.route('/api/market-risk/history', methods=['GET'])
 def get_market_risk_history():
     """Get market risk history (last N days)"""
@@ -1718,24 +1762,24 @@ def get_market_risk_history():
 if __name__ == '__main__':
     # Initialize database
     try:
-        print("\nðŸš€ Starting AI Advisor Backend v3.3 - FIXED...")
+        print("\nÃ°Å¸Å¡â‚¬ Starting AI Advisor Backend v3.3 - FIXED...")
         Base.metadata.create_all(engine)
-        print("âœ… Database initialized")
+        print("Ã¢Å“â€¦ Database initialized")
         
         # Load EOD prices
         load_eod_prices()
         
     except Exception as e:
-        print(f"âš ï¸ Warning: {e}")
+        print(f"Ã¢Å¡ Ã¯Â¸Â Warning: {e}")
     
     # Get port from environment (CRITICAL for Render!)
     port = int(os.getenv('PORT', 10000))
     
     print(f"\n{'='*70}")
-    print("ðŸš€ AI ADVISOR BACKEND v3.3 - FIXED VERSION")
+    print("Ã°Å¸Å¡â‚¬ AI ADVISOR BACKEND v3.3 - FIXED VERSION")
     print(f"{'='*70}")
-    print(f"AI: {'âœ… GPT-4o-mini (Strict Rules)' if openai_client else 'âŒ Not configured'}")
-    print(f"EOD File: {'âœ… Loaded' if CACHE_LOADED and PRICES_CACHE else 'âš ï¸ Not found'}")
+    print(f"AI: {'Ã¢Å“â€¦ GPT-4o-mini (Strict Rules)' if openai_client else 'Ã¢ÂÅ’ Not configured'}")
+    print(f"EOD File: {'Ã¢Å“â€¦ Loaded' if CACHE_LOADED and PRICES_CACHE else 'Ã¢Å¡ Ã¯Â¸Â Not found'}")
     print(f"Tickers: {len(PRICES_CACHE)}")
     print(f"Database: {DATABASE_URL}")
     print(f"Host: 0.0.0.0 (Render-ready)")
