@@ -1,757 +1,736 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 
-// Generate unique user ID
-const generateUserId = () => {
-  const timestamp = Date.now();
-  const randomStr = Math.random().toString(36).substring(2, 15);
-  return `user_${timestamp}_${randomStr}`;
-};
+const fmt = (n) => n?.toLocaleString('vi-VN') || '0'
+const fmtPct = (n) => (n >= 0 ? '+' : '') + n?.toFixed(1) + '%'
 
-// Get or create user session
-const getUserId = () => {
-  let userId = localStorage.getItem('ai_advisor_user_id');
-  if (!userId) {
-    userId = generateUserId();
-    localStorage.setItem('ai_advisor_user_id', userId);
-    console.log('✅ New user session created:', userId);
+export default function AIPortfolioManager({ userId = '1' }) {
+  // ── Portfolio state ──────────────────────────────────────────
+  const [portfolio, setPortfolio] = useState([])
+  const [cash, setCash]           = useState(0)
+  const [cashInput, setCashInput] = useState('')
+  const [editingCash, setEditingCash] = useState(false)
+
+  const [addForm, setAddForm]     = useState({ ticker: '', quantity: '', price: '' })
+  const [addLoading, setAddLoading] = useState(false)
+  const [addError, setAddError]   = useState('')
+
+  // ── Chat state ───────────────────────────────────────────────
+  const [messages, setMessages]   = useState([])
+  const [input, setInput]         = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const chatEndRef = useRef(null)
+
+  // ── Market risk for header badge ─────────────────────────────
+  const [marketMode, setMarketMode] = useState(null)
+
+  // ── Load data on mount ───────────────────────────────────────
+  useEffect(() => {
+    loadPortfolio()
+    loadCash()
+    loadChatHistory()
+    loadMarketMode()
+  }, [userId])
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  async function loadPortfolio() {
+    try {
+      const r = await fetch(`${API_BASE}/portfolio?user_id=${userId}`)
+      const d = await r.json()
+      if (d.success) setPortfolio(d.portfolio || [])
+    } catch {}
   }
-  return userId;
-};
 
-const AIPortfolioManager = () => {
-  const [userId] = useState(getUserId());
-  
-  // Portfolio state
-  const [portfolio, setPortfolio] = useState([]);
-  const [cash, setCash] = useState(0);
-  const [totalValue, setTotalValue] = useState(0);
-  const [totalPL, setTotalPL] = useState(0);
-  const [totalPLPercent, setTotalPLPercent] = useState(0);
-  
-  // Form state
-  const [ticker, setTicker] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [price, setPrice] = useState('');
-  const [cashInput, setCashInput] = useState('');
-  
-  // Chat state
-  const [chatHistory, setChatHistory] = useState([]);
-  const [userMessage, setUserMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingPrice, setIsFetchingPrice] = useState(false);
-
-  // Fetch portfolio on mount
-  useEffect(() => {
-    fetchPortfolio();
-    fetchChatHistory();
-  }, [userId]);
-
-  // Recalculate totals when portfolio changes
-  useEffect(() => {
-    calculateTotals();
-  }, [portfolio, cash]);
-
-  const fetchPortfolio = async () => {
+  async function loadCash() {
     try {
-      const response = await fetch(`${API_BASE}/portfolio?user_id=${userId}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setPortfolio(data.portfolio || []);
-        setCash(data.cash || 0);
+      const r = await fetch(`${API_BASE}/cash?user_id=${userId}`)
+      const d = await r.json()
+      if (d.success) {
+        setCash(d.cash || 0)
+        setCashInput(d.cash > 0 ? String(d.cash) : '')
       }
-    } catch (error) {
-      console.error('Error fetching portfolio:', error);
-    }
-  };
+    } catch {}
+  }
 
-  const fetchChatHistory = async () => {
+  async function loadChatHistory() {
     try {
-      const response = await fetch(`${API_BASE}/chat/history?user_id=${userId}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setChatHistory(data.chat_history || []);
+      const r = await fetch(`${API_BASE}/chat/history?user_id=${userId}&limit=30`)
+      const d = await r.json()
+      if (d.success && d.history?.length) {
+        const msgs = []
+        d.history.forEach(h => {
+          msgs.push({ role: 'user', text: h.message, time: h.created_at })
+          msgs.push({ role: 'ai', text: h.response, time: h.created_at })
+        })
+        setMessages(msgs)
+      } else {
+        setMessages([{
+          role: 'ai',
+          text: '👋 Xin chào! Tôi là AI ADVISOR. Tôi có thể tư vấn về danh mục của bạn, phân tích cổ phiếu trong Buysell Signal, và hỗ trợ quản trị rủi ro theo Market Dashboard. Bạn muốn hỏi gì?'
+        }])
       }
-    } catch (error) {
-      console.error('Error fetching chat history:', error);
-    }
-  };
+    } catch {}
+  }
 
-  const calculateTotals = () => {
-    let invested = 0;
-    let current = 0;
-
-    portfolio.forEach(stock => {
-      invested += stock.cost || 0;
-      current += stock.current_value || 0;
-    });
-
-    const pl = current - invested;
-    const plPercent = invested > 0 ? (pl / invested) * 100 : 0;
-    
-    setTotalValue(current + cash);
-    setTotalPL(pl);
-    setTotalPLPercent(plPercent);
-  };
-
-  const handleAddStock = async (e) => {
-    e.preventDefault();
-    
-    if (!ticker || !quantity || !price) {
-      alert('Vui lòng điền đầy đủ thông tin');
-      return;
-    }
-
-    const tickerUpper = ticker.toUpperCase();
-    
+  async function loadMarketMode() {
     try {
-      setIsFetchingPrice(true);
-      
-      // Fetch current EOD price
-      const priceResponse = await fetch(`${API_BASE}/stock/current-price?ticker=${tickerUpper}`);
-      const priceData = await priceResponse.json();
-      
-      const currentPrice = priceData.success ? priceData.price : parseFloat(price);
-      
-      // Add to portfolio
-      const response = await fetch(`${API_BASE}/portfolio`, {
+      const r = await fetch(`${API_BASE.replace('/api', '')}/api/market-risk`)
+      const d = await r.json()
+      if (d.success && d.data) setMarketMode(d.data)
+    } catch {}
+  }
+
+  // ── Portfolio actions ────────────────────────────────────────
+  async function handleAddStock(e) {
+    e.preventDefault()
+    if (!addForm.ticker || !addForm.quantity || !addForm.price) {
+      setAddError('Vui lòng điền đầy đủ thông tin')
+      return
+    }
+    setAddLoading(true)
+    setAddError('')
+    try {
+      const r = await fetch(`${API_BASE}/portfolio`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
-          ticker: tickerUpper,
-          quantity: parseInt(quantity),
-          price: parseFloat(price),
-          current_price: currentPrice
+          ticker: addForm.ticker.toUpperCase(),
+          quantity: parseInt(addForm.quantity),
+          price: parseFloat(addForm.price)
         })
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        // Refresh portfolio
-        await fetchPortfolio();
-        
-        // Clear form
-        setTicker('');
-        setQuantity('');
-        setPrice('');
-        
-        alert(`✅ Đã thêm ${tickerUpper} vào danh mục!`);
+      })
+      const d = await r.json()
+      if (d.success) {
+        setAddForm({ ticker: '', quantity: '', price: '' })
+        loadPortfolio()
       } else {
-        alert(`❌ Lỗi: ${data.error}`);
+        setAddError(d.error || 'Lỗi thêm cổ phiếu')
       }
-    } catch (error) {
-      console.error('Error adding stock:', error);
-      alert('❌ Không thể thêm cổ phiếu');
-    } finally {
-      setIsFetchingPrice(false);
-    }
-  };
+    } catch { setAddError('Lỗi kết nối') }
+    setAddLoading(false)
+  }
 
-  const handleUpdateCash = async (e) => {
-    e.preventDefault();
-    
-    if (!cashInput) {
-      alert('Vui lòng nhập số tiền');
-      return;
-    }
-
+  async function handleDeleteStock(ticker) {
+    if (!confirm(`Xóa ${ticker} khỏi danh mục?`)) return
     try {
-      const response = await fetch(`${API_BASE}/cash`, {
+      await fetch(`${API_BASE}/portfolio/${ticker}?user_id=${userId}`, { method: 'DELETE' })
+      loadPortfolio()
+    } catch {}
+  }
+
+  async function handleSaveCash() {
+    const val = parseFloat(cashInput.replace(/[^0-9.]/g, '')) || 0
+    try {
+      const r = await fetch(`${API_BASE}/cash`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          cash_amount: parseFloat(cashInput)
-        })
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        await fetchPortfolio();
-        setCashInput('');
-        alert('✅ Đã cập nhật tiền mặt!');
-      } else {
-        alert(`❌ Lỗi: ${data.error}`);
+        body: JSON.stringify({ user_id: userId, cash: val })
+      })
+      const d = await r.json()
+      if (d.success) {
+        setCash(val)
+        setEditingCash(false)
       }
-    } catch (error) {
-      console.error('Error updating cash:', error);
-      alert('❌ Không thể cập nhật tiền mặt');
-    }
-  };
+    } catch {}
+  }
 
-  const handleDeleteStock = async (ticker) => {
-    if (!confirm(`Xóa ${ticker} khỏi danh mục?`)) return;
-
+  // ── Chat ─────────────────────────────────────────────────────
+  async function handleSend(e) {
+    e?.preventDefault()
+    const msg = input.trim()
+    if (!msg || chatLoading) return
+    setInput('')
+    setMessages(prev => [...prev, { role: 'user', text: msg }])
+    setChatLoading(true)
     try {
-      const response = await fetch(`${API_BASE}/portfolio/${ticker}?user_id=${userId}`, {
-        method: 'DELETE'
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        await fetchPortfolio();
-        alert(`✅ Đã xóa ${ticker}`);
-      }
-    } catch (error) {
-      console.error('Error deleting stock:', error);
-      alert('❌ Không thể xóa cổ phiếu');
-    }
-  };
-
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    
-    if (!userMessage.trim()) return;
-
-    const message = userMessage.trim();
-    setUserMessage('');
-    setIsLoading(true);
-
-    // Build portfolio context with P&L
-    const portfolioContext = {
-      total_value: totalValue,
-      cash: cash,
-      stocks_value: totalValue - cash,
-      total_pl: totalPL,
-      total_pl_percent: totalPLPercent,
-      holdings: portfolio.map(stock => ({
-        ticker: stock.ticker,
-        quantity: stock.quantity,
-        avg_price: stock.avg_price,
-        current_price: stock.current_price,
-        pl_amount: stock.pl_amount,
-        pl_percent: stock.pl_pct
-      }))
-    };
-
-    try {
-      const response = await fetch(`${API_BASE}/chat`, {
+      const r = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          message: message,
-          portfolio_context: JSON.stringify(portfolioContext)
-        })
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setChatHistory([...chatHistory, {
-          message: message,
-          response: data.response,
-          created_at: new Date().toISOString()
-        }]);
-      } else {
-        alert(`❌ Lỗi: ${data.error}`);
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      alert('❌ Không thể gửi tin nhắn');
-    } finally {
-      setIsLoading(false);
+        body: JSON.stringify({ user_id: userId, message: msg })
+      })
+      const d = await r.json()
+      setMessages(prev => [...prev, {
+        role: 'ai',
+        text: d.response || d.error || 'AI không phản hồi được.'
+      }])
+    } catch {
+      setMessages(prev => [...prev, { role: 'ai', text: 'Lỗi kết nối. Vui lòng thử lại.' }])
     }
-  };
+    setChatLoading(false)
+  }
 
-  const formatNumber = (num) => {
-    return new Intl.NumberFormat('vi-VN').format(num);
-  };
+  // ── Computed totals ──────────────────────────────────────────
+  const totalStock   = portfolio.reduce((s, p) => s + (p.current_value || 0), 0)
+  const totalCost    = portfolio.reduce((s, p) => s + (p.cost || 0), 0)
+  const totalPL      = totalStock - totalCost
+  const totalPLPct   = totalCost > 0 ? (totalPL / totalCost) * 100 : 0
+  const totalAssets  = totalStock + cash
+  const stockPct     = totalAssets > 0 ? (totalStock / totalAssets) * 100 : 0
+  const cashPct      = totalAssets > 0 ? (cash / totalAssets) * 100 : 0
 
-  const formatPercent = (num) => {
-    return num >= 0 ? `+${num.toFixed(2)}%` : `${num.toFixed(2)}%`;
-  };
+  const modeColor = {
+    BULL: '#00e676', SIDEWAYS: '#ffd600', 'THAN TRONG': '#ffd600', BEAR: '#ff1744'
+  }[marketMode?.market_mode] || '#94a3b8'
+
+  const quickPrompts = [
+    'Danh mục tôi đang ở mức rủi ro nào?',
+    'Tỷ trọng có phù hợp thị trường không?',
+    'Cổ phiếu nào nên xem xét bán?',
+  ]
 
   return (
     <div style={{
-      padding: '20px',
-      backgroundColor: '#000',
-      minHeight: '100vh',
-      color: '#fff'
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '20px',
+      maxWidth: '900px',
+      margin: '0 auto',
+      padding: '0 0 40px',
+      fontFamily: "'DM Sans', sans-serif",
     }}>
+
+      {/* ── MARKET MODE BADGE ── */}
+      {marketMode && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '10px',
+          padding: '10px 16px',
+          background: 'rgba(255,255,255,0.04)',
+          borderRadius: '10px',
+          border: `1px solid ${modeColor}33`,
+          fontSize: '13px',
+        }}>
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: modeColor, boxShadow: `0 0 8px ${modeColor}`,
+            display: 'inline-block', flexShrink: 0,
+          }}/>
+          <span style={{ color: modeColor, fontWeight: 700 }}>
+            {marketMode.market_mode}
+          </span>
+          <span style={{ color: '#94a3b8' }}>·</span>
+          <span style={{ color: '#94a3b8' }}>
+            Risk Score <strong style={{ color: '#e2e8f0' }}>{marketMode.risk_score}/100</strong>
+          </span>
+          <span style={{ color: '#94a3b8' }}>·</span>
+          <span style={{ color: '#94a3b8' }}>
+            Khuyến nghị tỷ trọng CP: <strong style={{ color: modeColor }}>{marketMode.allocation}%</strong>
+          </span>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
+          PHẦN 1: AI CHAT (ưu tiên trên cùng)
+      ══════════════════════════════════════════════ */}
       <div style={{
-        maxWidth: '1400px',
-        margin: '0 auto'
+        background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)',
+        borderRadius: '16px',
+        border: '1px solid #1e3a5f',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
       }}>
-        {/* Header */}
-        <div style={{ marginBottom: '30px' }}>
-          <h2 style={{ 
-            fontSize: '28px', 
-            fontWeight: '600',
-            marginBottom: '10px',
-            color: '#fff'
-          }}>
-            📊 Quản trị đầu tư bằng AI
-          </h2>
-          <p style={{ 
-            fontSize: '14px', 
-            color: '#888',
-            marginBottom: '5px'
-          }}>
-            Hãy chia sẻ danh mục của bạn và hỏi đáp mua bán để AI hỗ trợ quản lý danh mục và kiểm soát FOMO hay HOẢNG SỢ
-          </p>
-          <p style={{ 
-            fontSize: '12px', 
-            color: '#555' 
-          }}>
-            👤 User ID: {userId.substring(0, 30)}...
-          </p>
+        {/* Chat header */}
+        <div style={{
+          padding: '16px 20px',
+          borderBottom: '1px solid #1e293b',
+          display: 'flex', alignItems: 'center', gap: '10px',
+        }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: '8px',
+            background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '16px',
+          }}>🤖</div>
+          <div>
+            <div style={{ fontWeight: 700, color: '#e2e8f0', fontSize: '15px' }}>Tư vấn AI</div>
+            <div style={{ fontSize: '12px', color: '#64748b' }}>Phân tích danh mục · Buysell Signal · Market Risk</div>
+          </div>
         </div>
 
-        {/* Main Content - 2 Columns */}
+        {/* Chat messages */}
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '30px'
+          height: '420px',
+          overflowY: 'auto',
+          padding: '16px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#1e3a5f transparent',
         }}>
-          {/* Left Column - Portfolio */}
-          <div>
-            {/* Portfolio Summary */}
-            <div style={{
-              backgroundColor: '#1a1a1a',
-              padding: '20px',
-              borderRadius: '8px',
-              marginBottom: '20px'
+          {messages.map((m, i) => (
+            <div key={i} style={{
+              display: 'flex',
+              justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start',
             }}>
-              <h3 style={{ fontSize: '18px', marginBottom: '15px', color: '#fff' }}>
-                💼 Tổng quan danh mục
-              </h3>
+              {m.role === 'ai' && (
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '13px', flexShrink: 0, marginRight: '8px', marginTop: '2px',
+                }}>🤖</div>
+              )}
               <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '15px'
+                maxWidth: '78%',
+                padding: '10px 14px',
+                borderRadius: m.role === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
+                background: m.role === 'user'
+                  ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
+                  : 'rgba(255,255,255,0.06)',
+                color: '#e2e8f0',
+                fontSize: '14px',
+                lineHeight: '1.6',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                border: m.role === 'ai' ? '1px solid rgba(255,255,255,0.08)' : 'none',
               }}>
-                <div>
-                  <div style={{ fontSize: '12px', color: '#888', marginBottom: '5px' }}>
-                    Tổng tài sản
-                  </div>
-                  <div style={{ fontSize: '20px', fontWeight: '600', color: '#fff' }}>
-                    {formatNumber(totalValue)} VND
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '12px', color: '#888', marginBottom: '5px' }}>
-                    Tiền mặt
-                  </div>
-                  <div style={{ fontSize: '20px', fontWeight: '600', color: '#4CAF50' }}>
-                    {formatNumber(cash)} VND
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '12px', color: '#888', marginBottom: '5px' }}>
-                    Lãi/Lỗ
-                  </div>
-                  <div style={{ 
-                    fontSize: '20px', 
-                    fontWeight: '600',
-                    color: totalPL >= 0 ? '#4CAF50' : '#f44336'
-                  }}>
-                    {totalPL >= 0 ? '+' : ''}{formatNumber(totalPL)} VND
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '12px', color: '#888', marginBottom: '5px' }}>
-                    % Lãi/Lỗ
-                  </div>
-                  <div style={{ 
-                    fontSize: '20px', 
-                    fontWeight: '600',
-                    color: totalPLPercent >= 0 ? '#4CAF50' : '#f44336'
-                  }}>
-                    {formatPercent(totalPLPercent)}
-                  </div>
-                </div>
+                {m.text}
               </div>
             </div>
+          ))}
+          {chatLoading && (
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{
+                width: 28, height: 28, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px',
+              }}>🤖</div>
+              <div style={{
+                padding: '10px 16px',
+                background: 'rgba(255,255,255,0.06)',
+                borderRadius: '4px 16px 16px 16px',
+                border: '1px solid rgba(255,255,255,0.08)',
+                display: 'flex', gap: '4px', alignItems: 'center',
+              }}>
+                {[0,1,2].map(i => (
+                  <div key={i} style={{
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: '#60a5fa',
+                    animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                  }}/>
+                ))}
+              </div>
+            </div>
+          )}
+          <div ref={chatEndRef} />
+        </div>
 
-            {/* Add Stock Form */}
-            <div style={{
-              backgroundColor: '#1a1a1a',
-              padding: '20px',
-              borderRadius: '8px',
-              marginBottom: '20px'
+        {/* Quick prompts */}
+        <div style={{
+          padding: '8px 20px 0',
+          display: 'flex', gap: '8px', flexWrap: 'wrap',
+        }}>
+          {quickPrompts.map((q, i) => (
+            <button key={i} onClick={() => { setInput(q); }}
+              style={{
+                padding: '5px 12px',
+                background: 'rgba(37,99,235,0.12)',
+                border: '1px solid rgba(37,99,235,0.3)',
+                borderRadius: '20px',
+                color: '#93c5fd',
+                fontSize: '12px',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => e.target.style.background = 'rgba(37,99,235,0.25)'}
+              onMouseLeave={e => e.target.style.background = 'rgba(37,99,235,0.12)'}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+
+        {/* Input */}
+        <form onSubmit={handleSend} style={{
+          padding: '12px 16px 16px',
+          display: 'flex', gap: '10px',
+        }}>
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            placeholder="Đặt câu hỏi cho AI (VD: C69 có nên mua không?)"
+            style={{
+              flex: 1,
+              padding: '10px 16px',
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '24px',
+              color: '#e2e8f0',
+              fontSize: '14px',
+              outline: 'none',
+            }}
+            onFocus={e => e.target.style.borderColor = '#2563eb'}
+            onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+          />
+          <button type="submit" disabled={chatLoading || !input.trim()}
+            style={{
+              width: 42, height: 42,
+              borderRadius: '50%',
+              background: chatLoading || !input.trim()
+                ? 'rgba(37,99,235,0.3)'
+                : 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+              border: 'none', cursor: chatLoading ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, fontSize: '16px', transition: 'all 0.2s',
             }}>
-              <h3 style={{ fontSize: '16px', marginBottom: '15px', color: '#fff' }}>
-                ➕ Thêm cổ phiếu
-              </h3>
-              <form onSubmit={handleAddStock}>
+            ▶
+          </button>
+        </form>
+      </div>
+
+      {/* ══════════════════════════════════════════════
+          PHẦN 2: DANH MỤC (bên dưới)
+      ══════════════════════════════════════════════ */}
+      <div style={{
+        background: 'linear-gradient(160deg, #0f172a 0%, #1a1f3a 100%)',
+        borderRadius: '16px',
+        border: '1px solid #1e293b',
+        overflow: 'hidden',
+      }}>
+        {/* Portfolio header */}
+        <div style={{
+          padding: '16px 20px',
+          borderBottom: '1px solid #1e293b',
+          display: 'flex', alignItems: 'center', gap: '10px',
+        }}>
+          <span style={{ fontSize: '18px' }}>📊</span>
+          <div style={{ fontWeight: 700, color: '#e2e8f0', fontSize: '15px' }}>Danh mục đầu tư</div>
+        </div>
+
+        {/* ── TỔNG QUAN: 4 cards bao gồm tiền mặt ── */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+          gap: '12px',
+          padding: '16px 20px',
+        }}>
+          {/* Tổng tài sản */}
+          <SummaryCard
+            label="Tổng tài sản"
+            value={`${fmt(totalAssets)} ₫`}
+            sub={portfolio.length > 0 || cash > 0 ? `${portfolio.length} mã · ${cashPct.toFixed(0)}% TM` : 'Chưa có dữ liệu'}
+            accent="#2563eb"
+          />
+          {/* Giá trị cổ phiếu */}
+          <SummaryCard
+            label="Cổ phiếu"
+            value={`${fmt(totalStock)} ₫`}
+            sub={`${stockPct.toFixed(1)}% tổng tài sản`}
+            accent="#7c3aed"
+          />
+          {/* Tiền mặt */}
+          <SummaryCard
+            label="Tiền mặt"
+            value={`${fmt(cash)} ₫`}
+            sub={`${cashPct.toFixed(1)}% tổng tài sản`}
+            accent="#0891b2"
+            onClick={() => setEditingCash(true)}
+            clickable
+          />
+          {/* Lãi/Lỗ */}
+          <SummaryCard
+            label="Lãi/Lỗ"
+            value={`${totalPL >= 0 ? '+' : ''}${fmt(totalPL)} ₫`}
+            sub={totalCost > 0 ? fmtPct(totalPLPct) : '—'}
+            accent={totalPL >= 0 ? '#10b981' : '#ef4444'}
+            valueColor={totalPL >= 0 ? '#10b981' : '#ef4444'}
+          />
+        </div>
+
+        {/* Allocation bar */}
+        {totalAssets > 0 && (
+          <div style={{ padding: '0 20px 16px' }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              fontSize: '12px', color: '#64748b', marginBottom: '6px',
+            }}>
+              <span>Cổ phiếu {stockPct.toFixed(1)}%</span>
+              {marketMode && (
+                <span style={{ color: modeColor }}>
+                  Khuyến nghị: {marketMode.allocation}%
+                </span>
+              )}
+              <span>Tiền mặt {cashPct.toFixed(1)}%</span>
+            </div>
+            <div style={{
+              height: 8, borderRadius: 4,
+              background: 'rgba(255,255,255,0.08)',
+              overflow: 'hidden',
+              position: 'relative',
+            }}>
+              <div style={{
+                height: '100%',
+                width: `${stockPct}%`,
+                background: 'linear-gradient(90deg, #2563eb, #7c3aed)',
+                borderRadius: 4,
+                transition: 'width 0.5s ease',
+              }}/>
+              {/* Recommended line */}
+              {marketMode && (
                 <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr 1fr',
-                  gap: '10px',
-                  marginBottom: '10px'
-                }}>
-                  <input
-                    type="text"
-                    placeholder="Mã (VD: VCB)"
-                    value={ticker}
-                    onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                    style={{
-                      padding: '10px',
-                      backgroundColor: '#000',
-                      border: '1px solid #333',
-                      borderRadius: '4px',
-                      color: '#fff',
-                      fontSize: '14px'
-                    }}
-                  />
-                  <input
-                    type="number"
-                    placeholder="Số lượng (VD: 100)"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                    style={{
-                      padding: '10px',
-                      backgroundColor: '#000',
-                      border: '1px solid #333',
-                      borderRadius: '4px',
-                      color: '#fff',
-                      fontSize: '14px'
-                    }}
-                  />
-                  <input
-                    type="number"
-                    placeholder="Giá mua (VD: 85000)"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    style={{
-                      padding: '10px',
-                      backgroundColor: '#000',
-                      border: '1px solid #333',
-                      borderRadius: '4px',
-                      color: '#fff',
-                      fontSize: '14px'
-                    }}
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={isFetchingPrice}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    backgroundColor: isFetchingPrice ? '#555' : '#2196F3',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    cursor: isFetchingPrice ? 'not-allowed' : 'pointer',
-                    transition: 'background-color 0.2s'
-                  }}
-                  onMouseOver={(e) => !isFetchingPrice && (e.target.style.backgroundColor = '#1976D2')}
-                  onMouseOut={(e) => !isFetchingPrice && (e.target.style.backgroundColor = '#2196F3')}
-                >
-                  {isFetchingPrice ? '⏳ Đang lấy giá...' : '+ Thêm'}
-                </button>
-              </form>
-            </div>
-
-            {/* Update Cash */}
-            <div style={{
-              backgroundColor: '#1a1a1a',
-              padding: '20px',
-              borderRadius: '8px',
-              marginBottom: '20px'
-            }}>
-              <h3 style={{ fontSize: '16px', marginBottom: '15px', color: '#fff' }}>
-                💰 Cập nhật tiền mặt
-              </h3>
-              <form onSubmit={handleUpdateCash}>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <input
-                    type="number"
-                    placeholder="Số tiền (VD: 50000000)"
-                    value={cashInput}
-                    onChange={(e) => setCashInput(e.target.value)}
-                    style={{
-                      flex: 1,
-                      padding: '10px',
-                      backgroundColor: '#000',
-                      border: '1px solid #333',
-                      borderRadius: '4px',
-                      color: '#fff',
-                      fontSize: '14px'
-                    }}
-                  />
-                  <button
-                    type="submit"
-                    style={{
-                      padding: '10px 20px',
-                      backgroundColor: '#4CAF50',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      transition: 'background-color 0.2s'
-                    }}
-                    onMouseOver={(e) => e.target.style.backgroundColor = '#45a049'}
-                    onMouseOut={(e) => e.target.style.backgroundColor = '#4CAF50'}
-                  >
-                    Cập nhật
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* Portfolio List */}
-            <div style={{
-              backgroundColor: '#1a1a1a',
-              padding: '20px',
-              borderRadius: '8px'
-            }}>
-              <h3 style={{ fontSize: '16px', marginBottom: '15px', color: '#fff' }}>
-                📋 Danh mục cổ phiếu ({portfolio.length})
-              </h3>
-              {portfolio.length === 0 ? (
-                <p style={{ color: '#888', fontSize: '14px', textAlign: 'center', padding: '20px' }}>
-                  Danh mục trống. Thêm cổ phiếu đầu tiên!
-                </p>
-              ) : (
-                <div style={{ 
-                  maxHeight: '400px', 
-                  overflowY: 'auto' 
-                }}>
-                  {portfolio.map((stock) => (
-                    <div
-                      key={stock.id}
-                      style={{
-                        backgroundColor: '#000',
-                        padding: '15px',
-                        borderRadius: '6px',
-                        marginBottom: '10px',
-                        border: '1px solid #333'
-                      }}
-                    >
-                      <div style={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '10px'
-                      }}>
-                        <div style={{ fontSize: '16px', fontWeight: '600', color: '#fff' }}>
-                          {stock.ticker}
-                        </div>
-                        <button
-                          onClick={() => handleDeleteStock(stock.ticker)}
-                          style={{
-                            padding: '5px 10px',
-                            backgroundColor: '#f44336',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: '4px',
-                            fontSize: '12px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Xóa
-                        </button>
-                      </div>
-                      <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 1fr',
-                        gap: '10px',
-                        fontSize: '13px',
-                        color: '#888'
-                      }}>
-                        <div>
-                          <span>SL: </span>
-                          <span style={{ color: '#fff' }}>{stock.quantity}</span>
-                        </div>
-                        <div>
-                          <span>Giá mua: </span>
-                          <span style={{ color: '#fff' }}>{formatNumber(stock.avg_price)}</span>
-                        </div>
-                        <div>
-                          <span>Giá hiện tại: </span>
-                          <span style={{ color: '#fff' }}>{formatNumber(stock.current_price)}</span>
-                        </div>
-                        <div>
-                          <span>Giá trị: </span>
-                          <span style={{ color: '#fff' }}>{formatNumber(stock.current_value)}</span>
-                        </div>
-                        <div>
-                          <span>L/L: </span>
-                          <span style={{ 
-                            color: stock.pl_amount >= 0 ? '#4CAF50' : '#f44336',
-                            fontWeight: '600'
-                          }}>
-                            {stock.pl_amount >= 0 ? '+' : ''}{formatNumber(stock.pl_amount)}
-                          </span>
-                        </div>
-                        <div>
-                          <span>%: </span>
-                          <span style={{ 
-                            color: stock.pl_pct >= 0 ? '#4CAF50' : '#f44336',
-                            fontWeight: '600'
-                          }}>
-                            {formatPercent(stock.pl_pct)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                  position: 'absolute',
+                  left: `${marketMode.allocation}%`,
+                  top: 0, bottom: 0, width: 2,
+                  background: modeColor,
+                  opacity: 0.8,
+                }}/>
               )}
             </div>
           </div>
+        )}
 
-          {/* Right Column - AI Chat */}
-          <div>
-            <div style={{
-              backgroundColor: '#1a1a1a',
-              padding: '20px',
-              borderRadius: '8px',
-              height: 'calc(100vh - 180px)',
-              display: 'flex',
-              flexDirection: 'column'
+        {/* ── Cập nhật tiền mặt ── */}
+        <div style={{
+          padding: '0 20px 16px',
+          display: editingCash ? 'flex' : 'none',
+          gap: '8px', alignItems: 'center',
+        }}>
+          <input
+            value={cashInput}
+            onChange={e => setCashInput(e.target.value)}
+            placeholder="Nhập số tiền mặt (VND)"
+            style={{
+              flex: 1, padding: '8px 14px',
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid #0891b2',
+              borderRadius: '8px', color: '#e2e8f0', fontSize: '14px', outline: 'none',
+            }}
+            onKeyDown={e => e.key === 'Enter' && handleSaveCash()}
+            autoFocus
+          />
+          <button onClick={handleSaveCash} style={{
+            padding: '8px 16px',
+            background: '#0891b2', border: 'none',
+            borderRadius: '8px', color: '#fff',
+            fontSize: '13px', cursor: 'pointer', fontWeight: 600,
+          }}>Lưu</button>
+          <button onClick={() => setEditingCash(false)} style={{
+            padding: '8px 12px',
+            background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '8px', color: '#94a3b8',
+            fontSize: '13px', cursor: 'pointer',
+          }}>✕</button>
+        </div>
+
+        {/* Nút mở nhập tiền mặt nếu chưa đang edit */}
+        {!editingCash && (
+          <div style={{ padding: '0 20px 12px' }}>
+            <button onClick={() => setEditingCash(true)} style={{
+              padding: '6px 14px',
+              background: 'rgba(8,145,178,0.1)',
+              border: '1px solid rgba(8,145,178,0.3)',
+              borderRadius: '20px',
+              color: '#67e8f9',
+              fontSize: '12px', cursor: 'pointer',
             }}>
-              <h3 style={{ fontSize: '16px', marginBottom: '15px', color: '#fff' }}>
-                💬 Tư vấn AI
-              </h3>
-              
-              {/* Chat History */}
-              <div style={{
-                flex: 1,
-                overflowY: 'auto',
-                marginBottom: '15px',
-                paddingRight: '10px'
-              }}>
-                {chatHistory.length === 0 ? (
-                  <div style={{
-                    textAlign: 'center',
-                    padding: '40px 20px',
-                    color: '#888'
-                  }}>
-                    <div style={{ fontSize: '48px', marginBottom: '15px' }}>🤖</div>
-                    <p style={{ fontSize: '14px', marginBottom: '10px' }}>
-                      Xin chào! Tôi là AI Advisor của bạn.
-                    </p>
-                    <p style={{ fontSize: '13px', color: '#666' }}>
-                      Hãy bắt đầu bằng cách:
-                    </p>
-                    <ol style={{
-                      textAlign: 'left',
-                      display: 'inline-block',
-                      fontSize: '13px',
-                      color: '#666',
-                      marginTop: '10px'
-                    }}>
-                      <li>Nhập vốn đầu tư của bạn</li>
-                      <li>Thêm các vị thế hiện tại (nếu có)</li>
-                      <li>Đặt câu hỏi hoặc yêu cầu phân tích</li>
-                    </ol>
-                    <p style={{ 
-                      fontSize: '12px', 
-                      color: '#555',
-                      marginTop: '20px',
-                      fontStyle: 'italic'
-                    }}>
-                      Tôi sẽ phân tích danh mục và tư vấn chiến lược phù hợp! 🚀
-                    </p>
-                  </div>
-                ) : (
-                  chatHistory.map((chat, index) => (
-                    <div key={index} style={{ marginBottom: '20px' }}>
-                      {/* User Message */}
-                      <div style={{
-                        backgroundColor: '#2196F3',
-                        padding: '12px 15px',
-                        borderRadius: '8px',
-                        marginBottom: '10px',
-                        maxWidth: '80%',
-                        marginLeft: 'auto'
-                      }}>
-                        <div style={{ fontSize: '13px', color: '#fff' }}>
-                          {chat.message}
-                        </div>
-                      </div>
-                      
-                      {/* AI Response */}
-                      <div style={{
-                        backgroundColor: '#000',
-                        padding: '12px 15px',
-                        borderRadius: '8px',
-                        border: '1px solid #333',
-                        maxWidth: '80%'
-                      }}>
-                        <div style={{ fontSize: '13px', color: '#fff', whiteSpace: 'pre-wrap' }}>
-                          {chat.response}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-                {isLoading && (
-                  <div style={{
-                    backgroundColor: '#000',
-                    padding: '12px 15px',
-                    borderRadius: '8px',
-                    border: '1px solid #333',
-                    maxWidth: '80%'
-                  }}>
-                    <div style={{ fontSize: '13px', color: '#888' }}>
-                      ⏳ AI đang suy nghĩ...
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Chat Input */}
-              <form onSubmit={handleSendMessage}>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <input
-                    type="text"
-                    placeholder="Đặt câu hỏi cho AI (VD: Tôi nên mua hay bán VCB?)"
-                    value={userMessage}
-                    onChange={(e) => setUserMessage(e.target.value)}
-                    disabled={isLoading}
-                    style={{
-                      flex: 1,
-                      padding: '12px',
-                      backgroundColor: '#000',
-                      border: '1px solid #333',
-                      borderRadius: '4px',
-                      color: '#fff',
-                      fontSize: '14px'
-                    }}
-                  />
-                  <button
-                    type="submit"
-                    disabled={isLoading || !userMessage.trim()}
-                    style={{
-                      padding: '12px 24px',
-                      backgroundColor: isLoading || !userMessage.trim() ? '#555' : '#2196F3',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      cursor: isLoading || !userMessage.trim() ? 'not-allowed' : 'pointer',
-                      transition: 'background-color 0.2s'
-                    }}
-                    onMouseOver={(e) => !isLoading && userMessage.trim() && (e.target.style.backgroundColor = '#1976D2')}
-                    onMouseOut={(e) => !isLoading && userMessage.trim() && (e.target.style.backgroundColor = '#2196F3')}
-                  >
-                    {isLoading ? '⏳' : '➤'}
-                  </button>
-                </div>
-              </form>
-            </div>
+              💵 {cash > 0 ? 'Cập nhật tiền mặt' : 'Nhập tiền mặt'}
+            </button>
           </div>
+        )}
+
+        {/* ── Thêm cổ phiếu ── */}
+        <div style={{
+          padding: '0 20px 16px',
+          borderTop: '1px solid #1e293b',
+          paddingTop: '16px',
+        }}>
+          <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '10px', fontWeight: 600 }}>
+            + Thêm cổ phiếu
+          </div>
+          <form onSubmit={handleAddStock} style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 1fr auto',
+            gap: '8px',
+          }}>
+            {[
+              { key: 'ticker', placeholder: 'Mã CP (VD: VCB)', upper: true },
+              { key: 'quantity', placeholder: 'Số lượng (CP)', type: 'number' },
+              { key: 'price', placeholder: 'Giá vốn (VND)', type: 'number' },
+            ].map(f => (
+              <input key={f.key}
+                value={addForm[f.key]}
+                onChange={e => setAddForm(prev => ({
+                  ...prev,
+                  [f.key]: f.upper ? e.target.value.toUpperCase() : e.target.value
+                }))}
+                placeholder={f.placeholder}
+                type={f.type || 'text'}
+                style={{
+                  padding: '8px 12px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px', color: '#e2e8f0',
+                  fontSize: '13px', outline: 'none',
+                  minWidth: 0,
+                }}
+                onFocus={e => e.target.style.borderColor = '#2563eb'}
+                onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+              />
+            ))}
+            <button type="submit" disabled={addLoading} style={{
+              padding: '8px 16px',
+              background: addLoading ? 'rgba(37,99,235,0.3)' : 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+              border: 'none', borderRadius: '8px',
+              color: '#fff', fontSize: '13px',
+              cursor: addLoading ? 'not-allowed' : 'pointer',
+              fontWeight: 600, whiteSpace: 'nowrap',
+            }}>
+              {addLoading ? '...' : 'Thêm'}
+            </button>
+          </form>
+          {addError && (
+            <div style={{ color: '#f87171', fontSize: '12px', marginTop: '6px' }}>{addError}</div>
+          )}
+        </div>
+
+        {/* ── Danh sách cổ phiếu ── */}
+        {portfolio.length > 0 ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{
+              width: '100%', borderCollapse: 'collapse',
+              fontSize: '13px',
+            }}>
+              <thead>
+                <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                  {['Mã', 'SL', 'Giá vốn', 'Giá TT', 'Giá trị', 'Lãi/Lỗ', ''].map(h => (
+                    <th key={h} style={{
+                      padding: '10px 16px', textAlign: 'right',
+                      color: '#64748b', fontWeight: 600, fontSize: '12px',
+                      textTransform: 'uppercase', letterSpacing: '0.5px',
+                      borderBottom: '1px solid #1e293b',
+                      ...(h === 'Mã' || h === '' ? { textAlign: 'left' } : {}),
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {portfolio.map((p, i) => {
+                  const pl = p.pl_amount || 0
+                  const plPct = p.pl_pct || 0
+                  const isPos = pl >= 0
+                  return (
+                    <tr key={i} style={{
+                      borderBottom: '1px solid rgba(255,255,255,0.04)',
+                      transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <td style={{ padding: '12px 16px', color: '#e2e8f0', fontWeight: 700 }}>
+                        {p.ticker}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', color: '#94a3b8' }}>
+                        {fmt(p.quantity)}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', color: '#94a3b8' }}>
+                        {fmt(p.avg_price)}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', color: '#e2e8f0' }}>
+                        {fmt(p.current_price)}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', color: '#e2e8f0' }}>
+                        {fmt(p.current_value)}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                        <span style={{ color: isPos ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                          {isPos ? '+' : ''}{fmt(pl)}<br/>
+                          <span style={{ fontSize: '11px', opacity: 0.8 }}>
+                            {fmtPct(plPct)}
+                          </span>
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'left' }}>
+                        <button onClick={() => handleDeleteStock(p.ticker)} style={{
+                          padding: '4px 8px',
+                          background: 'rgba(239,68,68,0.1)',
+                          border: '1px solid rgba(239,68,68,0.2)',
+                          borderRadius: '6px', color: '#f87171',
+                          fontSize: '11px', cursor: 'pointer',
+                          transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => e.target.style.background = 'rgba(239,68,68,0.25)'}
+                        onMouseLeave={e => e.target.style.background = 'rgba(239,68,68,0.1)'}
+                        >Xóa</button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{
+            padding: '32px 20px',
+            textAlign: 'center',
+            color: '#475569',
+            fontSize: '14px',
+          }}>
+            📭 Chưa có cổ phiếu nào trong danh mục.<br/>
+            <span style={{ fontSize: '12px' }}>Thêm cổ phiếu ở trên để AI có thể tư vấn chính xác hơn.</span>
+          </div>
+        )}
+
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #1e293b' }}>
+          <p style={{ fontSize: '11px', color: '#334155', margin: 0, textAlign: 'center' }}>
+            AI Advisor là công cụ hỗ trợ quyết định, không phải tư vấn đầu tư.
+            Mọi quyết định là trách nhiệm của bạn.
+          </p>
         </div>
       </div>
-    </div>
-  );
-};
 
-export default AIPortfolioManager;
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 0.3; transform: scale(0.8); }
+          50% { opacity: 1; transform: scale(1); }
+        }
+        @media (max-width: 600px) {
+          form[style*="grid-template-columns"] {
+            grid-template-columns: 1fr 1fr !important;
+          }
+          form[style*="grid-template-columns"] button {
+            grid-column: 1 / -1;
+          }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+// ── Summary Card component ───────────────────────────────────
+function SummaryCard({ label, value, sub, accent, valueColor, onClick, clickable }) {
+  return (
+    <div onClick={onClick}
+      style={{
+        padding: '14px 16px',
+        background: 'rgba(255,255,255,0.03)',
+        border: `1px solid ${accent}22`,
+        borderRadius: '12px',
+        cursor: clickable ? 'pointer' : 'default',
+        transition: 'all 0.2s',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+      onMouseEnter={e => { if (clickable) e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
+      onMouseLeave={e => { if (clickable) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+    >
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0,
+        height: 2, background: accent, borderRadius: '12px 12px 0 0',
+      }}/>
+      <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+        {label} {clickable && <span style={{ color: accent, fontSize: '10px' }}>✎</span>}
+      </div>
+      <div style={{ fontSize: '16px', fontWeight: 700, color: valueColor || '#e2e8f0', marginBottom: '4px' }}>
+        {value}
+      </div>
+      <div style={{ fontSize: '11px', color: '#475569' }}>{sub}</div>
+    </div>
+  )
+}
