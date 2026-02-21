@@ -138,21 +138,21 @@ export default function LandingPage({ onLogin }) {
   const evaluateSellSignal = (signal, currentPrice, ma20) => {
     // This is a simulation - in production, fetch real prices and MA20
     
-    // If price reached TP → Sell 1/2
+    // If price reached TP â†’ Sell 1/2
     if (currentPrice >= signal.takeProfit && signal.status === 'active') {
       return {
         status: 'half_sold',
-        action: 'BÁN 1/2',
-        reason: 'Đạt Take Profit'
+        action: 'BÃN 1/2',
+        reason: 'Äáº¡t Take Profit'
       }
     }
     
-    // If already sold 1/2 and price cuts below MA20 → Sell remaining 1/2
+    // If already sold 1/2 and price cuts below MA20 â†’ Sell remaining 1/2
     if (signal.status === 'half_sold' && currentPrice < ma20) {
       return {
         status: 'fully_sold',
-        action: 'BÁN NỐT 1/2',
-        reason: 'Cắt xuống MA20'
+        action: 'BÃN Ná»T 1/2',
+        reason: 'Cáº¯t xuá»‘ng MA20'
       }
     }
     
@@ -160,8 +160,8 @@ export default function LandingPage({ onLogin }) {
     if (signal.status === 'half_sold') {
       return {
         status: 'half_sold',
-        action: 'NẮM GIỮ',
-        reason: 'Trên MA20'
+        action: 'Náº®M GIá»®',
+        reason: 'TrÃªn MA20'
       }
     }
     
@@ -251,30 +251,49 @@ export default function LandingPage({ onLogin }) {
           <div className="hero-content">
             <div className="hero-text">
               <h1 className="hero-title">
-                Đầu tư thông minh với
-                <span className="gradient-text"> AI Advisor</span>
+                Äáº§u tÆ° thÃ´ng minh vá»›i
+                <span className="gradient-text" style={{display:"inline-flex",alignItems:"center",gap:"8px",verticalAlign:"middle"}}>
+                  <svg width="42" height="42" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg" style={{display:"inline-block",verticalAlign:"middle",marginLeft:"6px",flexShrink:0}}>
+                    <defs>
+                      <linearGradient id="heroLogoG1" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stopColor="#38bdf8"/>
+                        <stop offset="100%" stopColor="#2563eb"/>
+                      </linearGradient>
+                      <linearGradient id="heroLogoG2" x1="22" y1="0" x2="22" y2="44" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stopColor="#1e40af"/>
+                        <stop offset="100%" stopColor="#0369a1"/>
+                      </linearGradient>
+                    </defs>
+                    <path d="M22 3 L39 12.5 L39 31.5 L22 41 L5 31.5 L5 12.5 Z" fill="url(#heroLogoG2)" opacity="0.2" stroke="url(#heroLogoG1)" strokeWidth="1.5"/>
+                    <path d="M22 10 L35 17.5 L35 26.5 L22 34 L9 26.5 L9 17.5 Z" fill="url(#heroLogoG1)" opacity="0.15"/>
+                    <path d="M22 11 L32 22 L22 33 L12 22 Z" fill="url(#heroLogoG1)" opacity="0.95"/>
+                    <path d="M22 16 L28 22 L22 28 L16 22 Z" fill="white" opacity="0.9"/>
+                    <circle cx="22" cy="22" r="2" fill="white" opacity="0.6"/>
+                  </svg>
+                  AI Advisor
+                </span>
               </h1>
               <p className="hero-subtitle">
-                Tín hiệu mua bán chính xác, quản trị danh mục tự động, và tư vấn AI 24/7 - 
-                Nền tảng đầu tư chứng khoán thế hệ mới
+                TÃ­n hiá»‡u mua bÃ¡n chÃ­nh xÃ¡c, quáº£n trá»‹ danh má»¥c tá»± Ä‘á»™ng, vÃ  tÆ° váº¥n AI 24/7 - 
+                Ná»n táº£ng Ä‘áº§u tÆ° chá»©ng khoÃ¡n tháº¿ há»‡ má»›i
               </p>
               
               <div className="hero-stats">
                 <div className="stat-item">
                   <div className="stat-number">{stats.totalSignals}+</div>
-                  <div className="stat-label">Tín hiệu phát sinh</div>
+                  <div className="stat-label">TÃ­n hiá»‡u phÃ¡t sinh</div>
                 </div>
                 <div className="stat-item">
                   <div className="stat-number">{stats.successRate}%</div>
-                  <div className="stat-label">Tỷ lệ thành công</div>
+                  <div className="stat-label">Tá»· lá»‡ thÃ nh cÃ´ng</div>
                 </div>
                 <div className="stat-item">
                   <div className="stat-number">{stats.avgReturn}%</div>
-                  <div className="stat-label">Lợi nhuận TB</div>
+                  <div className="stat-label">Lá»£i nhuáº­n TB</div>
                 </div>
                 <div className="stat-item">
                   <div className="stat-number" style={{color: '#ef4444'}}>{stats.failureRate}%</div>		
-                  <div className="stat-label">Tỷ lệ không thành công</div>
+                  <div className="stat-label">Tá»· lá»‡ khÃ´ng thÃ nh cÃ´ng</div>
                 </div>
               </div>
 
@@ -285,10 +304,10 @@ export default function LandingPage({ onLogin }) {
                     <polyline points="10 17 15 12 10 7"/>
                     <line x1="15" y1="12" x2="3" y2="12"/>
                   </svg>
-                  Bắt đầu ngay - Miễn phí
+                  Báº¯t Ä‘áº§u ngay - Miá»…n phÃ­
                 </button>
                 <button className="btn-secondary-large" onClick={() => scrollToSection('showcase')}>
-                  Xem lịch sử khuyến nghị
+                  Xem lá»‹ch sá»­ khuyáº¿n nghá»‹
                 </button>
               </div>
             </div>
@@ -326,7 +345,7 @@ export default function LandingPage({ onLogin }) {
                           color: marketRisk.market_mode === 'BULL' ? '#00E676'
                                : marketRisk.market_mode === 'BEAR' ? '#FF1744' : '#FFD600',
                         }}>
-                          {marketRisk.market_mode === 'BULL' ? '🟢' : marketRisk.market_mode === 'BEAR' ? '🔴' : '🟡'}{' '}
+                          {marketRisk.market_mode === 'BULL' ? 'ðŸŸ¢' : marketRisk.market_mode === 'BEAR' ? 'ðŸ”´' : 'ðŸŸ¡'}{' '}
                           {marketRisk.mode_label}
                         </div>
                       </div>
@@ -358,8 +377,8 @@ export default function LandingPage({ onLogin }) {
                         display: 'flex', justifyContent: 'space-between',
                         fontSize: '12px', color: '#94a3b8', marginBottom: '6px',
                       }}>
-                        <span>Tỷ trọng CP: <strong style={{ color: '#e2e8f0' }}>{marketRisk.allocation}%</strong></span>
-                        <span>Tiền mặt: <strong style={{ color: '#e2e8f0' }}>{100 - marketRisk.allocation}%</strong></span>
+                        <span>Tá»· trá»ng CP: <strong style={{ color: '#e2e8f0' }}>{marketRisk.allocation}%</strong></span>
+                        <span>Tiá»n máº·t: <strong style={{ color: '#e2e8f0' }}>{100 - marketRisk.allocation}%</strong></span>
                       </div>
                       <div style={{
                         height: '8px', background: 'rgba(255,255,255,0.1)',
@@ -378,10 +397,10 @@ export default function LandingPage({ onLogin }) {
                       </div>
                     </div>
 
-                    {/* Factors - chỉ hiện những yếu tố có dữ liệu */}
+                    {/* Factors - chá»‰ hiá»‡n nhá»¯ng yáº¿u tá»‘ cÃ³ dá»¯ liá»‡u */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       {(marketRisk.factors || [])
-                        .filter(factor => !factor.isRef && !factor.value?.includes('Chưa có'))
+                        .filter(factor => !factor.isRef && !factor.value?.includes('ChÆ°a cÃ³'))
                         .map((factor, i) => (
                         <div key={i} style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -393,7 +412,7 @@ export default function LandingPage({ onLogin }) {
                             color: factor.positive ? '#00E676' : '#FF6B6B',
                             fontWeight: '600',
                           }}>
-                            {factor.positive ? '▲ ' : '▼ '}
+                            {factor.positive ? 'â–² ' : 'â–¼ '}
                             {factor.value}
                           </span>
                         </div>
@@ -404,7 +423,7 @@ export default function LandingPage({ onLogin }) {
                     <div style={{
                       marginTop: '12px', fontSize: '11px', color: '#475569', textAlign: 'right',
                     }}>
-                      Cập nhật: {marketRisk.analyzed_at ? new Date(marketRisk.analyzed_at).toLocaleString('vi-VN') : 'N/A'}
+                      Cáº­p nháº­t: {marketRisk.analyzed_at ? new Date(marketRisk.analyzed_at).toLocaleString('vi-VN') : 'N/A'}
                     </div>
                   </div>
                 ) : (
@@ -413,8 +432,8 @@ export default function LandingPage({ onLogin }) {
                     background: 'linear-gradient(135deg, #0B0F1A 0%, #1a1f3a 100%)',
                     borderRadius: '0 0 12px 12px',
                   }}>
-                    <div style={{ fontSize: '32px', marginBottom: '12px' }}>📊</div>
-                    <div style={{ color: '#64748b', fontSize: '14px' }}>Đang tải phân tích thị trường...</div>
+                    <div style={{ fontSize: '32px', marginBottom: '12px' }}>ðŸ“Š</div>
+                    <div style={{ color: '#64748b', fontSize: '14px' }}>Äang táº£i phÃ¢n tÃ­ch thá»‹ trÆ°á»ng...</div>
                   </div>
                 )}
               </div>
@@ -427,8 +446,8 @@ export default function LandingPage({ onLogin }) {
       <section className="features">
         <div className="container">
           <div className="section-header">
-            <h2>Tính năng nổi bật</h2>
-            <p>Công nghệ AI tiên tiến giúp tối ưu hóa quyết định đầu tư</p>
+            <h2>TÃ­nh nÄƒng ná»•i báº­t</h2>
+            <p>CÃ´ng nghá»‡ AI tiÃªn tiáº¿n giÃºp tá»‘i Æ°u hÃ³a quyáº¿t Ä‘á»‹nh Ä‘áº§u tÆ°</p>
           </div>
 
           <div className="features-grid">
@@ -439,8 +458,8 @@ export default function LandingPage({ onLogin }) {
                   <polyline points="19 12 12 19 5 12"/>
                 </svg>
               </div>
-              <h3>Tín hiệu mua bán AI</h3>
-              <p>Phân tích 343 mã chứng khoán 24/7, tạo tín hiệu chính xác với tỷ lệ thành công 78.5%</p>
+              <h3>TÃ­n hiá»‡u mua bÃ¡n AI</h3>
+              <p>PhÃ¢n tÃ­ch 343 mÃ£ chá»©ng khoÃ¡n 24/7, táº¡o tÃ­n hiá»‡u chÃ­nh xÃ¡c vá»›i tá»· lá»‡ thÃ nh cÃ´ng 78.5%</p>
             </div>
 
             <div className="feature-card">
@@ -451,8 +470,8 @@ export default function LandingPage({ onLogin }) {
                   <line x1="15" y1="9" x2="9" y2="15"/>
                 </svg>
               </div>
-              <h3>Quản trị danh mục thông minh</h3>
-              <p>Theo dõi hiệu suất, phân bổ tài sản tối ưu, và nhận cảnh báo rủi ro kịp thời</p>
+              <h3>Quáº£n trá»‹ danh má»¥c thÃ´ng minh</h3>
+              <p>Theo dÃµi hiá»‡u suáº¥t, phÃ¢n bá»• tÃ i sáº£n tá»‘i Æ°u, vÃ  nháº­n cáº£nh bÃ¡o rá»§i ro ká»‹p thá»i</p>
             </div>
 
             <div className="feature-card">
@@ -461,8 +480,8 @@ export default function LandingPage({ onLogin }) {
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                 </svg>
               </div>
-              <h3>Tư vấn AI 24/7</h3>
-              <p>Trợ lý AI cá nhân giúp kiểm soát cảm xúc, duy trì kỷ luật và ra quyết định sáng suốt</p>
+              <h3>TÆ° váº¥n AI 24/7</h3>
+              <p>Trá»£ lÃ½ AI cÃ¡ nhÃ¢n giÃºp kiá»ƒm soÃ¡t cáº£m xÃºc, duy trÃ¬ ká»· luáº­t vÃ  ra quyáº¿t Ä‘á»‹nh sÃ¡ng suá»‘t</p>
             </div>
           </div>
         </div>
@@ -472,19 +491,19 @@ export default function LandingPage({ onLogin }) {
       <section className="showcase" id="showcase">
         <div className="container">
           <div className="section-header">
-            <h2>Lịch sử khuyến nghị</h2>
-            <p>Các tín hiệu đã thành công trong thời gian gần đây</p>
+            <h2>Lá»‹ch sá»­ khuyáº¿n nghá»‹</h2>
+            <p>CÃ¡c tÃ­n hiá»‡u Ä‘Ã£ thÃ nh cÃ´ng trong thá»i gian gáº§n Ä‘Ã¢y</p>
           </div>
 
           {loading ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
-              <div style={{ fontSize: '16px' }}>⏳ Đang tải tín hiệu...</div>
+              <div style={{ fontSize: '16px' }}>â³ Äang táº£i tÃ­n hiá»‡u...</div>
             </div>
           ) : recommendations.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
-              <div style={{ fontSize: '48px', marginBottom: '20px' }}>📊</div>
-              <div style={{ fontSize: '18px', marginBottom: '10px' }}>Chưa có tín hiệu nào</div>
-              <div style={{ fontSize: '14px' }}>Hệ thống sẽ tự động tạo tín hiệu mới</div>
+              <div style={{ fontSize: '48px', marginBottom: '20px' }}>ðŸ“Š</div>
+              <div style={{ fontSize: '18px', marginBottom: '10px' }}>ChÆ°a cÃ³ tÃ­n hiá»‡u nÃ o</div>
+              <div style={{ fontSize: '14px' }}>Há»‡ thá»‘ng sáº½ tá»± Ä‘á»™ng táº¡o tÃ­n hiá»‡u má»›i</div>
             </div>
           ) : (
             <>
@@ -492,13 +511,13 @@ export default function LandingPage({ onLogin }) {
                 <table className="signals-table">
                   <thead>
                     <tr>
-                      <th>MÃ CK</th>
-                      <th>GIÁ VÀO</th>
+                      <th>MÃƒ CK</th>
+                      <th>GIÃ VÃ€O</th>
                       <th>STOP LOSS</th>
                       <th>TAKE PROFIT</th>
                       <th>SCORE</th>
-                      <th>LOẠI</th>
-                      <th>NGÀY</th>
+                      <th>LOáº I</th>
+                      <th>NGÃ€Y</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -522,14 +541,14 @@ export default function LandingPage({ onLogin }) {
               {/* Sell Signal Strategy Info */}
               <div className="strategy-info">
                 <div className="strategy-card">
-                  <div className="strategy-icon">📊</div>
+                  <div className="strategy-icon">ðŸ“Š</div>
                   <div className="strategy-content">
-                    <h4>Chiến lược bán tự động</h4>
-                    <p>Hệ thống theo dõi các CP trong danh sách và đưa ra tín hiệu bán theo quy tắc:</p>
+                    <h4>Chiáº¿n lÆ°á»£c bÃ¡n tá»± Ä‘á»™ng</h4>
+                    <p>Há»‡ thá»‘ng theo dÃµi cÃ¡c CP trong danh sÃ¡ch vÃ  Ä‘Æ°a ra tÃ­n hiá»‡u bÃ¡n theo quy táº¯c:</p>
                     <ul>
-                      <li><strong>Bán 1/2:</strong> Khi giá đạt Take Profit</li>
-                      <li><strong>Bán nốt 1/2:</strong> Khi giá cắt xuống MA20 (sau khi đã bán 1/2)</li>
-                      <li><strong>Nắm giữ:</strong> Khi giá trên MA20 (sau khi đã bán 1/2)</li>
+                      <li><strong>BÃ¡n 1/2:</strong> Khi giÃ¡ Ä‘áº¡t Take Profit</li>
+                      <li><strong>BÃ¡n ná»‘t 1/2:</strong> Khi giÃ¡ cáº¯t xuá»‘ng MA20 (sau khi Ä‘Ã£ bÃ¡n 1/2)</li>
+                      <li><strong>Náº¯m giá»¯:</strong> Khi giÃ¡ trÃªn MA20 (sau khi Ä‘Ã£ bÃ¡n 1/2)</li>
                     </ul>
                   </div>
                 </div>
@@ -539,7 +558,7 @@ export default function LandingPage({ onLogin }) {
 
           <div className="showcase-cta">
             <button className="btn-primary-large" onClick={() => setShowAuth(true)}>
-              Truy cập tín hiệu mới nhất
+              Truy cáº­p tÃ­n hiá»‡u má»›i nháº¥t
             </button>
           </div>
         </div>
@@ -558,19 +577,33 @@ export default function LandingPage({ onLogin }) {
             </button>
 
             <div className="auth-header">
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"8px",marginBottom:"8px"}}>
+                <svg width="28" height="28" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <linearGradient id="authLogoG" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stopColor="#38bdf8"/>
+                      <stop offset="100%" stopColor="#2563eb"/>
+                    </linearGradient>
+                  </defs>
+                  <path d="M22 3 L39 12.5 L39 31.5 L22 41 L5 31.5 L5 12.5 Z" fill="#1e3a5f" stroke="url(#authLogoG)" strokeWidth="1.5"/>
+                  <path d="M22 11 L32 22 L22 33 L12 22 Z" fill="url(#authLogoG)" opacity="0.95"/>
+                  <path d="M22 16 L28 22 L22 28 L16 22 Z" fill="white" opacity="0.9"/>
+                </svg>
+                <span style={{fontWeight:700,fontSize:"17px",background:"linear-gradient(135deg,#38bdf8,#2563eb)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>AI Advisor</span>
+              </div>
               <h2>{isLogin ? 'Đăng nhập' : 'Đăng ký'}</h2>
-              <p>{isLogin ? 'Chào mừng trở lại!' : 'Tạo tài khoản miễn phí'}</p>
+              <p style={{color:"#94a3b8",fontSize:"13px",marginTop:"4px"}}>Đầu tư thông minh với AI</p>
             </div>
 
             <form className="auth-form" onSubmit={handleSubmit}>
               {!isLogin && (
                 <div className="form-field">
-                  <label>Họ và tên</label>
+                  <label>Há» vÃ  tÃªn</label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    placeholder="Nguyễn Văn A"
+                    placeholder="Nguyá»…n VÄƒn A"
                     required={!isLogin}
                   />
                 </div>
@@ -588,38 +621,38 @@ export default function LandingPage({ onLogin }) {
               </div>
 
               <div className="form-field">
-                <label>Mật khẩu</label>
+                <label>Máº­t kháº©u</label>
                 <input
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({...formData, password: e.target.value})}
-                  placeholder="••••••••"
+                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                   required
                 />
               </div>
 
               <button type="submit" className="btn-submit">
-                {isLogin ? 'Đăng nhập' : 'Tạo tài khoản'}
+                {isLogin ? 'ÄÄƒng nháº­p' : 'Táº¡o tÃ i khoáº£n'}
               </button>
 
               <div className="auth-switch">
-                {isLogin ? 'Chưa có tài khoản?' : 'Đã có tài khoản?'}
+                {isLogin ? 'ChÆ°a cÃ³ tÃ i khoáº£n?' : 'ÄÃ£ cÃ³ tÃ i khoáº£n?'}
                 <button
                   type="button"
                   onClick={() => setIsLogin(!isLogin)}
                   className="switch-btn"
                 >
-                  {isLogin ? 'Đăng ký ngay' : 'Đăng nhập'}
+                  {isLogin ? 'ÄÄƒng kÃ½ ngay' : 'ÄÄƒng nháº­p'}
                 </button>
               </div>
             </form>
 
             <div className="auth-footer">
-              <p>Bằng việc đăng nhập, bạn đồng ý với</p>
+              <p>Báº±ng viá»‡c Ä‘Äƒng nháº­p, báº¡n Ä‘á»“ng Ã½ vá»›i</p>
               <div className="auth-links">
-                <a href="#" onClick={(e) => { e.preventDefault(); setShowAuth(false); setShowTerms(true); }}>Điều khoản dịch vụ</a>
-                <span>•</span>
-                <a href="#">Chính sách bảo mật</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setShowAuth(false); setShowTerms(true); }}>Äiá»u khoáº£n dá»‹ch vá»¥</a>
+                <span>â€¢</span>
+                <a href="#">ChÃ­nh sÃ¡ch báº£o máº­t</a>
               </div>
             </div>
           </div>
@@ -646,15 +679,15 @@ export default function LandingPage({ onLogin }) {
                   <line x1="12" y1="8" x2="12.01" y2="8"/>
                 </svg>
               </div>
-              <h2>Về AI Advisor</h2>
-              <p>Hệ thống hỗ trợ ra quyết định đầu tư thông minh</p>
+              <h2>Vá» AI Advisor</h2>
+              <p>Há»‡ thá»‘ng há»— trá»£ ra quyáº¿t Ä‘á»‹nh Ä‘áº§u tÆ° thÃ´ng minh</p>
             </div>
 
             <div className="about-body">
               <div className="about-section">
-                <h3>Vấn đề chúng tôi giải quyết</h3>
+                <h3>Váº¥n Ä‘á» chÃºng tÃ´i giáº£i quyáº¿t</h3>
                 <p>
-                  Hầu hết nhà đầu tư cá nhân – dù có kinh nghiệm – đều từng đối mặt với những thách thức sau:
+                  Háº§u háº¿t nhÃ  Ä‘áº§u tÆ° cÃ¡ nhÃ¢n â€“ dÃ¹ cÃ³ kinh nghiá»‡m â€“ Ä‘á»u tá»«ng Ä‘á»‘i máº·t vá»›i nhá»¯ng thÃ¡ch thá»©c sau:
                 </p>
 
                 <div className="about-problems">
@@ -667,7 +700,7 @@ export default function LandingPage({ onLogin }) {
                       </svg>
                     </div>
                     <div>
-                      <strong>Hành động bốc đồng theo cảm xúc</strong> (FOMO mua đỉnh, hoảng loạn bán đáy)
+                      <strong>HÃ nh Ä‘á»™ng bá»‘c Ä‘á»“ng theo cáº£m xÃºc</strong> (FOMO mua Ä‘á»‰nh, hoáº£ng loáº¡n bÃ¡n Ä‘Ã¡y)
                     </div>
                   </div>
 
@@ -680,7 +713,7 @@ export default function LandingPage({ onLogin }) {
                       </svg>
                     </div>
                     <div>
-                      <strong>Không có cơ chế cảnh báo rủi ro đủ sớm</strong>
+                      <strong>KhÃ´ng cÃ³ cÆ¡ cháº¿ cáº£nh bÃ¡o rá»§i ro Ä‘á»§ sá»›m</strong>
                     </div>
                   </div>
 
@@ -693,7 +726,7 @@ export default function LandingPage({ onLogin }) {
                       </svg>
                     </div>
                     <div>
-                      <strong>Không có ai hoặc công cụ nào "nhắc họ dừng lại"</strong> khi hành vi bắt đầu lệch khỏi kế hoạch ban đầu
+                      <strong>KhÃ´ng cÃ³ ai hoáº·c cÃ´ng cá»¥ nÃ o "nháº¯c há» dá»«ng láº¡i"</strong> khi hÃ nh vi báº¯t Ä‘áº§u lá»‡ch khá»i káº¿ hoáº¡ch ban Ä‘áº§u
                     </div>
                   </div>
                 </div>
@@ -701,38 +734,38 @@ export default function LandingPage({ onLogin }) {
 
               <div className="about-section">
                 <div className="about-philosophy">
-                  <div className="philosophy-icon-large">💡</div>
-                  <h3>Triết lý cốt lõi</h3>
+                  <div className="philosophy-icon-large">ðŸ’¡</div>
+                  <h3>Triáº¿t lÃ½ cá»‘t lÃµi</h3>
                   <p className="philosophy-quote-modal">
-                    "Không thay nhà đầu tư quyết định – mà giúp nhà đầu tư ra quyết định tỉnh táo hơn."
+                    "KhÃ´ng thay nhÃ  Ä‘áº§u tÆ° quyáº¿t Ä‘á»‹nh â€“ mÃ  giÃºp nhÃ  Ä‘áº§u tÆ° ra quyáº¿t Ä‘á»‹nh tá»‰nh tÃ¡o hÆ¡n."
                   </p>
                 </div>
               </div>
 
               <div className="about-section">
-                <h3>Hệ thống được thiết kế xoay quanh 3 trụ cột:</h3>
+                <h3>Há»‡ thá»‘ng Ä‘Æ°á»£c thiáº¿t káº¿ xoay quanh 3 trá»¥ cá»™t:</h3>
                 <div className="about-pillars">
                   <div className="about-pillar-item">
                     <div className="pillar-number-small">1</div>
                     <div className="pillar-content">
-                      <h4>Hỗ trợ quyết định</h4>
-                      <p>Cung cấp tín hiệu, kịch bản và bối cảnh thị trường theo logic nhất quán</p>
+                      <h4>Há»— trá»£ quyáº¿t Ä‘á»‹nh</h4>
+                      <p>Cung cáº¥p tÃ­n hiá»‡u, ká»‹ch báº£n vÃ  bá»‘i cáº£nh thá»‹ trÆ°á»ng theo logic nháº¥t quÃ¡n</p>
                     </div>
                   </div>
 
                   <div className="about-pillar-item">
                     <div className="pillar-number-small">2</div>
                     <div className="pillar-content">
-                      <h4>Bảo vệ rủi ro</h4>
-                      <p>Cảnh báo khi xác suất bất lợi tăng cao, khi danh mục hoặc hành vi vượt ngưỡng an toàn</p>
+                      <h4>Báº£o vá»‡ rá»§i ro</h4>
+                      <p>Cáº£nh bÃ¡o khi xÃ¡c suáº¥t báº¥t lá»£i tÄƒng cao, khi danh má»¥c hoáº·c hÃ nh vi vÆ°á»£t ngÆ°á»¡ng an toÃ n</p>
                     </div>
                   </div>
 
                   <div className="about-pillar-item">
                     <div className="pillar-number-small">3</div>
                     <div className="pillar-content">
-                      <h4>Kỷ luật hóa hành vi</h4>
-                      <p>Giúp nhà đầu tư tuân thủ kế hoạch đã chọn, thay vì phản ứng bốc đồng theo thị trường</p>
+                      <h4>Ká»· luáº­t hÃ³a hÃ nh vi</h4>
+                      <p>GiÃºp nhÃ  Ä‘áº§u tÆ° tuÃ¢n thá»§ káº¿ hoáº¡ch Ä‘Ã£ chá»n, thay vÃ¬ pháº£n á»©ng bá»‘c Ä‘á»“ng theo thá»‹ trÆ°á»ng</p>
                     </div>
                   </div>
                 </div>
@@ -740,9 +773,9 @@ export default function LandingPage({ onLogin }) {
 
               <div className="about-section">
                 <div className="about-vision">
-                  <h3>Tầm nhìn dài hạn</h3>
+                  <h3>Táº§m nhÃ¬n dÃ i háº¡n</h3>
                   <p>
-                    Xây dựng một trợ lý tài chính AI cá nhân, đóng vai trò như <strong>"bản đồ định hướng"</strong> cho nhà đầu tư – không dẫn đường tắt, không hứa lợi nhuận, nhưng <strong>giúp giảm sai lầm nghiêm trọng và tăng xác suất tồn tại bền vững trên thị trường.</strong>
+                    XÃ¢y dá»±ng má»™t trá»£ lÃ½ tÃ i chÃ­nh AI cÃ¡ nhÃ¢n, Ä‘Ã³ng vai trÃ² nhÆ° <strong>"báº£n Ä‘á»“ Ä‘á»‹nh hÆ°á»›ng"</strong> cho nhÃ  Ä‘áº§u tÆ° â€“ khÃ´ng dáº«n Ä‘Æ°á»ng táº¯t, khÃ´ng há»©a lá»£i nhuáº­n, nhÆ°ng <strong>giÃºp giáº£m sai láº§m nghiÃªm trá»ng vÃ  tÄƒng xÃ¡c suáº¥t tá»“n táº¡i bá»n vá»¯ng trÃªn thá»‹ trÆ°á»ng.</strong>
                   </p>
                 </div>
               </div>
@@ -750,7 +783,7 @@ export default function LandingPage({ onLogin }) {
 
             <div className="about-actions">
               <button className="btn-understand" onClick={() => { setShowAbout(false); setShowAuth(true); }}>
-                Trải nghiệm ngay
+                Tráº£i nghiá»‡m ngay
               </button>
             </div>
           </div>
@@ -778,64 +811,64 @@ export default function LandingPage({ onLogin }) {
                   <line x1="12" y1="9" x2="12.01" y2="9"/>
                 </svg>
               </div>
-              <h2>Disclaimer – Tuyên bố miễn trừ trách nhiệm</h2>
+              <h2>Disclaimer â€“ TuyÃªn bá»‘ miá»…n trá»« trÃ¡ch nhiá»‡m</h2>
               <p>AI Advisor</p>
             </div>
 
             <div className="terms-body">
               <div className="terms-section">
                 <p className="terms-intro">
-                  <strong>AI Advisor là hệ thống hỗ trợ ra quyết định, không phải dịch vụ tư vấn đầu tư, và không đại diện cho bất kỳ tổ chức môi giới hay tài chính nào.</strong>
+                  <strong>AI Advisor lÃ  há»‡ thá»‘ng há»— trá»£ ra quyáº¿t Ä‘á»‹nh, khÃ´ng pháº£i dá»‹ch vá»¥ tÆ° váº¥n Ä‘áº§u tÆ°, vÃ  khÃ´ng Ä‘áº¡i diá»‡n cho báº¥t ká»³ tá»• chá»©c mÃ´i giá»›i hay tÃ i chÃ­nh nÃ o.</strong>
                 </p>
               </div>
 
               <div className="terms-section">
-                <h3>Các nội dung do AI Advisor cung cấp bao gồm (nhưng không giới hạn):</h3>
+                <h3>CÃ¡c ná»™i dung do AI Advisor cung cáº¥p bao gá»“m (nhÆ°ng khÃ´ng giá»›i háº¡n):</h3>
                 <ul className="terms-list">
                   <li>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="20 6 9 17 4 12"/>
                     </svg>
-                    <span>Tín hiệu mua/bán và cảnh báo rủi ro</span>
+                    <span>TÃ­n hiá»‡u mua/bÃ¡n vÃ  cáº£nh bÃ¡o rá»§i ro</span>
                   </li>
                   <li>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="20 6 9 17 4 12"/>
                     </svg>
-                    <span>Phân tích xu hướng, kịch bản thị trường</span>
+                    <span>PhÃ¢n tÃ­ch xu hÆ°á»›ng, ká»‹ch báº£n thá»‹ trÆ°á»ng</span>
                   </li>
                   <li>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="20 6 9 17 4 12"/>
                     </svg>
-                    <span>Gợi ý quản trị hành vi và kỷ luật đầu tư</span>
+                    <span>Gá»£i Ã½ quáº£n trá»‹ hÃ nh vi vÃ  ká»· luáº­t Ä‘áº§u tÆ°</span>
                   </li>
                 </ul>
               </div>
 
               <div className="terms-section important-notice">
-                <div className="notice-icon">⚠️</div>
+                <div className="notice-icon">âš ï¸</div>
                 <div className="notice-content">
-                  <h4>Lưu ý quan trọng</h4>
+                  <h4>LÆ°u Ã½ quan trá»ng</h4>
                   <p>
-                    Tất cả các nội dung trên <strong>chỉ mang tính tham khảo</strong> và hỗ trợ quá trình ra quyết định.
+                    Táº¥t cáº£ cÃ¡c ná»™i dung trÃªn <strong>chá»‰ mang tÃ­nh tham kháº£o</strong> vÃ  há»— trá»£ quÃ¡ trÃ¬nh ra quyáº¿t Ä‘á»‹nh.
                   </p>
                   <p className="highlight">
-                    <strong>Người dùng tự chịu hoàn toàn trách nhiệm đối với mọi quyết định mua, bán, nắm giữ tài sản.</strong>
+                    <strong>NgÆ°á»i dÃ¹ng tá»± chá»‹u hoÃ n toÃ n trÃ¡ch nhiá»‡m Ä‘á»‘i vá»›i má»i quyáº¿t Ä‘á»‹nh mua, bÃ¡n, náº¯m giá»¯ tÃ i sáº£n.</strong>
                   </p>
                 </div>
               </div>
 
               <div className="terms-section">
                 <p className="terms-footer-text">
-                  Bằng việc sử dụng AI Advisor, bạn xác nhận rằng bạn đã đọc, hiểu và đồng ý với các điều khoản miễn trừ trách nhiệm này.
+                  Báº±ng viá»‡c sá»­ dá»¥ng AI Advisor, báº¡n xÃ¡c nháº­n ráº±ng báº¡n Ä‘Ã£ Ä‘á»c, hiá»ƒu vÃ  Ä‘á»“ng Ã½ vá»›i cÃ¡c Ä‘iá»u khoáº£n miá»…n trá»« trÃ¡ch nhiá»‡m nÃ y.
                 </p>
               </div>
             </div>
 
             <div className="terms-actions">
               <button className="btn-understand" onClick={() => setShowTerms(false)}>
-                Tôi đã hiểu
+                TÃ´i Ä‘Ã£ hiá»ƒu
               </button>
             </div>
           </div>
@@ -848,37 +881,37 @@ export default function LandingPage({ onLogin }) {
           <div className="footer-content">
             <div className="footer-brand">
               <h3>AI Advisor</h3>
-              <p>Nền tảng đầu tư chứng khoán thông minh với AI</p>
+              <p>Ná»n táº£ng Ä‘áº§u tÆ° chá»©ng khoÃ¡n thÃ´ng minh vá»›i AI</p>
             </div>
 
             <div className="footer-links">
               <div className="footer-column">
-                <h4>Sản phẩm</h4>
-                <a href="#" onClick={(e) => { e.preventDefault(); setShowAuth(true); }}>Tín hiệu mua bán</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setShowAuth(true); }}>Quản trị danh mục</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setShowAuth(true); }}>Tư vấn AI</a>
+                <h4>Sáº£n pháº©m</h4>
+                <a href="#" onClick={(e) => { e.preventDefault(); setShowAuth(true); }}>TÃ­n hiá»‡u mua bÃ¡n</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setShowAuth(true); }}>Quáº£n trá»‹ danh má»¥c</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setShowAuth(true); }}>TÆ° váº¥n AI</a>
               </div>
 
               <div className="footer-column">
-                <h4>Công ty</h4>
-                <a href="#" onClick={(e) => { e.preventDefault(); setShowAbout(true); }}>Về chúng tôi</a>
+                <h4>CÃ´ng ty</h4>
+                <a href="#" onClick={(e) => { e.preventDefault(); setShowAbout(true); }}>Vá» chÃºng tÃ´i</a>
                 <a href="#">Blog</a>
-                <a href="#">Liên hệ</a>
+                <a href="#">LiÃªn há»‡</a>
               </div>
 
               <div className="footer-column">
-                <h4>Hỗ trợ</h4>
-                <a href="#">Trung tâm trợ giúp</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setShowTerms(true); }}>Điều khoản</a>
-                <a href="#">Bảo mật</a>
+                <h4>Há»— trá»£</h4>
+                <a href="#">Trung tÃ¢m trá»£ giÃºp</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setShowTerms(true); }}>Äiá»u khoáº£n</a>
+                <a href="#">Báº£o máº­t</a>
               </div>
             </div>
           </div>
 
           <div className="footer-bottom">
-            <p>© 2025 AI Advisor. All rights reserved.</p>
+            <p>Â© 2025 AI Advisor. All rights reserved.</p>
             <p className="disclaimer-small">
-              Đầu tư chứng khoán có rủi ro. Vui lòng nghiên cứu kỹ trước khi quyết định.
+              Äáº§u tÆ° chá»©ng khoÃ¡n cÃ³ rá»§i ro. Vui lÃ²ng nghiÃªn cá»©u ká»¹ trÆ°á»›c khi quyáº¿t Ä‘á»‹nh.
             </p>
           </div>
         </div>
@@ -1024,7 +1057,7 @@ export default function LandingPage({ onLogin }) {
         }
 
         .strategy-content li:before {
-          content: "→";
+          content: "â†’";
           position: absolute;
           left: 0;
           color: #3b82f6;
