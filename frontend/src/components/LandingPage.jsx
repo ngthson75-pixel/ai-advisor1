@@ -252,23 +252,22 @@ export default function LandingPage({ onLogin }) {
             <div className="hero-text">
               <h1 className="hero-title">
                 Đầu tư thông minh với
-                <span className="gradient-text" style={{display:"inline-flex",alignItems:"center",gap:"8px",verticalAlign:"middle"}}>
-                  <svg width="42" height="42" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg" style={{display:"inline-block",verticalAlign:"middle",marginLeft:"6px",flexShrink:0}}>
-                    <defs>
-                      <linearGradient id="heroLogoG1" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
-                        <stop offset="0%" stopColor="#38bdf8"/>
-                        <stop offset="100%" stopColor="#2563eb"/>
-                      </linearGradient>
-                      <linearGradient id="heroLogoG2" x1="22" y1="0" x2="22" y2="44" gradientUnits="userSpaceOnUse">
-                        <stop offset="0%" stopColor="#1e40af"/>
-                        <stop offset="100%" stopColor="#0369a1"/>
-                      </linearGradient>
-                    </defs>
-                    <path d="M22 3 L39 12.5 L39 31.5 L22 41 L5 31.5 L5 12.5 Z" fill="url(#heroLogoG2)" opacity="0.2" stroke="url(#heroLogoG1)" strokeWidth="1.5"/>
-                    <path d="M22 10 L35 17.5 L35 26.5 L22 34 L9 26.5 L9 17.5 Z" fill="url(#heroLogoG1)" opacity="0.15"/>
-                    <path d="M22 11 L32 22 L22 33 L12 22 Z" fill="url(#heroLogoG1)" opacity="0.95"/>
-                    <path d="M22 16 L28 22 L22 28 L16 22 Z" fill="white" opacity="0.9"/>
-                    <circle cx="22" cy="22" r="2" fill="white" opacity="0.6"/>
+                <span className="gradient-text" style={{display:"inline-flex",alignItems:"center",gap:"10px",verticalAlign:"middle"}}>
+                  <svg width="44" height="44" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{display:"inline-block",verticalAlign:"middle",marginLeft:"4px",flexShrink:0}}>
+                    {/* Outer hexagon border */}
+                    <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" fill="none" stroke="#1e40af" strokeWidth="2" opacity="0.5"/>
+                    {/* Top face of cube */}
+                    <path d="M50 22 L75 36 L50 50 L25 36 Z" fill="#60a5fa"/>
+                    {/* Left face of cube */}
+                    <path d="M25 36 L50 50 L50 78 L25 64 Z" fill="#1d4ed8"/>
+                    {/* Right face of cube */}
+                    <path d="M75 36 L75 64 L50 78 L50 50 Z" fill="#2563eb"/>
+                    {/* Top face highlight */}
+                    <path d="M50 26 L72 38.5 L50 51 L28 38.5 Z" fill="#93c5fd" opacity="0.4"/>
+                    {/* Edge lines */}
+                    <line x1="50" y1="22" x2="50" y2="78" stroke="#1e3a8a" strokeWidth="0.8" opacity="0.6"/>
+                    <line x1="25" y1="36" x2="75" y2="36" stroke="#1e3a8a" strokeWidth="0.8" opacity="0.6"/>
+                    <line x1="25" y1="64" x2="75" y2="64" stroke="#1e3a8a" strokeWidth="0.8" opacity="0.6"/>
                   </svg>
                   AI Advisor
                 </span>
@@ -578,18 +577,14 @@ export default function LandingPage({ onLogin }) {
 
             <div className="auth-header">
               <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"8px",marginBottom:"8px"}}>
-                <svg width="28" height="28" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <defs>
-                    <linearGradient id="authLogoG" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
-                      <stop offset="0%" stopColor="#38bdf8"/>
-                      <stop offset="100%" stopColor="#2563eb"/>
-                    </linearGradient>
-                  </defs>
-                  <path d="M22 3 L39 12.5 L39 31.5 L22 41 L5 31.5 L5 12.5 Z" fill="#1e3a5f" stroke="url(#authLogoG)" strokeWidth="1.5"/>
-                  <path d="M22 11 L32 22 L22 33 L12 22 Z" fill="url(#authLogoG)" opacity="0.95"/>
-                  <path d="M22 16 L28 22 L22 28 L16 22 Z" fill="white" opacity="0.9"/>
+                <svg width="30" height="30" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" fill="none" stroke="#1e40af" strokeWidth="2" opacity="0.5"/>
+                  <path d="M50 22 L75 36 L50 50 L25 36 Z" fill="#60a5fa"/>
+                  <path d="M25 36 L50 50 L50 78 L25 64 Z" fill="#1d4ed8"/>
+                  <path d="M75 36 L75 64 L50 78 L50 50 Z" fill="#2563eb"/>
+                  <path d="M50 26 L72 38.5 L50 51 L28 38.5 Z" fill="#93c5fd" opacity="0.4"/>
                 </svg>
-                <span style={{fontWeight:700,fontSize:"17px",background:"linear-gradient(135deg,#38bdf8,#2563eb)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>AI Advisor</span>
+                <span style={{fontWeight:700,fontSize:"17px",background:"linear-gradient(135deg,#60a5fa,#2563eb)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>AI Advisor</span>
               </div>
               <h2>{isLogin ? 'Đăng nhập' : 'Đăng ký'}</h2>
               <p style={{color:"#94a3b8",fontSize:"13px",marginTop:"4px"}}>Đầu tư thông minh với AI</p>
