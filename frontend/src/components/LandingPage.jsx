@@ -253,7 +253,7 @@ export default function LandingPage({ onLogin }) {
               <h1 className="hero-title">
                 Đầu tư thông minh với
                 <span className="gradient-text" style={{display:"inline-flex",alignItems:"center",gap:"10px",verticalAlign:"middle"}}>
-                  <svg width="44" height="44" viewBox="0 0 40 40" fill="none" style={{display:"inline-block",verticalAlign:"middle",marginLeft:"4px",flexShrink:0}}>
+                  <svg width="56" height="56" viewBox="0 0 40 40" fill="none" style={{display:"inline-block",verticalAlign:"middle",marginLeft:"4px",flexShrink:0}}>
                     <defs>
                       <linearGradient id="heroLogoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                         <stop offset="0%" style={{stopColor:'#3b82f6',stopOpacity:1}}/>

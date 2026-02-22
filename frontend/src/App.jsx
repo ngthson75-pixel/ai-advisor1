@@ -94,7 +94,7 @@ function App() {
               </div>
               <div className="brand-text">
                 <h1>AI Advisor</h1>
-                <p>Stock Trading Signals</p>
+                <p>Đầu tư thông minh với AI</p>
               </div>
             </div>
 
