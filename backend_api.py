@@ -667,11 +667,15 @@ def signals_endpoint():
             
             # --- AUTO-UPDATE BUY STATUS khi táº¡o SELL signal ---
             buy_update_info = None
-            if signal.action == 'SELL':
+                        if signal.action == 'SELL':
                 signal.status = 'closed'
                 signal.position_pct = 0
-                # Update BUY signal tÆ°Æ¡ng á»©ng (FIFO)
-                buy_update_info = auto_update_buy_status(signal.ticker, session)
+                # Lấy sell_pct từ request (TAKE_PROFIT=50%, STOP_LOSS=100%)
+                sell_pct = data.get('sell_pct', 100)
+                if data.get('strategy') == 'TAKE_PROFIT' and 'sell_pct' not in data:
+                    sell_pct = 50  # TAKE_PROFIT mặc định bán 50%
+                # Update BUY signal tương ứng (FIFO)
+                buy_update_info = auto_update_buy_status(signal.ticker, session, sell_pct=sell_pct)
                 # Link SELL â†’ BUY
                 if buy_update_info:
                     signal.buy_signal_code = buy_update_info['buy_signal_code']
@@ -707,7 +711,7 @@ def signals_endpoint():
 # HELPER: AUTO-UPDATE BUY STATUS KHI CÃ“ SELL SIGNAL
 # ========================================================================
 
-def auto_update_buy_status(ticker, session):
+def auto_update_buy_status(ticker, session, sell_pct=100):
     """
     Tá»± Ä‘á»™ng update BUY signal cÅ© nháº¥t (FIFO) sang closed khi cÃ³ SELL signal má»›i.
     DÃ¹ng ORM query Ä‘á»ƒ trÃ¡nh session cache issue.
@@ -739,20 +743,27 @@ def auto_update_buy_status(ticker, session):
             return None
         
         old_status = buy_signal.status or 'open'
+        old_pct = buy_signal.position_pct if buy_signal.position_pct is not None else 100
         buy_signal_code = buy_signal.signal_code or f"{ticker}-{buy_signal.id}"
         
-        # Update BUY â†’ closed qua ORM (khÃ´ng raw SQL)
-        buy_signal.status = 'closed'
-        buy_signal.position_pct = 0
+        # Tinh position con lai
+        remaining_pct = max(0, old_pct - sell_pct)
         
-        print(f"âœ… BUY {buy_signal_code}: {old_status} â†’ closed")
+        if remaining_pct <= 0:
+            buy_signal.status = 'closed'
+            buy_signal.position_pct = 0
+        else:
+            buy_signal.status = 'partial'
+            buy_signal.position_pct = remaining_pct
+        
+        print(f"BUY {buy_signal_code}: {old_status}/{old_pct}% -> {buy_signal.status}/{buy_signal.position_pct}%")
         
         return {
             'buy_id': buy_signal.id,
             'buy_signal_code': buy_signal_code,
             'old_status': old_status,
-            'new_status': 'closed',
-            'new_pct': 0
+            'new_status': buy_signal.status,
+            'new_pct': buy_signal.position_pct
         }
         
     except Exception as e:
