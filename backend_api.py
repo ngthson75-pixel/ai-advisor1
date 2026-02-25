@@ -667,7 +667,7 @@ def signals_endpoint():
             
             # --- AUTO-UPDATE BUY STATUS khi táº¡o SELL signal ---
             buy_update_info = None
-                        if signal.action == 'SELL':
+            if signal.action == 'SELL':
                 signal.status = 'closed'
                 signal.position_pct = 0
                 # Lấy sell_pct từ request (TAKE_PROFIT=50%, STOP_LOSS=100%)
