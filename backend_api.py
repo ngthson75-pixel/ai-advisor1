@@ -1732,7 +1732,61 @@ def trigger_market_risk_scan():
         except:
             pass
 
-
+@app.route('/api/market-risk/upload', methods=['POST'])
+def upload_market_risk():
+    """Upload market risk data from local analysis"""
+    session = Session()
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        today = data.get('date', datetime.now().strftime('%Y-%m-%d'))
+        
+        existing = session.query(MarketRisk).filter_by(date=today).first()
+        
+        factors_json = json.dumps(data.get('factors', []), ensure_ascii=False)
+        raw_scores_json = json.dumps(data.get('raw_scores', {}))
+        
+        if existing:
+            existing.market_mode = data.get('mode', data.get('market_mode', 'sideways'))
+            existing.mode_label = data.get('mode_label', 'THẬN TRỌNG')
+            existing.risk_score = data.get('risk_score', 50)
+            existing.allocation = data.get('allocation', 50)
+            existing.description = data.get('description', '')
+            existing.factors_json = factors_json
+            existing.vnindex_value = data.get('vnindex_value')
+            existing.raw_scores_json = raw_scores_json
+            existing.analyzed_at = datetime.now()
+        else:
+            new_record = MarketRisk(
+                date=today,
+                market_mode=data.get('mode', data.get('market_mode', 'sideways')),
+                mode_label=data.get('mode_label', 'THẬN TRỌNG'),
+                risk_score=data.get('risk_score', 50),
+                allocation=data.get('allocation', 50),
+                description=data.get('description', ''),
+                factors_json=factors_json,
+                vnindex_value=data.get('vnindex_value'),
+                raw_scores_json=raw_scores_json,
+                analyzed_at=datetime.now(),
+            )
+            session.add(new_record)
+        
+        session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Market risk uploaded for {today}',
+            'date': today,
+            'risk_score': data.get('risk_score'),
+        }), 201
+        
+    except Exception as e:
+        session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        session.close()
 @app.route('/api/market-risk/history', methods=['GET'])
 def get_market_risk_history():
     """Get market risk history (last N days)"""
