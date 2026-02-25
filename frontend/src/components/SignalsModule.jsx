@@ -69,10 +69,12 @@ export default function SignalsModule() {
     return signal.action === 'BUY' ? 100 : 0;
   };
 
-  const getExitReason = (signal) => {
+const getExitReason = (signal) => {
     const s = signal.strategy || '';
-    if (s === 'STOP_LOSS')   return { text: 'Cắt lỗ (SL)',  icon: '🔴', color: '#ef4444', bg: '#fee2e2' };
-    if (s === 'TAKE_PROFIT') return { text: 'Chốt lời (TP)', icon: '🟢', color: '#10b981', bg: '#dcfce7' };
+    if (s === 'STOP_LOSS')        return { text: 'Cắt lỗ (SL)',    icon: '🔴', color: '#ef4444', bg: '#fee2e2' };
+    if (s === 'TAKE_PROFIT')      return { text: 'Chốt lời (TP)',  icon: '🟢', color: '#10b981', bg: '#dcfce7' };
+    if (s === 'MA20_CONSECUTIVE') return { text: 'MA20 (2 ngày)',   icon: '🟠', color: '#f59e0b', bg: '#fef3c7' };
+    if (s === 'MA20_HIGH_VOLUME') return { text: 'MA20 (Vol cao)',  icon: '🟠', color: '#f59e0b', bg: '#fef3c7' };
     return { text: 'Thủ công', icon: '⚪', color: '#94a3b8', bg: '#1e293b' };
   };
   // ================================================
