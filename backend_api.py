@@ -1549,10 +1549,11 @@ def update_prices():
     
     try:
         env = os.environ.copy()
+        # Non-blocking: fire and forget, do NOT wait for process
         process = subprocess.Popen(
             ['python', script_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             cwd=os.path.dirname(os.path.abspath(__file__)),
             env=env
         )
@@ -1560,7 +1561,7 @@ def update_prices():
         return jsonify({
             'success': True,
             'status': 'running',
-            'message': 'Price update started. Takes ~8 minutes for all tickers.',
+            'message': f'Price update started (PID {process.pid}). Takes ~8 min. Check /api/eod/status.',
             'pid': process.pid
         }), 202
         
