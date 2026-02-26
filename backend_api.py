@@ -346,7 +346,9 @@ def load_eod_prices():
 
 
 def get_current_price(ticker):
-    """Get current price for ticker from EOD file - auto-reload if stale (>20h)"""
+    """Get current price for ticker.
+    Priority: EOD cache → vnstock realtime fallback → None
+    Auto-reloads EOD cache if stale (>20h)"""
     global PRICES_CACHE, CACHE_LOADED, CACHE_LOADED_AT
     
     # Auto-reload if never loaded, or cache is older than 20 hours
@@ -361,9 +363,27 @@ def get_current_price(ticker):
     
     ticker = ticker.upper().strip()
     
+    # 1. Try EOD cache first (fast)
     if ticker in PRICES_CACHE:
         price_data = PRICES_CACHE[ticker]
         return price_data.get('price')
+    
+    # 2. Fallback: vnstock realtime for tickers not in EOD cache
+    try:
+        print(f"🔄 {ticker} not in EOD cache, fetching realtime...")
+        stock_api = Vnstock()
+        stock = stock_api.stock(symbol=ticker, source='VCI')
+        end_date = datetime.now().strftime('%Y-%m-%d')
+        start_date = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
+        df = stock.quote.history(symbol=ticker, start=start_date, end=end_date)
+        if df is not None and not df.empty:
+            price = float(df['close'].iloc[-1])
+            # Cache it for this session
+            PRICES_CACHE[ticker] = {'price': price, 'date': end_date, 'source': 'realtime'}
+            print(f"✅ {ticker} realtime: {price:,.0f}")
+            return price
+    except Exception as e:
+        print(f"⚠️ Realtime fetch failed for {ticker}: {e}")
     
     return None
 
@@ -536,7 +556,7 @@ def chat_with_gpt(message, portfolio_context, signal_tickers):
 def index():
     return jsonify({
         'service': 'AI Advisor Backend v3.3',
-        'version': '3.5 (Market Dashboard + EOD Auto-reload) - 2026-02-26',
+        'version': '3.5 (Market Dashboard + EOD Auto-reload + Realtime Fallback) - 2026-02-26',
         'features': ['signals', 'portfolio', 'cash', 'eod_prices', 'chat_ai_strict', 'fomo_control', 'automation'],
         'eod_file': {
             'exists': os.path.exists(EOD_FILE),
@@ -1594,6 +1614,50 @@ def debug_context():
             'has_signal_list': 'OFFICIAL BUYSELL SIGNAL LIST' in context,
             'version': '3.5'
         })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/prices/update', methods=['POST'])
+def update_prices():
+    """Trigger EOD price update for all tickers.
+    Runs update_eod_prices.py script, then reloads cache."""
+    try:
+        import subprocess
+        script_path = os.path.join(os.path.dirname(__file__), 'update_eod_prices.py')
+        
+        if not os.path.exists(script_path):
+            # Try running inline update for common tickers
+            return jsonify({
+                'success': False,
+                'error': f'update_eod_prices.py not found at {script_path}. Please deploy the script.'
+            }), 404
+        
+        # Run the price updater script
+        process = subprocess.Popen(
+            ['python', script_path],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            cwd=os.path.dirname(__file__)
+        )
+        stdout, stderr = process.communicate(timeout=300)  # 5 min timeout
+        
+        if process.returncode == 0:
+            # Reload cache with new prices
+            global CACHE_LOADED, CACHE_LOADED_AT
+            CACHE_LOADED = False
+            load_eod_prices()
+            return jsonify({
+                'success': True,
+                'tickers_loaded': len(PRICES_CACHE),
+                'loaded_at': CACHE_LOADED_AT.isoformat() if CACHE_LOADED_AT else None,
+                'message': f'Updated {len(PRICES_CACHE)} prices successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': stderr.decode('utf-8', errors='ignore')[:500]
+            }), 500
+            
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
