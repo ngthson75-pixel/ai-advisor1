@@ -63,42 +63,24 @@ TOP_343_STOCKS = [
     'GVR', 'PNJ', 'VGC', 'DHG', 'DPM', 'GMD', 'SHB', 'LPB', 'VCI', 'TCX',
     'BVH', 'HVN', 'BMP', 'DXG', 'VPL', 'KBC', 'DIG', 'GEX', 'VIB', 'EIB',
     
-    # HOSE - Mid Caps (100 stocks)
+    # HOSE - Mid Caps (80 stocks)
     'VPI', 'HT1', 'HSG', 'DCM', 'NT2', 'HNG', 'VND', 'VCG', 'SBT', 'EVF',
     'DBC', 'HCM', 'CTD', 'PC1', 'DGW', 'SZC', 'CTR', 'MCH', 'VIX', 'HDG',
-    'PPC', 'VSC', 'BWE', 'VCK', 'VDS', 'VSH', 'VTP', 'SCS', 'CNG', 'PVD',
-    'PVT', 'VOS', 'CSV', 'PVS', 'NLG', 'VCF', 'CMG', 'TCH', 'PAN', 'SGN',
-    'PHR', 'NBB', 'DPR', 'DVP', 'NHA', 'GEG', 'CII', 'PTB', 'NAF', 'HAG',
-    'CMX', 'ORS', 'HDC', 'DMC', 'KDC', 'TNG', 'HRC', 'SVC', 'TCL', 'KSB',
-    'VHC', 'HHS', 'MSH', 'SSB', 'HAX', 'SZL', 'VTO', 'VPX', 'PET', 'PVP',
-    'VCK', 'QCG', 'FRT', 'SJS', 'FCN', 'GEE', 'TRA', 'DSE', 'TCM', 'VGT',
-    'DHA', 'GEL', 'PDN', 'PMG', 'GIL', 'VFC', 'CTI', 'PDR', 'IDC', 'KHG',
-    'MSB', 'DXS', 'OCB', 'HAH', 'IJC', 'ANV', 'LCG', 'DPG', 'BAF', 'HPA',
-    'TV2', 'SMC', 'CTF', 'KOS', 'SIP', 'ELC', 'BMI', 'NTL', 'TAL', 'DCL',
-    'BSI', 'HSL', 'BFC', 
+    'PPC', 'VSC', 'VCK', 'VDS', 'VTP', 'SCS', 'CNG', 'PVD', 'HPA', 'DPG', 
+    'PVT', 'VOS', 'CSV', 'PVS', 'NLG', 'CMG', 'TCH', 'PAN', 'SGN', 'BFC',
+    'PHR', 'DPR', 'GEG', 'CII', 'PTB', 'NAF', 'HAG', 'BSI', 'HSL', 'VTO',
+    'ORS', 'HDC', 'KDC', 'TNG', 'HRC', 'SVC', 'TCL', 'KSB', 'TV2', 'SMC', 
+    'VHC', 'HHS', 'MSH', 'SSB', 'HAX', 'VPX', 'PET', 'PVP', 'SIP', 'BMI',
+    'VCK', 'QCG', 'FRT', 'SJS', 'FCN', 'GEE', 'DSE', 'TCM', 'VGT', 'BAF',
+    'DHA', 'GEL', 'CTI', 'PDR', 'IDC', 'KHG', 'NTL', 'TAL', 'DCL', 'ELC', 
+    'MSB', 'DXS', 'OCB', 'HAH', 'IJC', 'ANV', 'LCG',  
+     
+       
+    # HNX - Top Stocks (25 stocks)
+    'PVS', 'VFS', 'SHS', 'PVB', 'CEO', 'NNC', 'BVS', 'BAB', 'NVB', 'API',
+    'PVC', 'BVB', 'PVI', 'HUT', 'MBS', 'DXP', 'LAS', 'VGS', 'EVS', 'L18', 
+    'VCS', 'DHA', 'IPA', 'BCC', 'PLC',
     
-    # HOSE - Small Caps (93 stocks)
-    'HQC', 'HTN', 'PDC', 'LSS', 'AGG', 'VIP', 'CDC', 'ASG', 'ITC', 'TIP',
-    'ASM', 'VTB', 'PGC', 'SHI', 'SRC', 'TDH', 'DVN', 'GDT', 'VLA', 'APH',
-    'VPG', 'VRC', 'HPX', 'CRE', 'PGI', 'TTF', 'TNT', 'VDP', 'CSM', 'CTS',
-    'FMC', 'TCO', 'DLG', 'PGS', 'PAC', 'TMT', 'KLB', 'DC4', 'GTA', 'PGT',
-    'ST8', 'TCR', 'TLG', 'LBM', 'GDW', 'THG', 'VNE', 'VNL', 'HTI', 'HU1',
-    'NHH', 'HID', 'HU6', 'HVH', 'TDP', 'PNC', 'PTL', 'HDM', 'VHL', 'IDI',
-    'TCW', 'VIM', 'CLC', 'SAM', 'EVG', 'PTI', 'FIT', 'SMA', 'VIT', 'VGG',
-    'CRC', 'TSC', 'TLH', 'DRI', 'BCC', 'TYA', 'VE1', 'HBC', 'OGC', 'YEG',
-    'VPH', 'VE9', 'VHG', 'VID', 'AAA', 'VIF', 'VIG', 'LDG', 'CIG', 'DRH',
-    'DXV', 'TNI', 'ASP', 'HU3', 'HAP', 'PVX', 
-    
-    # HNX - Top Stocks (100 stocks)
-    'PVS', 'VFS', 'AAV', 'SHS', 'PVB', 'CEO', 'NNC', 'BVS', 'BAB', 'NVB',
-    'TIG', 'API', 'AST', 'PVC', 'BVB', 'VTZ', 'VBB', 'PGB', 'VC3', 'ASG',
-    'MST', 'DST', 'PVI', 'HUT', 'DVM', 'PTI', 'VIG', 'MIG', 'NRC', 'ABI',
-    'C69', 'PGI', 'EVS', 'PSI', 'HBS', 'TVS', 'APS', 'IDJ', 'DL1', 'DTD',
-    'MBS', 'DXP', 'LAS', 'VGS', 'L40', 'EVS', 'L18', 'NDN', 'VC2', 'LIG',
-    'VCS', 'SJE', 'VHE', 'INN', 'DHT', 'DHA', 'NAG', 'VC7', 'IPA', 'L14',
-    'VIG', 'MBG', 'LAS', 'LDP', 'BCC', 'PVG', 'DTD', 'DTT', 'NBC', 'KSV',
-    'PLC', 'PTC', 'PVL', 'PVV', 'HGM', 'TIG', 'HLD', 'VE2', 'NBC', 'AMV',
-    'KSF', 'SD9', 'OCH', 'PSD', 'VIG', 'VGG', 'VTB',
     
 ]
 
