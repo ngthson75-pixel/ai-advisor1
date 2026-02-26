@@ -1,0 +1,48 @@
+name: Update EOD Prices
+
+on:
+  schedule:
+    # 4PM Vietnam = 9AM UTC, Monday-Friday
+    - cron: '0 9 * * 1-5'
+  workflow_dispatch:  # Cho phép chạy thủ công từ GitHub Actions UI
+
+jobs:
+  update-prices:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger price update on backend
+        run: |
+          echo "⏰ Triggering EOD price update at $(date)"
+          
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://ai-advisor1-backend.onrender.com/api/prices/update" \
+            -H "Content-Type: application/json" \
+            --max-time 30)
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -1)
+          
+          echo "Response: $BODY"
+          echo "HTTP Code: $HTTP_CODE"
+          
+          if [ "$HTTP_CODE" = "202" ]; then
+            echo "✅ Price update started successfully"
+          else
+            echo "❌ Failed to trigger update (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+
+      - name: Wait for update to complete
+        run: |
+          echo "⏳ Waiting 10 minutes for price update to complete..."
+          sleep 600
+
+      - name: Verify prices updated
+        run: |
+          echo "🔍 Checking EOD price status..."
+          
+          RESPONSE=$(curl -s "https://ai-advisor1-backend.onrender.com/api/eod/status")
+          echo "Status: $RESPONSE"
+          
+          TICKERS=$(echo $RESPONSE | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tickers_count', 0))")
+          echo "✅ Prices in DB: $TICKERS tickers"

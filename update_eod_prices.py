@@ -3,176 +3,152 @@
 """
 AI ADVISOR - EOD PRICE UPDATER
 ================================
-Script riêng để download giá đóng cửa cho tất cả 343 mã.
-Chạy sau 4PM mỗi ngày giao dịch (tách riêng khỏi signal scanner).
+Download giá đóng cửa từ vnstock → lưu vào PostgreSQL.
+Chạy tự động lúc 4PM Vietnam qua GitHub Actions.
 
-Lịch chạy (GitHub Actions): cron '0 10 * * 1-5' = 5PM Vietnam, T2-T6
-Output: latest_prices_all.json
-
-Cách dùng:
-  python update_eod_prices.py          # Chạy local
-  POST /api/prices/update              # Trigger qua API
+Không dùng file JSON. Giá lưu trong DB → không mất khi Render redeploy.
 """
 
-import json
 import os
 import time
 import logging
 from datetime import datetime, timedelta
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# ============================================================
-# DANH SÁCH 343 MÃ - copy từ daily_signal_scanner_eod.py
-# Cập nhật cùng lúc với scanner khi thêm/bớt mã
-# ============================================================
+# Database setup
+DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///signals.db')
+if DATABASE_URL.startswith('postgresql://'):
+    DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
 
-ALL_TICKERS = [
-    # HOSE - Blue Chips & Large Caps
-    'VCB', 'VHM', 'VIC', 'VNM', 'HPG', 'TCB', 'VPB', 'MBB', 'STB', 'MSN',
-    'FPT', 'VRE', 'SSI', 'BID', 'CTG', 'PLX', 'GAS', 'MWG', 'VJC', 'HDB',
-    'BSR', 'POW', 'SAB', 'NVL', 'BCM', 'KDH', 'DGC', 'REE', 'TPB', 'ACB',
-    'GVR', 'PNJ', 'VGC', 'DHG', 'DPM', 'GMD', 'SHB', 'LPB', 'VCI', 'TCX',
-    'BVH', 'HVN', 'BMP', 'DXG', 'VPL', 'KBC', 'DIG', 'GEX', 'VIB', 'EIB',
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
-    # HOSE - Mid Caps
-    'VPI', 'HSG', 'DCM', 'NT2', 'HNG', 'VND', 'VCG', 'SBT', 'EVF', 'BFC',
-    'DBC', 'HCM', 'CTD', 'PC1', 'DGW', 'SZC', 'CTR', 'MCH', 'VIX', 'HDG',
-    'VSC', 'BWE', 'VCK', 'VDS', 'VTP', 'SCS', 'CNG', 'PVD', 'HSL', 'OCB',
-    'PVT', 'VOS', 'CSV', 'NLG', 'CMG', 'TCH', 'PAN', 'BSI', 'DCL', 'HAH',
-    'PHR', 'DPR', 'GEG', 'CII', 'PTB', 'NAF', 'HAG', 'TAL', 'NTL', 'BMI',
-    'CMX', 'ORS', 'HDC', 'TNG', 'HRC', 'SVC', 'TCL', 'KSB', 'ELC', 'IJC',
-    'VHC', 'HHS', 'MSH', 'HAX', 'VTO', 'VPX', 'PET', 'PVP', 'SIP', 'SMC',
-    'QCG', 'FRT', 'SJS', 'FCN', 'GEE', 'DSE', 'TCM', 'VGT', 'TV2', 'BAF',
-    'DHA', 'GEL', 'GIL', 'CTI', 'PDR', 'IDC', 'KHG', 'DPG', 'LCG', 'ANV',
-    'MSB', 'DXS',
+Base = declarative_base()
 
-    # HNX - Top Stocks
-    'PVS', 'VFS', 'SHS', 'PVB', 'CEO', 'BVS', 'BAB', 'NVB', 'PLC', 'IPA',
-    'TIG', 'API', 'PVC', 'BVB', 'HUT', 'MIG', 'EVS', 'PSI', 'APS', 'IDJ',
-    'MBS', 'LAS', 'VGS', 'VCS',
+class EodPrice(Base):
+    __tablename__ = 'eod_prices'
+    id = Column(Integer, primary_key=True)
+    ticker = Column(String(10), nullable=False, unique=True)
+    price = Column(Float, nullable=False)
+    trade_date = Column(String(20))
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    # Additional stocks commonly held in portfolios
-    'ASG', 'ASP', 'ABI', 'BAF', 'C69', 'CLC', 'HDB', 'HPG', 'HT1', 'HTI',
-    'KDC', 'L18', 'LSS', 'PC1', 'PGC', 'PGD', 'PPC', 'PVP', 'SZL', 'TCO',
-    'TIP', 'VHM', 'VSH', 'VTP', 'SZC', 'SZL',
-]
+engine = create_engine(DATABASE_URL)
+Base.metadata.create_all(engine)
+Session = sessionmaker(bind=engine)
 
-# Deduplicate
-ALL_TICKERS = list(dict.fromkeys(ALL_TICKERS))
 
-OUTPUT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'latest_prices_all.json')
+def load_ticker_list():
+    """Đọc danh sách mã từ daily_signal_scanner_eod.py - tự động sync"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    for path in [
+        os.path.join(script_dir, 'scripts', 'daily_signal_scanner_eod.py'),
+        os.path.join(script_dir, 'daily_signal_scanner_eod.py'),
+    ]:
+        if os.path.exists(path):
+            try:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("scanner", path)
+                scanner = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(scanner)
+                tickers = list(dict.fromkeys(scanner.TOP_343_STOCKS))
+                logger.info(f"✅ Loaded {len(tickers)} tickers from scanner")
+                return tickers
+            except Exception as e:
+                logger.warning(f"Could not load from {path}: {e}")
+    logger.error("❌ Scanner file not found!")
+    return []
 
 
 def get_last_trading_day():
     today = datetime.now()
-    if today.weekday() == 5:  # Saturday
+    if today.weekday() == 5:
         return (today - timedelta(days=1)).strftime('%Y-%m-%d')
-    elif today.weekday() == 6:  # Sunday
+    elif today.weekday() == 6:
         return (today - timedelta(days=2)).strftime('%Y-%m-%d')
     return today.strftime('%Y-%m-%d')
 
 
-def fetch_price_batch(tickers, batch_size=20):
-    """
-    Fetch closing prices for a batch of tickers.
-    Returns dict: {ticker: {'price': float, 'date': str}}
-    """
+def update_eod_prices():
+    """Download giá từ vnstock và upsert vào PostgreSQL"""
     try:
         from vnstock import Quote
     except ImportError:
-        logger.error("vnstock not installed. Run: pip install vnstock3")
-        return {}
+        logger.error("vnstock not installed")
+        return {'success': False, 'error': 'vnstock not installed'}
 
-    prices = {}
-    end_date = get_last_trading_day()
-    start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=5)).strftime('%Y-%m-%d')
+    tickers = load_ticker_list()
+    if not tickers:
+        return {'success': False, 'error': 'No tickers loaded'}
 
-    for i, ticker in enumerate(tickers):
-        try:
-            quote = Quote(symbol=ticker, source='VCI')
-            df = quote.history(start=start_date, end=end_date)
+    total = len(tickers)
+    trade_date = get_last_trading_day()
+    end_date = trade_date
+    start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=7)).strftime('%Y-%m-%d')
 
-            if df is not None and len(df) > 0:
-                close_price = float(df['close'].iloc[-1])
-                trade_date = str(df.index[-1])[:10] if hasattr(df.index[-1], 'strftime') else end_date
+    logger.info(f"\n{'='*60}")
+    logger.info(f"🚀 EOD Price Update → PostgreSQL")
+    logger.info(f"   Tickers: {total} | Date: {trade_date}")
+    logger.info(f"   ~{total * 2 / 60:.0f} phút")
+    logger.info(f"{'='*60}\n")
 
-                prices[ticker] = {
-                    'price': close_price,
-                    'date': trade_date,
-                }
-                logger.info(f"✅ {ticker}: {close_price:,.0f} ({trade_date})")
-            else:
-                logger.warning(f"⚠️  {ticker}: No data")
-
-        except Exception as e:
-            error_str = str(e).lower()
-            if 'rate limit' in error_str or 'quá nhiều' in error_str:
-                logger.warning(f"⏳ Rate limit hit at {ticker}. Waiting 30s...")
-                time.sleep(30)
-                # Retry once
-                try:
-                    quote = Quote(symbol=ticker, source='VCI')
-                    df = quote.history(start=start_date, end=end_date)
-                    if df is not None and len(df) > 0:
-                        prices[ticker] = {
-                            'price': float(df['close'].iloc[-1]),
-                            'date': str(df.index[-1])[:10],
-                        }
-                except Exception:
-                    pass
-            else:
-                logger.warning(f"❌ {ticker}: {e}")
-
-        # Polite delay every 10 tickers
-        if (i + 1) % 10 == 0:
-            time.sleep(2)
-
-    return prices
-
-
-def update_eod_prices(tickers=None):
-    """
-    Main function: Download EOD prices and save to latest_prices_all.json
-    Returns: dict with success status and stats
-    """
-    if tickers is None:
-        tickers = ALL_TICKERS
-
-    logger.info(f"🚀 Starting EOD price update for {len(tickers)} tickers...")
-    logger.info(f"   Output: {OUTPUT_FILE}")
+    session = Session()
+    updated = 0
+    failed = []
     start_time = datetime.now()
 
-    # Fetch prices
-    prices = fetch_price_batch(tickers)
+    for i, ticker in enumerate(tickers):
+        success = False
 
-    # Build output structure
-    output = {
-        'generated_at': datetime.now().isoformat(),
-        'trade_date': get_last_trading_day(),
-        'total_tickers': len(prices),
-        'prices': prices,
-    }
+        for source in ['VCI', 'TCBS']:
+            try:
+                df = Quote(symbol=ticker, source=source).history(start=start_date, end=end_date)
+                if df is not None and len(df) > 0:
+                    price = float(df['close'].iloc[-1])
+                    # Upsert
+                    record = session.query(EodPrice).filter_by(ticker=ticker).first()
+                    if record:
+                        record.price = price
+                        record.trade_date = trade_date
+                        record.updated_at = datetime.now()
+                    else:
+                        session.add(EodPrice(ticker=ticker, price=price, trade_date=trade_date))
+                    updated += 1
+                    logger.info(f"[{i+1:3d}/{total}] ✅ {ticker}: {price:>10,.0f} ({source})")
+                    success = True
+                    break
+            except Exception as e:
+                if 'rate limit' in str(e).lower() or 'quá nhiều' in str(e).lower():
+                    logger.warning(f"[{i+1:3d}/{total}] ⏳ Rate limit. Saving & waiting 60s...")
+                    session.commit()
+                    time.sleep(60)
 
-    # Save to file
-    with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
+        if not success:
+            failed.append(ticker)
+            logger.warning(f"[{i+1:3d}/{total}] ❌ {ticker}: all sources failed")
+
+        time.sleep(2.0)
+
+        if (i + 1) % 20 == 0:
+            session.commit()
+            logger.info(f"--- 💾 {updated} saved. Pausing 10s ---")
+            time.sleep(10)
+
+    session.commit()
+    session.close()
 
     elapsed = (datetime.now() - start_time).total_seconds()
-    logger.info(f"\n✅ Done! {len(prices)}/{len(tickers)} tickers updated in {elapsed:.0f}s")
-    logger.info(f"   Saved to: {OUTPUT_FILE}")
+    logger.info(f"\n✅ Done! Updated {updated}/{total} | Failed {len(failed)} | {elapsed/60:.1f} min")
 
     return {
         'success': True,
-        'tickers_updated': len(prices),
-        'tickers_requested': len(tickers),
-        'trade_date': get_last_trading_day(),
-        'elapsed_seconds': int(elapsed),
-        'output_file': OUTPUT_FILE,
+        'updated': updated,
+        'failed': len(failed),
+        'trade_date': trade_date,
+        'elapsed_minutes': round(elapsed / 60, 1)
     }
 
 

@@ -82,11 +82,8 @@ db_url_display = DATABASE_URL[:50] + "..." if len(DATABASE_URL) > 50 else DATABA
 print(f"Ã°Å¸â€â€” Database URL: {db_url_display}")
 print(f"{'='*70}\n")
 
-# EOD file settings
-EOD_FILE = 'latest_prices_all.json'
-PRICES_CACHE = {}
-CACHE_LOADED_AT = None  # Track when cache was last loaded for auto-reload
-CACHE_LOADED = False
+# EOD prices now stored in PostgreSQL (eod_prices table)
+# No more file-based caching
 
 # ========================================================================
 # DATABASE SETUP
@@ -110,69 +107,59 @@ Your primary role:
 
 === MARKET DASHBOARD (AI ADVISOR MARKET RISK SYSTEM) ===
 
-⚠️ CRITICAL INSTRUCTION: Market Dashboard data is AUTOMATICALLY INJECTED into your
-context by the system at the start of every conversation. It appears under the header
-"=== MARKET DASHBOARD (AI ADVISOR) ===". 
+You will receive real-time Market Dashboard data in the context. This includes:
 
-NEVER ask the user to "provide" or "share" Market Dashboard data.
-The data is ALREADY in your system context. Just read and use it directly.
-NEVER repeat or echo the "=== MARKET DASHBOARD ===" header in your response.
-Start your response directly with the analysis, e.g. "Theo Market Dashboard ngày..."
+1. MARKET MODE: Overall market state
+   - BULL (Thị trường tăng): Risk score 0-40, allocation 80-100%
+     → Có thể duy trì hoặc tăng tỷ trọng cổ phiếu theo tín hiệu
+     → Khuyến khích giữ vị thế trong Buysell Signal list
+   - NEUTRAL / THẬN TRỌNG (Thị trường trung tính): Risk score 41-65, allocation 40-70%
+     → Giảm tỷ trọng, ưu tiên bảo toàn vốn
+     → Chỉ giữ cổ phiếu có nền tảng tốt trong Signal list
+     → Tăng tỷ lệ tiền mặt
+   - BEAR (Thị trường giảm): Risk score 66-100, allocation 0-30%
+     → Ưu tiên cắt lỗ và giảm tỷ trọng tối đa
+     → Tăng tiền mặt, phòng thủ là ưu tiên số 1
+     → Không mở vị thế mới dù có tín hiệu
 
-The Market Dashboard section in your context contains:
+2. RISK SCORE (0-100): Điểm rủi ro thị trường tổng hợp
+   - 0-40: Rủi ro thấp → Có thể tích cực hơn
+   - 41-65: Rủi ro trung bình → Thận trọng
+   - 66-80: Rủi ro cao → Giảm tỷ trọng
+   - 81-100: Rủi ro rất cao → Phòng thủ tối đa
 
-1. MARKET MODE — Overall market state:
-   - BULL: Risk score 0-40, allocation 80-100%
-     → Uptrend confirmed. Can maintain or increase stock allocation per signals.
-   - SIDEWAYS / THAN TRONG (Thận trọng): Risk score 41-65, allocation 40-70%
-     → Be cautious. Reduce exposure. Prioritize capital preservation.
-   - BEAR: Risk score 66-100, allocation 0-30%
-     → Defensive mode. Cut losses. Maximize cash. No new positions.
+3. ALLOCATION (% tài sản nên đầu tư vào cổ phiếu):
+   - Ví dụ: allocation=50 → Chỉ nên giữ 50% tài sản là cổ phiếu, 50% tiền mặt
+   - So sánh với tỷ lệ hiện tại của user để đưa ra khuyến nghị cụ thể
 
-2. RISK SCORE (0-100): Composite market risk
-   - 0-40: Low risk → Can be more active
-   - 41-65: Medium risk → Cautious
-   - 66-80: High risk → Reduce allocation
-   - 81-100: Very high risk → Maximum defense
+4. MARKET FACTORS: Các yếu tố chi tiết (VN-Index trend, thanh khoản, AD ratio, MA indicators)
+   - Dùng để giải thích tại sao thị trường đang ở trạng thái đó
 
-3. ALLOCATION (%): Recommended % of total assets in stocks
-   - Example: allocation=50 → Only hold 50% in stocks, 50% cash
-   - Compare with user's current allocation to give specific advice
+=== QUY TẮC SỬ DỤNG MARKET DASHBOARD ===
 
-4. FACTORS: VN-Index trend, liquidity, AD ratio, stocks above MA20
+LUÔN tham chiếu Market Dashboard khi:
+- User hỏi về việc có nên mua/bán không
+- User hỏi về tỷ trọng danh mục
+- User đang FOMO (sợ bỏ lỡ) hoặc PANIC SELLING
+- User hỏi về thị trường chung
 
-=== HOW TO USE MARKET DASHBOARD DATA ===
+Cách sử dụng allocation để tư vấn:
+- Tính tỷ lệ cổ phiếu hiện tại của user = (tổng giá trị CP) / (tổng tài sản) × 100
+- So sánh với allocation được khuyến nghị từ Market Dashboard
+- Nếu user đang giữ nhiều hơn allocation → khuyến nghị giảm tỷ trọng
+- Nếu user đang giữ ít hơn allocation → có thể xem xét tăng (chỉ với Signal stocks)
 
-When user asks about market, allocation, or whether to hold/buy/sell:
-1. READ the Market Dashboard section already in your context
-2. CITE specific numbers: Market Mode, Risk Score, Allocation %
-3. COMPARE user's current allocation vs recommended allocation
-4. GIVE concrete advice based on the data
-
-Example response when data is in context:
-"Theo Market Dashboard ngày [date], thị trường đang ở trạng thái [MODE] 
-với Risk Score [X]/100. Khuyến nghị tỷ trọng cổ phiếu: [Y]%.
-[Compare with user portfolio if available]."
-
-NEVER say "Vui lòng cung cấp dữ liệu Market Dashboard" — the data is already there.
-NEVER say "Tôi không có thông tin về thị trường" — you DO have it in context.
-NEVER repeat or echo the "=== MARKET DASHBOARD ===" header in your response.
+Ví dụ tư vấn dựa trên Market Dashboard:
+- BEAR + allocation=20%, user đang giữ 80% CP → "Thị trường đang BEAR với rủi ro cao.
+  Hệ thống khuyến nghị chỉ giữ 20% tài sản là cổ phiếu. Danh mục hiện tại của bạn
+  đang ở mức 80% - cao hơn khuyến nghị đáng kể. Cân nhắc giảm tỷ trọng để bảo vệ vốn."
+- BULL + allocation=90%, user đang giữ 60% → "Thị trường đang BULL. Bạn có thể
+  xem xét tăng tỷ trọng với các cổ phiếu trong Buysell Signal list."
 
 === PRODUCT RULE (CRITICAL) ===
 
-The OFFICIAL BUYSELL SIGNAL LIST is injected into your context under the header:
-"=== OFFICIAL BUYSELL SIGNAL LIST ===" with a line "Tickers: AAA, BBB, CCC..."
-
-BEFORE answering any stock question:
-1. LOOK UP the "=== OFFICIAL BUYSELL SIGNAL LIST ===" section in your context
-2. CHECK if the ticker appears in the "Tickers:" line
-3. ONLY then determine if it is IN or NOT IN the signal list
-
-Example: If context shows "Tickers: VCB, HPG, FPT..." and user asks about VCB
-→ VCB IS in the Buysell Signal list → You CAN discuss it with signal context
-
 - AI ADVISOR only provides action-oriented guidance (buy/sell considerations)
-  for stocks that ARE in the "Tickers:" line of the official list.
+  for stocks that are included in the official "Buysell Signal" list.
 - For all other stocks: analysis only, NO action guidance.
 
 Core principles:
@@ -315,77 +302,34 @@ class MarketRisk(Base):
     analyzed_at = Column(DateTime, default=datetime.now)
 
 # ========================================================================
+class EodPrice(Base):
+    """EOD prices stored in PostgreSQL - persistent across Render redeploys"""
+    __tablename__ = 'eod_prices'
+    id = Column(Integer, primary_key=True)
+    ticker = Column(String(10), nullable=False, unique=True)
+    price = Column(Float, nullable=False)
+    trade_date = Column(String(20))
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+# ========================================================================
 # HELPER FUNCTIONS
 # ========================================================================
 
-def load_eod_prices():
-    """Load EOD prices from file"""
-    global PRICES_CACHE, CACHE_LOADED
-    
-    if not os.path.exists(EOD_FILE):
-        print(f"Ã¢Å¡ Ã¯Â¸Â EOD file not found: {EOD_FILE}")
-        PRICES_CACHE = {}
-        CACHE_LOADED = True
-        return False
-    
-    try:
-        with open(EOD_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        PRICES_CACHE = data.get('prices', {})
-        print(f"Ã¢Å“â€¦ Loaded {len(PRICES_CACHE)} prices from EOD file")
-        CACHE_LOADED = True
-        CACHE_LOADED_AT = datetime.now()
-        return True
-        
-    except Exception as e:
-        print(f"Ã¢ÂÅ’ Error loading EOD file: {e}")
-        PRICES_CACHE = {}
-        CACHE_LOADED = True
-        return False
-
-
 def get_current_price(ticker):
-    """Get current price for ticker.
-    Priority: EOD cache → vnstock realtime fallback → None
-    Auto-reloads EOD cache if stale (>20h)"""
-    global PRICES_CACHE, CACHE_LOADED, CACHE_LOADED_AT
-    
-    # Auto-reload if never loaded, or cache is older than 20 hours
-    should_reload = not CACHE_LOADED
-    if not should_reload and CACHE_LOADED_AT:
-        age_hours = (datetime.now() - CACHE_LOADED_AT).total_seconds() / 3600
-        if age_hours > 20:
-            should_reload = True
-            print(f"⏰ EOD cache stale ({age_hours:.1f}h old) - reloading...")
-    if should_reload:
-        load_eod_prices()
-    
+    """Get EOD price from PostgreSQL - persistent across Render redeploys"""
     ticker = ticker.upper().strip()
-    
-    # 1. Try EOD cache first (fast)
-    if ticker in PRICES_CACHE:
-        price_data = PRICES_CACHE[ticker]
-        return price_data.get('price')
-    
-    # 2. Fallback: vnstock realtime for tickers not in EOD cache
+    session = Session()
     try:
-        print(f"🔄 {ticker} not in EOD cache, fetching realtime...")
-        stock_api = Vnstock()
-        stock = stock_api.stock(symbol=ticker, source='VCI')
-        end_date = datetime.now().strftime('%Y-%m-%d')
-        start_date = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
-        df = stock.quote.history(symbol=ticker, start=start_date, end=end_date)
-        if df is not None and not df.empty:
-            price = float(df['close'].iloc[-1])
-            # Cache it for this session
-            PRICES_CACHE[ticker] = {'price': price, 'date': end_date, 'source': 'realtime'}
-            print(f"✅ {ticker} realtime: {price:,.0f}")
-            return price
+        record = session.query(EodPrice).filter_by(ticker=ticker).first()
+        if record:
+            return record.price
+        return None
     except Exception as e:
-        print(f"⚠️ Realtime fetch failed for {ticker}: {e}")
-    
-    return None
+        print(f"⚠️ get_current_price error for {ticker}: {e}")
+        return None
+    finally:
+        session.close()
 
 
 def get_portfolio_context(user_id):
@@ -448,10 +392,9 @@ def get_portfolio_context(user_id):
         # Empty portfolio
         if not portfolios and cash == 0:
             context = f"{market_context}\nDanh muc: Trong\n"
-            context += f"\n=== OFFICIAL BUYSELL SIGNAL LIST ===\n"
-            context += f"Total: {len(signal_tickers)} stocks.\n"
-            context += "Tickers: " + (", ".join(sorted(signal_tickers)) if signal_tickers else "None") + "\n"
-            context += "=== END BUYSELL SIGNAL LIST ===\n"
+            context += f"\nCO PHIEU TRONG BUYSELL SIGNAL SYSTEM:\n"
+            context += ", ".join(sorted(signal_tickers)) if signal_tickers else "Chua co signal nao"
+            return context, signal_tickers
 
         context = f"{market_context}\n"
         context += "DANH MUC DAU TU:\n\n"
@@ -511,10 +454,8 @@ def get_portfolio_context(user_id):
             except Exception:
                 pass
 
-        context += f"\n\n=== OFFICIAL BUYSELL SIGNAL LIST ===\n"
-        context += f"Total: {len(signal_tickers)} stocks.\n"
-        context += "Tickers: " + (", ".join(sorted(signal_tickers)) if signal_tickers else "None") + "\n"
-        context += "=== END BUYSELL SIGNAL LIST ===\n"
+        context += f"\n\nCO PHIEU TRONG BUYSELL SIGNAL SYSTEM:\n"
+        context += ", ".join(sorted(signal_tickers)) if signal_tickers else "Chua co signal nao"
 
         return context, signal_tickers
 
@@ -556,7 +497,7 @@ def chat_with_gpt(message, portfolio_context, signal_tickers):
 def index():
     return jsonify({
         'service': 'AI Advisor Backend v3.3',
-        'version': '3.5 (Market Dashboard + EOD Auto-reload + Realtime Fallback) - 2026-02-26',
+        'version': '3.6 (EOD Prices in PostgreSQL) - 2026-02-26',
         'features': ['signals', 'portfolio', 'cash', 'eod_prices', 'chat_ai_strict', 'fomo_control', 'automation'],
         'eod_file': {
             'exists': os.path.exists(EOD_FILE),
@@ -1563,101 +1504,66 @@ def get_batch_prices():
 
 @app.route('/api/eod/status', methods=['GET'])
 def eod_status():
-    """Get EOD file status"""
-    file_exists = os.path.exists(EOD_FILE)
-    file_age_days = None
-    last_modified = None
-    
-    if file_exists:
-        file_time = datetime.fromtimestamp(os.path.getmtime(EOD_FILE))
-        file_age_days = (datetime.now() - file_time).days
-        last_modified = file_time.isoformat()
-    
-    return jsonify({
-        'success': True,
-        'file_exists': file_exists,
-        'tickers_count': len(PRICES_CACHE),
-        'file_age_days': file_age_days,
-        'last_modified': last_modified,
-        'needs_refresh': file_age_days > 5 if file_age_days is not None else True
-    })
-
-
-@app.route('/api/eod/reload', methods=['POST'])
-def eod_reload():
-    """Force reload EOD price cache from latest_prices_all.json.
-    Call this endpoint after scanner writes new price file."""
-    global CACHE_LOADED, CACHE_LOADED_AT
-    CACHE_LOADED = False
-    CACHE_LOADED_AT = None
-    success = load_eod_prices()
-    return jsonify({
-        'success': success,
-        'tickers_loaded': len(PRICES_CACHE),
-        'loaded_at': CACHE_LOADED_AT.isoformat() if CACHE_LOADED_AT else None,
-        'message': f'Reloaded {len(PRICES_CACHE)} prices' if success else f'File not found: {EOD_FILE}'
-    })
-
-
-@app.route('/api/debug/context', methods=['GET'])
-def debug_context():
-    """DEBUG: Show what context is sent to AI (remove before marketing launch)"""
-    user_id = request.args.get('user_id', '1')
+    """Get EOD price status from DB"""
+    session = Session()
     try:
-        context, signal_tickers = get_portfolio_context(user_id)
+        count = session.query(EodPrice).count()
+        latest = session.query(EodPrice).order_by(EodPrice.updated_at.desc()).first()
+        last_updated = latest.updated_at.isoformat() if latest else None
+        trade_date = latest.trade_date if latest else None
+        
+        age_days = None
+        needs_refresh = True
+        if latest and latest.updated_at:
+            age_days = (datetime.now() - latest.updated_at).days
+            needs_refresh = age_days >= 1
+        
         return jsonify({
             'success': True,
-            'context_preview': context[:2000],
-            'context_length': len(context),
-            'signal_count': len(signal_tickers),
-            'has_market_dashboard': 'MARKET DASHBOARD' in context,
-            'has_signal_list': 'OFFICIAL BUYSELL SIGNAL LIST' in context,
-            'version': '3.5'
+            'source': 'postgresql',
+            'tickers_count': count,
+            'last_updated': last_updated,
+            'trade_date': trade_date,
+            'age_days': age_days,
+            'needs_refresh': needs_refresh
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        session.close()
 
 
 @app.route('/api/prices/update', methods=['POST'])
 def update_prices():
-    """Trigger EOD price update for all tickers.
-    Runs update_eod_prices.py script, then reloads cache."""
+    """Update EOD prices from vnstock into PostgreSQL.
+    Called by GitHub Actions at 4PM Vietnam time daily."""
+    import subprocess
+    
+    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'update_eod_prices.py')
+    
+    if not os.path.exists(script_path):
+        return jsonify({
+            'success': False,
+            'error': f'update_eod_prices.py not found. Please deploy the script.'
+        }), 404
+    
     try:
-        import subprocess
-        script_path = os.path.join(os.path.dirname(__file__), 'update_eod_prices.py')
-        
-        if not os.path.exists(script_path):
-            # Try running inline update for common tickers
-            return jsonify({
-                'success': False,
-                'error': f'update_eod_prices.py not found at {script_path}. Please deploy the script.'
-            }), 404
-        
-        # Run the price updater script
+        env = os.environ.copy()
         process = subprocess.Popen(
             ['python', script_path],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            cwd=os.path.dirname(__file__)
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            env=env
         )
-        stdout, stderr = process.communicate(timeout=300)  # 5 min timeout
         
-        if process.returncode == 0:
-            # Reload cache with new prices
-            global CACHE_LOADED, CACHE_LOADED_AT
-            CACHE_LOADED = False
-            load_eod_prices()
-            return jsonify({
-                'success': True,
-                'tickers_loaded': len(PRICES_CACHE),
-                'loaded_at': CACHE_LOADED_AT.isoformat() if CACHE_LOADED_AT else None,
-                'message': f'Updated {len(PRICES_CACHE)} prices successfully'
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': stderr.decode('utf-8', errors='ignore')[:500]
-            }), 500
-            
+        return jsonify({
+            'success': True,
+            'status': 'running',
+            'message': 'Price update started. Takes ~8 minutes for all tickers.',
+            'pid': process.pid
+        }), 202
+        
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -1669,7 +1575,7 @@ def migrate():
         return jsonify({
             'success': True,
             'message': 'Migration successful',
-            'tables': ['signals', 'portfolios', 'cash_positions', 'chat_history', 'ticker_blacklist', 'market_risk']
+            'tables': ['signals', 'portfolios', 'cash_positions', 'chat_history', 'ticker_blacklist', 'market_risk', 'eod_prices']
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -2001,8 +1907,8 @@ if __name__ == '__main__':
         Base.metadata.create_all(engine)
         print("Ã¢Å“â€¦ Database initialized")
         
-        # Load EOD prices
-        load_eod_prices()
+        # EodPrice table will be created by migrate
+        print("✅ EodPrice: prices stored in PostgreSQL")
         
     except Exception as e:
         print(f"Ã¢Å¡ Ã¯Â¸Â Warning: {e}")
