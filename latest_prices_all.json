@@ -1,44 +1,42 @@
 {
-  "date": "2026-01-11",
-  "timestamp": "2026-01-11T21:07:01.534397",
-  "total_tickers": 115,
-  "success_count": 115,
-  "fail_count": 0,
+  "generated_at": "2026-02-26T19:31:20.221220",
+  "trade_date": "2026-02-26",
+  "total_tickers": 169,
   "prices": {
     "DPM": {
-      "price": 23750.0,
-      "change_percent": 1.0638297872340425,
-      "volume": 6041200
+      "price": 26.5,
+      "date": "7",
+      "source": "VCI"
     },
     "PVS": {
-      "price": 36700.0,
-      "change_percent": -1.3440860215053763,
-      "volume": 6352000
+      "price": 46.3,
+      "date": "7",
+      "source": "VCI"
     },
     "MSN": {
-      "price": 76500.0,
-      "change_percent": -2.29885057471264,
-      "volume": 5786600
+      "price": 80.4,
+      "date": "7",
+      "source": "VCI"
     },
     "BVB": {
-      "price": 13100.0,
-      "change_percent": -1.5037593984962485,
-      "volume": 1631300
+      "price": 13.5,
+      "date": "7",
+      "source": "VCI"
     },
     "VPB": {
-      "price": 28250.0,
-      "change_percent": -3.418803418803419,
-      "volume": 37610200
+      "price": 28.9,
+      "date": "7",
+      "source": "VCI"
     },
     "PAN": {
-      "price": 26700.0,
-      "change_percent": -0.5586592178771029,
-      "volume": 1512100
+      "price": 32.1,
+      "date": "7",
+      "source": "VCI"
     },
     "IDC": {
-      "price": 39000.0,
-      "change_percent": 2.9023746701847,
-      "volume": 4379400
+      "price": 48.6,
+      "date": "7",
+      "source": "VCI"
     },
     "BST": {
       "price": 10000.0,
@@ -46,14 +44,14 @@
       "volume": 3000
     },
     "GAS": {
-      "price": 97100.0,
-      "change_percent": 6.004366812227074,
-      "volume": 4592600
+      "price": 106.0,
+      "date": "7",
+      "source": "VCI"
     },
     "PVB": {
-      "price": 35000.0,
-      "change_percent": -2.7777777777777777,
-      "volume": 430200
+      "price": 35.9,
+      "date": "7",
+      "source": "VCI"
     },
     "DTT": {
       "price": 16000.0,
@@ -61,9 +59,9 @@
       "volume": 1000
     },
     "VHM": {
-      "price": 140000.0,
-      "change_percent": 0.6470165348670063,
-      "volume": 9789300
+      "price": 107.6,
+      "date": "7",
+      "source": "VCI"
     },
     "VAB": {
       "price": 10300.0,
@@ -71,14 +69,14 @@
       "volume": 450200
     },
     "PVI": {
-      "price": 93500.0,
-      "change_percent": -2.604166666666667,
-      "volume": 78700
+      "price": 88.1,
+      "date": "7",
+      "source": "VCI"
     },
     "VCS": {
-      "price": 43300.0,
-      "change_percent": -0.2304147465437821,
-      "volume": 44300
+      "price": 44.4,
+      "date": "7",
+      "source": "VCI"
     },
     "SGB": {
       "price": 12400.0,
@@ -86,24 +84,24 @@
       "volume": 3000
     },
     "HDG": {
-      "price": 26300.0,
-      "change_percent": 0.0,
-      "volume": 5291300
+      "price": 27.6,
+      "date": "7",
+      "source": "VCI"
     },
     "FPT": {
-      "price": 97400.0,
-      "change_percent": 0.9326424870466379,
-      "volume": 10048700
+      "price": 90.5,
+      "date": "7",
+      "source": "VCI"
     },
     "STB": {
-      "price": 51800.0,
-      "change_percent": -3.1775700934579496,
-      "volume": 21551500
+      "price": 67.0,
+      "date": "7",
+      "source": "VCI"
     },
     "DXG": {
-      "price": 15500.0,
-      "change_percent": -6.0606060606060606,
-      "volume": 33186300
+      "price": 15.75,
+      "date": "7",
+      "source": "VCI"
     },
     "NKG": {
       "price": 14800.0,
@@ -111,19 +109,19 @@
       "volume": 4497600
     },
     "VRE": {
-      "price": 35000.0,
-      "change_percent": -2.506963788300832,
-      "volume": 15581100
+      "price": 29.75,
+      "date": "7",
+      "source": "VCI"
     },
     "EIB": {
-      "price": 21300.0,
-      "change_percent": -2.517162471395884,
-      "volume": 7257700
+      "price": 23.9,
+      "date": "7",
+      "source": "VCI"
     },
     "BID": {
-      "price": 46050.0,
-      "change_percent": 6.96864111498258,
-      "volume": 22918600
+      "price": 48.45,
+      "date": "7",
+      "source": "VCI"
     },
     "QBS": {
       "price": 600.0,
@@ -131,9 +129,9 @@
       "volume": 402700
     },
     "DXS": {
-      "price": 8160.0,
-      "change_percent": -6.955530216647657,
-      "volume": 4351600
+      "price": 7.28,
+      "date": "7",
+      "source": "VCI"
     },
     "SD2": {
       "price": 4100.0,
@@ -146,24 +144,24 @@
       "volume": 6600
     },
     "GMD": {
-      "price": 62000.0,
-      "change_percent": -1.5873015873015872,
-      "volume": 820800
+      "price": 81.4,
+      "date": "7",
+      "source": "VCI"
     },
     "DGC": {
-      "price": 62700.0,
-      "change_percent": -0.1592356687897999,
-      "volume": 4030000
+      "price": 73.6,
+      "date": "7",
+      "source": "VCI"
     },
     "GVR": {
-      "price": 31600.0,
-      "change_percent": 5.158069883527457,
-      "volume": 9394000
+      "price": 40.8,
+      "date": "7",
+      "source": "VCI"
     },
     "HT1": {
-      "price": 16500.0,
-      "change_percent": 4.430379746835438,
-      "volume": 1314400
+      "price": 16.5,
+      "date": "7",
+      "source": "VCI"
     },
     "HTP": {
       "price": 1300.0,
@@ -171,9 +169,9 @@
       "volume": 392300
     },
     "SSI": {
-      "price": 30350.0,
-      "change_percent": -0.6546644844517162,
-      "volume": 29015400
+      "price": 32.4,
+      "date": "7",
+      "source": "VCI"
     },
     "NAB": {
       "price": 14650.0,
@@ -186,9 +184,9 @@
       "volume": 200
     },
     "NT2": {
-      "price": 24400.0,
-      "change_percent": -2.2044088176352736,
-      "volume": 1791200
+      "price": 27.6,
+      "date": "7",
+      "source": "VCI"
     },
     "ABB": {
       "price": 15800.0,
@@ -196,14 +194,14 @@
       "volume": 8869800
     },
     "VCI": {
-      "price": 33550.0,
-      "change_percent": -1.3235294117647143,
-      "volume": 7731100
+      "price": 37.15,
+      "date": "7",
+      "source": "VCI"
     },
     "OCB": {
-      "price": 11800.0,
-      "change_percent": -1.2552301255230007,
-      "volume": 2872100
+      "price": 11.7,
+      "date": "7",
+      "source": "VCI"
     },
     "VIG": {
       "price": 5700.0,
@@ -211,14 +209,14 @@
       "volume": 215100
     },
     "HHS": {
-      "price": 11200.0,
-      "change_percent": -6.666666666666672,
-      "volume": 8035600
+      "price": 12.0,
+      "date": "7",
+      "source": "VCI"
     },
     "PVT": {
-      "price": 20300.0,
-      "change_percent": -2.168674698795177,
-      "volume": 6804500
+      "price": 22.5,
+      "date": "7",
+      "source": "VCI"
     },
     "SD9": {
       "price": 11400.0,
@@ -226,9 +224,9 @@
       "volume": 11600
     },
     "SHB": {
-      "price": 16500.0,
-      "change_percent": -0.6024096385542254,
-      "volume": 68480400
+      "price": 16.15,
+      "date": "7",
+      "source": "VCI"
     },
     "KHP": {
       "price": 12400.0,
@@ -241,24 +239,24 @@
       "volume": 100
     },
     "BVH": {
-      "price": 67500.0,
-      "change_percent": 1.9637462235649505,
-      "volume": 1864400
+      "price": 84.0,
+      "date": "7",
+      "source": "VCI"
     },
     "HPG": {
-      "price": 26200.0,
-      "change_percent": -0.7575757575757549,
-      "volume": 35089300
+      "price": 29.4,
+      "date": "7",
+      "source": "VCI"
     },
     "VJC": {
-      "price": 198700.0,
-      "change_percent": -2.1182266009852273,
-      "volume": 2533600
+      "price": 178.5,
+      "date": "7",
+      "source": "VCI"
     },
     "BAB": {
-      "price": 12700.0,
-      "change_percent": 0.0,
-      "volume": 15400
+      "price": 11.8,
+      "date": "7",
+      "source": "VCI"
     },
     "POM": {
       "price": 6000.0,
@@ -266,9 +264,9 @@
       "volume": 3041500
     },
     "VCB": {
-      "price": 68000.0,
-      "change_percent": 6.750392464678175,
-      "volume": 32481400
+      "price": 65.4,
+      "date": "7",
+      "source": "VCI"
     },
     "SJD": {
       "price": 14000.0,
@@ -276,9 +274,9 @@
       "volume": 31300
     },
     "POW": {
-      "price": 14400.0,
-      "change_percent": 2.85714285714286,
-      "volume": 24392800
+      "price": 14.1,
+      "date": "7",
+      "source": "VCI"
     },
     "SCR": {
       "price": 7210.0,
@@ -291,19 +289,19 @@
       "volume": 5100
     },
     "TCB": {
-      "price": 36650.0,
-      "change_percent": 1.8055555555555516,
-      "volume": 28290500
+      "price": 36.45,
+      "date": "7",
+      "source": "VCI"
     },
     "DBC": {
-      "price": 26000.0,
-      "change_percent": -2.0715630885122436,
-      "volume": 8728200
+      "price": 26.85,
+      "date": "7",
+      "source": "VCI"
     },
     "NLG": {
-      "price": 29150.0,
-      "change_percent": -5.967741935483875,
-      "volume": 5587600
+      "price": 28.35,
+      "date": "7",
+      "source": "VCI"
     },
     "SEA": {
       "price": 39900.0,
@@ -311,19 +309,19 @@
       "volume": 18900
     },
     "ACB": {
-      "price": 24550.0,
-      "change_percent": 0.0,
-      "volume": 16460000
+      "price": 24.45,
+      "date": "7",
+      "source": "VCI"
     },
     "VNM": {
-      "price": 61000.0,
-      "change_percent": -1.929260450160776,
-      "volume": 4184100
+      "price": 70.6,
+      "date": "7",
+      "source": "VCI"
     },
     "HUT": {
-      "price": 15500.0,
-      "change_percent": -2.5157232704402537,
-      "volume": 2109800
+      "price": 16.3,
+      "date": "7",
+      "source": "VCI"
     },
     "LHC": {
       "price": 113500.0,
@@ -341,19 +339,19 @@
       "volume": 7734600
     },
     "PLX": {
-      "price": 43000.0,
-      "change_percent": 3.614457831325301,
-      "volume": 8135100
+      "price": 57.5,
+      "date": "7",
+      "source": "VCI"
     },
     "HSG": {
-      "price": 15600.0,
-      "change_percent": -0.9523809523809548,
-      "volume": 2336100
+      "price": 16.25,
+      "date": "7",
+      "source": "VCI"
     },
     "REE": {
-      "price": 61000.0,
-      "change_percent": -1.1345218800648342,
-      "volume": 781600
+      "price": 62.2,
+      "date": "7",
+      "source": "VCI"
     },
     "VBB": {
       "price": 10400.0,
@@ -361,19 +359,19 @@
       "volume": 43900
     },
     "PC1": {
-      "price": 23750.0,
-      "change_percent": -2.862985685071572,
-      "volume": 6590000
+      "price": 28.2,
+      "date": "7",
+      "source": "VCI"
     },
     "BSR": {
-      "price": 19700.0,
-      "change_percent": 5.9139784946236436,
-      "volume": 38812900
+      "price": 30.0,
+      "date": "7",
+      "source": "VCI"
     },
     "LPB": {
-      "price": 41200.0,
-      "change_percent": -1.904761904761898,
-      "volume": 2099000
+      "price": 43.15,
+      "date": "7",
+      "source": "VCI"
     },
     "VC3": {
       "price": 27000.0,
@@ -381,29 +379,29 @@
       "volume": 1159400
     },
     "PDR": {
-      "price": 17250.0,
-      "change_percent": -6.756756756756757,
-      "volume": 34769500
+      "price": 16.9,
+      "date": "7",
+      "source": "VCI"
     },
     "TNG": {
-      "price": 19200.0,
-      "change_percent": 4.347826086956526,
-      "volume": 2463100
+      "price": 24.2,
+      "date": "7",
+      "source": "VCI"
     },
     "PNJ": {
-      "price": 103000.0,
-      "change_percent": 0.0,
-      "volume": 727400
+      "price": 120.0,
+      "date": "7",
+      "source": "VCI"
     },
     "VTO": {
-      "price": 11650.0,
-      "change_percent": -0.4273504273504183,
-      "volume": 109100
+      "price": 11.95,
+      "date": "7",
+      "source": "VCI"
     },
     "TCM": {
-      "price": 27100.0,
-      "change_percent": 2.2641509433962317,
-      "volume": 2328300
+      "price": 26.5,
+      "date": "7",
+      "source": "VCI"
     },
     "DTL": {
       "price": 13050.0,
@@ -411,14 +409,14 @@
       "volume": 2700
     },
     "SAB": {
-      "price": 48950.0,
-      "change_percent": 1.3457556935817925,
-      "volume": 2041500
+      "price": 49.1,
+      "date": "7",
+      "source": "VCI"
     },
     "KSB": {
-      "price": 16050.0,
-      "change_percent": -5.029585798816556,
-      "volume": 1342600
+      "price": 17.7,
+      "date": "7",
+      "source": "VCI"
     },
     "PVG": {
       "price": 7300.0,
@@ -426,9 +424,9 @@
       "volume": 588500
     },
     "TPB": {
-      "price": 17600.0,
-      "change_percent": -0.2832861189801539,
-      "volume": 23633700
+      "price": 18.35,
+      "date": "7",
+      "source": "VCI"
     },
     "TDH": {
       "price": 4200.0,
@@ -436,29 +434,29 @@
       "volume": 107900
     },
     "HAG": {
-      "price": 16600.0,
-      "change_percent": -3.4883720930232434,
-      "volume": 15694100
+      "price": 16.2,
+      "date": "7",
+      "source": "VCI"
     },
     "HVN": {
-      "price": 26850.0,
-      "change_percent": 1.1299435028248614,
-      "volume": 1654500
+      "price": 27.65,
+      "date": "7",
+      "source": "VCI"
     },
     "CTG": {
-      "price": 40750.0,
-      "change_percent": 6.67539267015706,
-      "volume": 38922900
+      "price": 38.5,
+      "date": "7",
+      "source": "VCI"
     },
     "DIG": {
-      "price": 16000.0,
-      "change_percent": -5.88235294117647,
-      "volume": 30057000
+      "price": 15.35,
+      "date": "7",
+      "source": "VCI"
     },
     "PVC": {
-      "price": 12800.0,
-      "change_percent": 0.7874015748031609,
-      "volume": 2806200
+      "price": 15.6,
+      "date": "7",
+      "source": "VCI"
     },
     "PLP": {
       "price": 5600.0,
@@ -466,44 +464,44 @@
       "volume": 258700
     },
     "HDB": {
-      "price": 27900.0,
-      "change_percent": -3.1250000000000075,
-      "volume": 29852300
+      "price": 28.4,
+      "date": "7",
+      "source": "VCI"
     },
     "CEO": {
-      "price": 18400.0,
-      "change_percent": -8.910891089108915,
-      "volume": 37674700
+      "price": 18.7,
+      "date": "7",
+      "source": "VCI"
     },
     "MSB": {
-      "price": 12500.0,
-      "change_percent": -1.185770750988145,
-      "volume": 7926600
+      "price": 12.2,
+      "date": "7",
+      "source": "VCI"
     },
     "HDC": {
-      "price": 20650.0,
-      "change_percent": -5.275229357798175,
-      "volume": 6737000
+      "price": 21.35,
+      "date": "7",
+      "source": "VCI"
     },
     "MWG": {
-      "price": 86000.0,
-      "change_percent": -1.7142857142857144,
-      "volume": 6472200
+      "price": 93.6,
+      "date": "7",
+      "source": "VCI"
     },
     "NVL": {
-      "price": 12550.0,
-      "change_percent": -5.639097744360902,
-      "volume": 22081700
+      "price": 12.6,
+      "date": "7",
+      "source": "VCI"
     },
     "VGC": {
-      "price": 44800.0,
-      "change_percent": 2.98850574712643,
-      "volume": 2142400
+      "price": 51.7,
+      "date": "7",
+      "source": "VCI"
     },
     "KDH": {
-      "price": 28600.0,
-      "change_percent": -6.229508196721307,
-      "volume": 14633500
+      "price": 28.0,
+      "date": "7",
+      "source": "VCI"
     },
     "THD": {
       "price": 30300.0,
@@ -516,19 +514,19 @@
       "volume": 713400
     },
     "VIC": {
-      "price": 176000.0,
-      "change_percent": -0.33975084937712025,
-      "volume": 5389600
+      "price": 168.9,
+      "date": "7",
+      "source": "VCI"
     },
     "SZC": {
-      "price": 30300.0,
-      "change_percent": 1.5075376884422085,
-      "volume": 967200
+      "price": 34.7,
+      "date": "7",
+      "source": "VCI"
     },
     "DCM": {
-      "price": 34650.0,
-      "change_percent": 0.0,
-      "volume": 2942900
+      "price": 40.4,
+      "date": "7",
+      "source": "VCI"
     },
     "CSC": {
       "price": 16600.0,
@@ -536,19 +534,19 @@
       "volume": 48300
     },
     "PVD": {
-      "price": 29500.0,
-      "change_percent": -2.960526315789469,
-      "volume": 7788200
+      "price": 37.4,
+      "date": "7",
+      "source": "VCI"
     },
     "MBS": {
-      "price": 26200.0,
-      "change_percent": 0.0,
-      "volume": 4767500
+      "price": 27.3,
+      "date": "7",
+      "source": "VCI"
     },
     "GEX": {
-      "price": 39250.0,
-      "change_percent": -6.547619047619048,
-      "volume": 15147400
+      "price": 39.9,
+      "date": "7",
+      "source": "VCI"
     },
     "TTB": {
       "price": 1800.0,
@@ -556,14 +554,14 @@
       "volume": 0
     },
     "VIB": {
-      "price": 17950.0,
-      "change_percent": -0.27777777777778173,
-      "volume": 10177300
+      "price": 17.4,
+      "date": "7",
+      "source": "VCI"
     },
     "MBB": {
-      "price": 27300.0,
-      "change_percent": 2.631578947368418,
-      "volume": 66065300
+      "price": 28.8,
+      "date": "7",
+      "source": "VCI"
     },
     "EVE": {
       "price": 10250.0,
@@ -571,14 +569,459 @@
       "volume": 15800
     },
     "KBC": {
-      "price": 36000.0,
-      "change_percent": 1.1235955056179736,
-      "volume": 9412500
+      "price": 35.55,
+      "date": "7",
+      "source": "VCI"
     },
     "DHG": {
-      "price": 102900.0,
-      "change_percent": 0.0,
-      "volume": 15900
+      "price": 104.6,
+      "date": "7",
+      "source": "VCI"
+    },
+    "BCM": {
+      "price": 66.0,
+      "date": "7",
+      "source": "VCI"
+    },
+    "TCX": {
+      "price": 63.0,
+      "date": "7",
+      "source": "VCI"
+    },
+    "BMP": {
+      "price": 161.0,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VPL": {
+      "price": 81.7,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VPI": {
+      "price": 59.9,
+      "date": "7",
+      "source": "VCI"
+    },
+    "HNG": {
+      "price": 6.7,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VND": {
+      "price": 18.8,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VCG": {
+      "price": 19.3,
+      "date": "7",
+      "source": "VCI"
+    },
+    "SBT": {
+      "price": 24.2,
+      "date": "7",
+      "source": "VCI"
+    },
+    "EVF": {
+      "price": 13.8,
+      "date": "7",
+      "source": "VCI"
+    },
+    "HCM": {
+      "price": 24.15,
+      "date": "7",
+      "source": "VCI"
+    },
+    "CTD": {
+      "price": 86.4,
+      "date": "7",
+      "source": "VCI"
+    },
+    "DGW": {
+      "price": 53.0,
+      "date": "7",
+      "source": "VCI"
+    },
+    "CTR": {
+      "price": 95.7,
+      "date": "7",
+      "source": "VCI"
+    },
+    "MCH": {
+      "price": 146.0,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VIX": {
+      "price": 22.65,
+      "date": "7",
+      "source": "VCI"
+    },
+    "PPC": {
+      "price": 10.15,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VSC": {
+      "price": 25.1,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VCK": {
+      "price": 48.25,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VDS": {
+      "price": 18.4,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VTP": {
+      "price": 106.7,
+      "date": "7",
+      "source": "VCI"
+    },
+    "SCS": {
+      "price": 55.9,
+      "date": "7",
+      "source": "VCI"
+    },
+    "CNG": {
+      "price": 26.0,
+      "date": "7",
+      "source": "VCI"
+    },
+    "HPA": {
+      "price": 42.85,
+      "date": "7",
+      "source": "VCI"
+    },
+    "DPG": {
+      "price": 47.8,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VOS": {
+      "price": 14.7,
+      "date": "7",
+      "source": "VCI"
+    },
+    "CSV": {
+      "price": 30.35,
+      "date": "7",
+      "source": "VCI"
+    },
+    "CMG": {
+      "price": 34.95,
+      "date": "7",
+      "source": "VCI"
+    },
+    "TCH": {
+      "price": 15.8,
+      "date": "7",
+      "source": "VCI"
+    },
+    "SGN": {
+      "price": 58.4,
+      "date": "7",
+      "source": "VCI"
+    },
+    "BFC": {
+      "price": 68.8,
+      "date": "7",
+      "source": "VCI"
+    },
+    "PHR": {
+      "price": 63.7,
+      "date": "7",
+      "source": "VCI"
+    },
+    "DPR": {
+      "price": 43.25,
+      "date": "7",
+      "source": "VCI"
+    },
+    "GEG": {
+      "price": 14.85,
+      "date": "7",
+      "source": "VCI"
+    },
+    "CII": {
+      "price": 18.15,
+      "date": "7",
+      "source": "VCI"
+    },
+    "PTB": {
+      "price": 56.5,
+      "date": "7",
+      "source": "VCI"
+    },
+    "NAF": {
+      "price": 42.5,
+      "date": "7",
+      "source": "VCI"
+    },
+    "BSI": {
+      "price": 39.0,
+      "date": "7",
+      "source": "VCI"
+    },
+    "HSL": {
+      "price": 7.08,
+      "date": "7",
+      "source": "VCI"
+    },
+    "ORS": {
+      "price": 13.9,
+      "date": "7",
+      "source": "VCI"
+    },
+    "KDC": {
+      "price": 52.0,
+      "date": "7",
+      "source": "VCI"
+    },
+    "HRC": {
+      "price": 45.3,
+      "date": "7",
+      "source": "VCI"
+    },
+    "SVC": {
+      "price": 20.2,
+      "date": "7",
+      "source": "VCI"
+    },
+    "TCL": {
+      "price": 35.15,
+      "date": "7",
+      "source": "VCI"
+    },
+    "TV2": {
+      "price": 40.4,
+      "date": "7",
+      "source": "VCI"
+    },
+    "SMC": {
+      "price": 12.7,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VHC": {
+      "price": 62.6,
+      "date": "7",
+      "source": "VCI"
+    },
+    "MSH": {
+      "price": 38.7,
+      "date": "7",
+      "source": "VCI"
+    },
+    "SSB": {
+      "price": 17.0,
+      "date": "7",
+      "source": "VCI"
+    },
+    "HAX": {
+      "price": 11.45,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VPX": {
+      "price": 31.1,
+      "date": "7",
+      "source": "VCI"
+    },
+    "PET": {
+      "price": 38.55,
+      "date": "7",
+      "source": "VCI"
+    },
+    "PVP": {
+      "price": 15.3,
+      "date": "7",
+      "source": "VCI"
+    },
+    "SIP": {
+      "price": 63.2,
+      "date": "7",
+      "source": "VCI"
+    },
+    "BMI": {
+      "price": 18.75,
+      "date": "7",
+      "source": "VCI"
+    },
+    "QCG": {
+      "price": 14.5,
+      "date": "7",
+      "source": "VCI"
+    },
+    "FRT": {
+      "price": 170.9,
+      "date": "7",
+      "source": "VCI"
+    },
+    "SJS": {
+      "price": 51.8,
+      "date": "7",
+      "source": "VCI"
+    },
+    "FCN": {
+      "price": 13.85,
+      "date": "7",
+      "source": "VCI"
+    },
+    "GEE": {
+      "price": 180.4,
+      "date": "7",
+      "source": "VCI"
+    },
+    "DSE": {
+      "price": 24.15,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VGT": {
+      "price": 14.4,
+      "date": "7",
+      "source": "VCI"
+    },
+    "BAF": {
+      "price": 37.75,
+      "date": "7",
+      "source": "VCI"
+    },
+    "DHA": {
+      "price": 56.3,
+      "date": "7",
+      "source": "VCI"
+    },
+    "GEL": {
+      "price": 39.4,
+      "date": "7",
+      "source": "VCI"
+    },
+    "CTI": {
+      "price": 24.2,
+      "date": "7",
+      "source": "VCI"
+    },
+    "KHG": {
+      "price": 6.49,
+      "date": "7",
+      "source": "VCI"
+    },
+    "NTL": {
+      "price": 17.3,
+      "date": "7",
+      "source": "VCI"
+    },
+    "TAL": {
+      "price": 46.6,
+      "date": "7",
+      "source": "VCI"
+    },
+    "DCL": {
+      "price": 57.4,
+      "date": "7",
+      "source": "VCI"
+    },
+    "ELC": {
+      "price": 21.0,
+      "date": "7",
+      "source": "VCI"
+    },
+    "HAH": {
+      "price": 61.4,
+      "date": "7",
+      "source": "VCI"
+    },
+    "IJC": {
+      "price": 10.75,
+      "date": "7",
+      "source": "VCI"
+    },
+    "ANV": {
+      "price": 27.75,
+      "date": "7",
+      "source": "VCI"
+    },
+    "LCG": {
+      "price": 10.5,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VFS": {
+      "price": 15.1,
+      "date": "7",
+      "source": "VCI"
+    },
+    "SHS": {
+      "price": 19.0,
+      "date": "7",
+      "source": "VCI"
+    },
+    "NNC": {
+      "price": 55.6,
+      "date": "7",
+      "source": "VCI"
+    },
+    "BVS": {
+      "price": 30.9,
+      "date": "7",
+      "source": "VCI"
+    },
+    "NVB": {
+      "price": 12.3,
+      "date": "7",
+      "source": "VCI"
+    },
+    "API": {
+      "price": 6.3,
+      "date": "7",
+      "source": "VCI"
+    },
+    "DXP": {
+      "price": 12.3,
+      "date": "7",
+      "source": "VCI"
+    },
+    "LAS": {
+      "price": 17.2,
+      "date": "7",
+      "source": "VCI"
+    },
+    "VGS": {
+      "price": 27.5,
+      "date": "7",
+      "source": "VCI"
+    },
+    "EVS": {
+      "price": 5.4,
+      "date": "7",
+      "source": "VCI"
+    },
+    "L18": {
+      "price": 26.0,
+      "date": "7",
+      "source": "VCI"
+    },
+    "IPA": {
+      "price": 18.2,
+      "date": "7",
+      "source": "VCI"
+    },
+    "BCC": {
+      "price": 7.7,
+      "date": "7",
+      "source": "VCI"
+    },
+    "PLC": {
+      "price": 31.5,
+      "date": "7",
+      "source": "VCI"
     }
   }
 }
