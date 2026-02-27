@@ -499,9 +499,9 @@ def index():
         'service': 'AI Advisor Backend v3.3',
         'version': '3.6 (EOD Prices in PostgreSQL) - 2026-02-26',
         'features': ['signals', 'portfolio', 'cash', 'eod_prices', 'chat_ai_strict', 'fomo_control', 'automation'],
-        'eod_file': {
-            'exists': os.path.exists(EOD_FILE),
-            'tickers': len(PRICES_CACHE)
+        'eod_prices': {
+            'source': 'postgresql',
+            'tickers': 0
         },
         'status': 'running'
     })
@@ -509,11 +509,18 @@ def index():
 
 @app.route('/health', methods=['GET'])
 def health():
+    session = Session()
+    try:
+        eod_count = session.query(EodPrice).count()
+    except:
+        eod_count = 0
+    finally:
+        session.close()
     return jsonify({
         'status': 'healthy',
         'openai': openai_client is not None,
-        'eod_file_loaded': CACHE_LOADED,
-        'eod_tickers': len(PRICES_CACHE),
+        'eod_source': 'postgresql',
+        'eod_tickers': eod_count,
         'timestamp': datetime.now().isoformat()
     })
 
@@ -1921,8 +1928,8 @@ if __name__ == '__main__':
     print("Ã°Å¸Å¡â‚¬ AI ADVISOR BACKEND v3.3 - FIXED VERSION")
     print(f"{'='*70}")
     print(f"AI: {'Ã¢Å“â€¦ GPT-4o-mini (Strict Rules)' if openai_client else 'Ã¢ÂÅ’ Not configured'}")
-    print(f"EOD File: {'Ã¢Å“â€¦ Loaded' if CACHE_LOADED and PRICES_CACHE else 'Ã¢Å¡ Ã¯Â¸Â Not found'}")
-    print(f"Tickers: {len(PRICES_CACHE)}")
+    print("EOD Prices: Stored in PostgreSQL (eod_prices table)")
+    print("Use /api/eod/status to check price count")
     print(f"Database: {DATABASE_URL}")
     print(f"Host: 0.0.0.0 (Render-ready)")
     print(f"Port: {port}")
