@@ -107,7 +107,8 @@ def update_eod_prices():
             try:
                 df = Quote(symbol=ticker, source=source).history(start=start_date, end=end_date)
                 if df is not None and len(df) > 0:
-                    price = float(df['close'].iloc[-1])
+                    # vnstock returns price in thousands VND → multiply by 1000
+                    price = float(df['close'].iloc[-1]) * 1000
                     # Upsert
                     record = session.query(EodPrice).filter_by(ticker=ticker).first()
                     if record:
