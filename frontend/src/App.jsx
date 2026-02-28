@@ -164,7 +164,7 @@ function App() {
   </>
 )}
           
-          {activeTab === 'portfolio' && <AIPortfolioManager user={user} />}
+          {activeTab === 'portfolio' && <AIPortfolioManager userId={user.email} />}
         </div>
       </main>
 
