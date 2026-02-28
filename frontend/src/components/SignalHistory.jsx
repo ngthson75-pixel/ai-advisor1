@@ -1,9 +1,23 @@
+// SignalHistory.jsx - DISABLED VERSION
+// Component hidden to reduce UI clutter
+// To re-enable: uncomment the original code at bottom of file
+
 import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, Clock, Star } from 'lucide-react'
 
 const API_URL = import.meta.env.PROD
   ? 'https://ai-advisor1-backend.onrender.com/api'
   : 'http://localhost:10000/api'
+
+export default function SignalHistory() {
+  // Component disabled - returns nothing
+  return null;
+}
+
+/* ============================================================================
+   ORIGINAL CODE - COMMENTED OUT
+   To re-enable: delete the "return null" above and uncomment code below
+   ============================================================================
 
 export default function SignalHistory() {
   const [signals, setSignals] = useState([])
@@ -354,3 +368,5 @@ export default function SignalHistory() {
     </div>
   )
 }
+
+============================================================================ */
