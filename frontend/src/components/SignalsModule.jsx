@@ -249,7 +249,150 @@ const getExitReason = (signal) => {
           </button>
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div>
+          {/* ===== MOBILE CARDS ===== */}
+          <div className="mobile-cards">
+            {activeTab === 'buy' && displaySignals.map((signal, idx) => {
+              const statusDisplay = getStatusDisplay(signal);
+              const positionPct = getPositionPct(signal);
+              const barColor = positionPct === 100 ? '#10b981' : positionPct === 0 ? '#6b7280' : '#f59e0b';
+              const strength = signal.strength || 0;
+              const strengthColor = strength >= 70 ? '#10b981' : strength >= 50 ? '#3b82f6' : strength > 0 ? '#f59e0b' : '#6b7280';
+              return (
+                <div key={signal.id || idx} style={{
+                  background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                  border: '1px solid #334155',
+                  borderRadius: '14px',
+                  padding: '16px',
+                  marginBottom: '12px',
+                  borderLeft: '4px solid #10b981'
+                }}>
+                  {/* Header row */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <strong style={{ color: '#3b82f6', fontSize: '22px', letterSpacing: '1px' }}>
+                      {signal.ticker || signal.code}
+                    </strong>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <span style={{
+                        padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold',
+                        background: strengthColor, color: 'white'
+                      }}>{strength > 0 ? `${strength.toFixed(0)}%` : 'N/A'}</span>
+                      <span style={{
+                        padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600',
+                        background: signal.stock_type === 'Blue Chip' ? '#1d4ed8' : signal.stock_type === 'Mid Cap' ? '#6d28d9' : '#374151',
+                        color: 'white'
+                      }}>{signal.stock_type || 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  {/* Price grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                    <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
+                      <div style={{ color: '#94a3b8', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>Giá vào</div>
+                      <div style={{ color: '#e2e8f0', fontWeight: '700', fontSize: '14px' }}>{signal.entry_price?.toLocaleString() || '-'}</div>
+                    </div>
+                    <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
+                      <div style={{ color: '#ef4444', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>Stop Loss</div>
+                      <div style={{ color: '#ef4444', fontWeight: '700', fontSize: '14px' }}>{signal.stop_loss?.toLocaleString() || '-'}</div>
+                    </div>
+                    <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
+                      <div style={{ color: '#10b981', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>Take Profit</div>
+                      <div style={{ color: '#10b981', fontWeight: '700', fontSize: '14px' }}>{signal.take_profit?.toLocaleString() || '-'}</div>
+                    </div>
+                  </div>
+
+                  {/* Footer row */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <span style={{
+                        fontFamily: 'monospace', fontSize: '11px', padding: '3px 8px',
+                        backgroundColor: '#0f172a', color: '#60a5fa',
+                        borderRadius: '6px', border: '1px solid #1e40af', fontWeight: '600'
+                      }}>{signal.signal_code || `#${signal.id}`}</span>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        padding: '3px 8px', borderRadius: '12px',
+                        backgroundColor: statusDisplay.bg, color: statusDisplay.color,
+                        fontSize: '11px', fontWeight: '600'
+                      }}>{statusDisplay.icon} {statusDisplay.text}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: '#94a3b8', fontSize: '11px' }}>Vị thế:</span>
+                      <div style={{ width: '60px', height: '6px', backgroundColor: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{ width: `${positionPct}%`, height: '100%', backgroundColor: barColor, borderRadius: '3px' }} />
+                      </div>
+                      <span style={{ fontSize: '12px', color: barColor, fontWeight: '700' }}>{positionPct}%</span>
+                    </div>
+                    <span style={{ color: '#64748b', fontSize: '11px' }}>
+                      📅 {signal.date ? new Date(signal.date).toLocaleDateString('vi-VN') : 'N/A'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {activeTab === 'sell' && displaySignals.map((signal, idx) => {
+              const exitReason = getExitReason(signal);
+              const exitPrice = signal.strategy === 'STOP_LOSS' ? signal.stop_loss : signal.take_profit;
+              const strength = signal.strength || 0;
+              const strengthColor = strength >= 70 ? '#10b981' : strength >= 50 ? '#3b82f6' : strength > 0 ? '#f59e0b' : '#6b7280';
+              return (
+                <div key={signal.id || idx} style={{
+                  background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                  border: '1px solid #334155',
+                  borderRadius: '14px',
+                  padding: '16px',
+                  marginBottom: '12px',
+                  borderLeft: '4px solid #ef4444'
+                }}>
+                  {/* Header row */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <strong style={{ color: '#ef4444', fontSize: '22px', letterSpacing: '1px' }}>
+                      {signal.ticker || signal.code}
+                    </strong>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <span style={{
+                        padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold',
+                        background: strengthColor, color: 'white'
+                      }}>{strength > 0 ? `${strength.toFixed(0)}%` : 'N/A'}</span>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        padding: '4px 10px', borderRadius: '12px',
+                        backgroundColor: exitReason.bg, color: exitReason.color,
+                        fontSize: '12px', fontWeight: '600'
+                      }}>{exitReason.icon} {exitReason.text}</span>
+                    </div>
+                  </div>
+
+                  {/* Price grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                    <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
+                      <div style={{ color: '#94a3b8', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>Giá vào</div>
+                      <div style={{ color: '#e2e8f0', fontWeight: '700', fontSize: '14px' }}>{signal.entry_price?.toLocaleString() || '-'}</div>
+                    </div>
+                    <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
+                      <div style={{ color: '#94a3b8', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>Giá ra</div>
+                      <div style={{ color: exitReason.color, fontWeight: '700', fontSize: '14px' }}>{exitPrice?.toLocaleString() || '-'}</div>
+                    </div>
+                    <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
+                      <div style={{ color: '#94a3b8', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>Loại CP</div>
+                      <div style={{ color: '#e2e8f0', fontWeight: '700', fontSize: '12px' }}>{signal.stock_type || 'N/A'}</div>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#64748b', fontSize: '11px' }}>
+                      📅 {signal.date ? new Date(signal.date).toLocaleDateString('vi-VN') : 'N/A'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ===== DESKTOP TABLE ===== */}
+          <div className="desktop-table" style={{ overflowX: 'auto' }}>
           {/* ===== BUY TABLE: 9 cột ===== */}
           {activeTab === 'buy' && (
             <table className="signals-table">
@@ -412,6 +555,7 @@ const getExitReason = (signal) => {
               </tbody>
             </table>
           )}
+          </div>{/* end desktop-table */}
         </div>
       )}
 
@@ -500,6 +644,24 @@ const getExitReason = (signal) => {
           .signals-table th,
           .signals-table td {
             padding: 10px 8px;
+          }
+
+          .mobile-cards {
+            display: block;
+          }
+
+          .desktop-table {
+            display: none;
+          }
+        }
+
+        @media (min-width: 769px) {
+          .mobile-cards {
+            display: none;
+          }
+
+          .desktop-table {
+            display: block;
           }
         }
       `}</style>
