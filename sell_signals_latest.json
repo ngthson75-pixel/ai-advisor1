@@ -1,0 +1,18 @@
+{
+  "date": "2026-02-27",
+  "sell_signals": [
+    {
+      "ticker": "VSC",
+      "exit_reason": "TAKE_PROFIT",
+      "entry_price": 23500,
+      "exit_price": 26200.0,
+      "stop_loss": 20900,
+      "take_profit": 25900,
+      "profit_loss_pct": 11.49,
+      "exit_quantity_pct": 50,
+      "signal_code": "VSC-488",
+      "buy_signal_code": "VSC-488"
+    }
+  ],
+  "count": 1
+}

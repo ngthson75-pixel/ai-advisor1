@@ -1,0 +1,76 @@
+name: Hourly SELL Signal Scanner
+
+on:
+  schedule:
+    # Chạy mỗi giờ trong giờ giao dịch Vietnam (9AM-3PM)
+    # 9AM = 2AM UTC, 3PM = 8AM UTC
+    - cron: '0 2-8 * * 1-5'  # Every hour 2-8 AM UTC (9AM-3PM Vietnam), Mon-Fri
+  workflow_dispatch:  # Manual trigger
+
+env:
+  API_URL: https://ai-advisor1-backend.onrender.com/api
+
+jobs:
+  scan-sell-signals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15  # Shorter timeout for hourly scans
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          pip install requests vnstock3
+      
+      - name: Wake backend (quick)
+        run: |
+          echo "🔔 Waking backend..."
+          for i in {1..3}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" $API_URL/../health)
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Backend awake!"
+              break
+            fi
+            echo "⏳ Attempt $i/3 failed, waiting 5s..."
+            sleep 5
+          done
+      
+      - name: Get BUY signals count (before)
+        id: before
+        run: |
+          RESPONSE=$(curl -s "$API_URL/signals")
+          BUY_COUNT=$(echo $RESPONSE | jq '[.signals[] | select(.action == "BUY" and .position_pct > 0)] | length')
+          echo "buy_signals_count=$BUY_COUNT" >> $GITHUB_OUTPUT
+          echo "📊 Active BUY positions: $BUY_COUNT"
+      
+      - name: Run SELL Scanner V5.2
+        run: |
+          echo "🔍 Running SELL Scanner V5.2..."
+          python sell_signal_scanner_v5.2.py
+        env:
+          PYTHONUNBUFFERED: 1
+        continue-on-error: true
+      
+      - name: Check scanner output
+        run: |
+          if [ -f "sell_signals_v5.2_latest.json" ]; then
+            SELL_COUNT=$(jq '.count' sell_signals_v5.2_latest.json)
+            echo "✅ Scanner completed: $SELL_COUNT SELL signals"
+            cat sell_signals_v5.2_latest.json | jq '.sell_signals[] | {ticker, exit_reason, profit_loss_pct}'
+          else
+            echo "⚠️ No output file - scanner may have failed"
+          fi
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo "📊 HOURLY SELL SCAN SUMMARY"
+          echo "Time: $(date '+%Y-%m-%d %H:%M Vietnam')"
+          echo "Active BUY signals checked: ${{ steps.before.outputs.buy_signals_count }}"
+          echo "Status: Check logs above for SELL signals"

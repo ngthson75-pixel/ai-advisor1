@@ -1,0 +1,63 @@
+{
+  "market_mode": "BULL",
+  "mode_label": "THẬN TRỌNG",
+  "mode_emoji": "🟡",
+  "description": "Thị trường sideway — Chỉ mua khi tín hiệu rõ ràng",
+  "risk_score": 34,
+  "allocation": 60,
+  "factors": [
+    {
+      "label": "VN-Index Trend",
+      "value": "Uptrend",
+      "positive": true,
+      "score": 11
+    },
+    {
+      "label": "Thanh khoản",
+      "value": "Tăng 5% vs TB20",
+      "positive": false,
+      "score": 50
+    },
+    {
+      "label": "Số CP tăng/giảm",
+      "value": "60 tăng / 96 giảm",
+      "positive": false,
+      "score": 70
+    },
+    {
+      "label": "CP trên MA20",
+      "value": "66% (111/168)",
+      "positive": true,
+      "score": 15
+    },
+    {
+      "label": "Tham khảo: NN",
+      "value": "Chỉ tham khảo",
+      "positive": false,
+      "isRef": true
+    }
+  ],
+  "raw_scores": {
+    "vnindex_trend": 11,
+    "liquidity": 50,
+    "advance_decline": 70,
+    "above_ma20": 15
+  },
+  "vnindex_detail": {
+    "trend": "Uptrend",
+    "vnindex": 1880.33,
+    "ema20": 1832.18,
+    "ema50": 1799.56,
+    "ema_diff_pct": 1.81
+  },
+  "breadth_detail": {
+    "advance": 60,
+    "decline": 96,
+    "total_analyzed": 168,
+    "above_ma20": 111,
+    "above_ma20_pct": 66.1
+  },
+  "analyzed_at": "2026-02-27T15:15:39.445400",
+  "api_calls_used": 1,
+  "mode": "sideways"
+}
