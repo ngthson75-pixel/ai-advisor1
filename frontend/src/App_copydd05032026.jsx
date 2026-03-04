@@ -4,8 +4,6 @@ import LandingPage from './components/LandingPage'
 import SignalsModule from './components/SignalsModule'
 import AIPortfolioManager from './components/AIPortfolioManager'
 import SignalHistory from './components/SignalHistory'
-import PWANotificationManager from './components/PWANotificationManager'
-import VIPAdminPanel from './components/VIPAdminPanel'
 
 // API Configuration
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
@@ -16,31 +14,6 @@ function App() {
   const [signals, setSignals] = useState([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
-
-  // VIP Auth state (JWT — song song với free user flow, không đụng nhau)
-  const [vipToken, setVipToken] = useState(() => localStorage.getItem('vip_token') || '')
-  const [vipUser, setVipUser]   = useState(null)
-
-  // Restore VIP session khi app load
-  useEffect(() => {
-    const savedToken = localStorage.getItem('vip_token')
-    if (!savedToken) return
-    const base = API_URL.replace('/api', '')
-    fetch(`${base}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${savedToken}` }
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.success) {
-          setVipUser(data.user)
-          setVipToken(savedToken)
-        } else {
-          localStorage.removeItem('vip_token')
-          setVipToken('')
-        }
-      })
-      .catch(() => {/* server unreachable — giữ token, thử lại sau */})
-  }, [])
 
   // Check for existing user on mount
   useEffect(() => {
@@ -89,10 +62,7 @@ function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('user')
-    localStorage.removeItem('vip_token')
     setUser(null)
-    setVipUser(null)
-    setVipToken('')
     setActiveTab('signals')
   }
 
@@ -207,23 +177,8 @@ function App() {
           </p>
         </div>
       </footer>
-
-      {/* PWA Push Notification — chỉ hiện với VIP user đã login */}
-      <PWANotificationManager
-        userId={vipUser?.id}
-        token={vipToken}
-        isPushEnabled={vipUser?.is_push_enabled}
-      />
     </div>
   )
 }
 
-// Wrapper: route /admin → VIPAdminPanel, còn lại → App bình thường
-function AppWithAdmin() {
-  if (window.location.pathname === '/admin') {
-    return <VIPAdminPanel />
-  }
-  return <App />
-}
-
-export default AppWithAdmin
+export default App

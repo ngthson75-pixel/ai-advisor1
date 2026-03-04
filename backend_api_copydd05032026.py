@@ -22,16 +22,14 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from vnstock import Vnstock
 
-# === VIP + PWA Push (graceful import) ===
+=== VIP + PWA Push (graceful import) ===
 try:
-    from vip_auth import init_vip_system, push_vip_users
-    from pwa_push_backend import init_push_routes, SignalPayloadBuilder
-    _has_vip = True
-    print("✅ VIP/Push modules loaded")
+from vip_auth import init_vip_system, push_vip_users
+from pwa_push_backend import init_push_routes, SignalPayloadBuilder
+_has_vip = True
 except ImportError as e:
-    _has_vip = False
-    push_vip_users = None
-    print(f'⚠️  VIP/Push modules not found: {e}')
+_has_vip = False
+print(f'⚠️  VIP/Push modules not found: {e}')
 
 # SELL Signal Integration (graceful import)
 try:
@@ -103,18 +101,6 @@ print(f"{'='*70}\n")
 Base = declarative_base()
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
-
-# === INIT VIP + PUSH (module level — works with Gunicorn on Render) ===
-def get_session():
-    return Session()
-
-if _has_vip:
-    try:
-        init_push_routes(app, get_session)
-        init_vip_system(app, engine, Session)
-        print("✅ VIP Auth + Push Notification routes registered")
-    except Exception as _vip_err:
-        print(f"⚠️  VIP init error: {_vip_err}")
 
 # ========================================================================
 # AI SYSTEM PROMPT
@@ -1952,7 +1938,6 @@ if __name__ == '__main__':
     print(f"{'='*70}")
     print(f"AI: {'Ã¢Å“â€¦ GPT-4o-mini (Strict Rules)' if openai_client else 'Ã¢ÂÅ’ Not configured'}")
     print("EOD Prices: Stored in PostgreSQL (eod_prices table)")
-    print(f"VIP/Push: {'✅ Enabled' if _has_vip else '⚠️  Not loaded'}")
     print("Use /api/eod/status to check price count")
     print(f"Database: {DATABASE_URL}")
     print(f"Host: 0.0.0.0 (Render-ready)")
