@@ -20,7 +20,8 @@ import { useState, useEffect, useCallback } from 'react'
 // ─────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────
-const API = (import.meta.env.VITE_API_URL || 'https://ai-advisor1-staging.onrender.com').replace(/\/api$/, '')
+const _rawApi = import.meta.env.VITE_API_URL || 'https://ai-advisor1-staging.onrender.com'
+const API = _rawApi.replace(/\/api\/?$/, '')
 
 // ─────────────────────────────────────────────
 // STYLES (inline - không cần file riêng)
@@ -138,6 +139,7 @@ function LoginGate({ onLogin }) {
   const [key, setKey] = useState('')
   const [err, setErr]  = useState('')
   const [loading, setLoading] = useState(false)
+  const [showKey, setShowKey] = useState(false)
 
   const tryLogin = async () => {
     if (!key.trim()) return
@@ -168,14 +170,29 @@ function LoginGate({ onLogin }) {
         </p>
         <div style={S.formGroup}>
           <label style={S.label}>Admin Key</label>
-          <input
-            type="password"
-            style={S.input}
-            placeholder="Nhập admin key..."
-            value={key}
-            onChange={e => setKey(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && tryLogin()}
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              type={showKey ? 'text' : 'password'}
+              style={{ ...S.input, paddingRight: '40px' }}
+              placeholder="Nhập admin key..."
+              value={key}
+              onChange={e => setKey(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && tryLogin()}
+            />
+            <button
+              onClick={() => setShowKey(v => !v)}
+              style={{
+                position: 'absolute', right: '10px', top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none', border: 'none',
+                color: '#64748b', cursor: 'pointer', fontSize: '16px',
+                padding: '4px',
+              }}
+              title={showKey ? 'Ẩn' : 'Hiện'}
+            >
+              {showKey ? '🙈' : '👁️'}
+            </button>
+          </div>
         </div>
         {err && <p style={{ color: '#f87171', fontSize: '13px', margin: '0 0 12px' }}>{err}</p>}
         <button
