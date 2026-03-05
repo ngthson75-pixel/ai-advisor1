@@ -20,8 +20,11 @@ import { useState, useEffect, useCallback } from 'react'
 // ─────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────
-const _rawApi = import.meta.env.VITE_API_URL || 'https://ai-advisor1-staging.onrender.com'
-const API = _rawApi.replace(/\/api\/?$/, '')
+// API URL — tự detect môi trường dựa theo hostname
+const IS_STAGING = window.location.hostname.includes('staging')
+const API = IS_STAGING
+  ? 'https://ai-advisor1-staging.onrender.com'
+  : (import.meta.env.VITE_API_URL || 'https://ai-advisor1-staging.onrender.com').replace(/\/api\/?$/, '')
 
 // ─────────────────────────────────────────────
 // STYLES (inline - không cần file riêng)
