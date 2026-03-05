@@ -20,7 +20,7 @@ import { useState, useEffect, useCallback } from 'react'
 // ─────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────
-const API = import.meta.env.VITE_API_URL || 'https://ai-advisor1-backend.onrender.com'
+const API = (import.meta.env.VITE_API_URL || 'https://ai-advisor1-staging.onrender.com').replace(/\/api$/, '')
 
 // ─────────────────────────────────────────────
 // STYLES (inline - không cần file riêng)
