@@ -208,11 +208,11 @@ function App() {
         </div>
       </footer>
 
-      {/* PWA Push Notification — chỉ hiện với VIP user đã login */}
+      {/* PWA Push Notification — hiện với VIP users đã login */}
       <PWANotificationManager
-        userId={vipUser?.id}
+        userId={vipUser?.id || user?.email}
         token={vipToken}
-        isPushEnabled={vipUser?.is_push_enabled}
+        isPushEnabled={vipUser?.is_push_enabled ?? true}
       />
     </div>
   )
