@@ -20,7 +20,10 @@ import { useState, useEffect, useCallback } from 'react'
 // ─────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────
-const API_BASE       = import.meta.env.VITE_API_URL || 'https://ai-advisor1-backend.onrender.com'
+const _isStaging = typeof window !== 'undefined' && window.location.hostname.includes('staging')
+const API_BASE = _isStaging
+  ? 'https://ai-advisor1-staging.onrender.com'
+  : (import.meta.env.VITE_API_URL || 'https://ai-advisor1-staging.onrender.com').replace(/\/api\/?$/, '')
 const STORAGE_KEY_SUB       = 'ai_advisor_push_sub_v2'
 const STORAGE_KEY_DISMISSED = 'ai_advisor_push_dismissed_v2'
 
