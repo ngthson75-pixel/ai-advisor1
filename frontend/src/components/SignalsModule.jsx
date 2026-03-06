@@ -70,11 +70,12 @@ export default function SignalsModule() {
   };
 
 const getExitReason = (signal) => {
-    const s = signal.strategy || '';
-    if (s === 'STOP_LOSS')        return { text: 'Cắt lỗ (SL)',    icon: '🔴', color: '#ef4444', bg: '#fee2e2' };
-    if (s === 'TAKE_PROFIT')      return { text: 'Chốt lời (TP)',  icon: '🟢', color: '#10b981', bg: '#dcfce7' };
-    if (s === 'MA20_CONSECUTIVE') return { text: 'MA20 (2 ngày)',   icon: '🟠', color: '#f59e0b', bg: '#fef3c7' };
-    if (s === 'MA20_HIGH_VOLUME') return { text: 'MA20 (Vol cao)',  icon: '🟠', color: '#f59e0b', bg: '#fef3c7' };
+    const reason = signal.exit_reason || signal.strategy || '';
+    if (reason === 'STOP_LOSS')        return { text: 'Cắt lỗ (SL)',    icon: '🔴', color: '#ef4444', bg: '#fee2e2' };
+    if (reason === 'TAKE_PROFIT')      return { text: 'Chốt lời (TP)',  icon: '🟢', color: '#10b981', bg: '#dcfce7' };
+    if (reason === 'MA20_BREAK')       return { text: 'MA20 Cross',      icon: '🟠', color: '#f59e0b', bg: '#fef3c7' };
+    if (reason === 'MA20_CONSECUTIVE') return { text: 'MA20 (2 ngày)',   icon: '🟠', color: '#f59e0b', bg: '#fef3c7' };
+    if (reason === 'MA20_HIGH_VOLUME') return { text: 'MA20 (Vol cao)',  icon: '🟠', color: '#f59e0b', bg: '#fef3c7' };
     return { text: 'Thủ công', icon: '⚪', color: '#94a3b8', bg: '#1e293b' };
   };
   // ================================================
@@ -333,9 +334,19 @@ const getExitReason = (signal) => {
 
             {activeTab === 'sell' && displaySignals.map((signal, idx) => {
               const exitReason = getExitReason(signal);
-              const exitPrice = signal.strategy === 'STOP_LOSS' ? signal.stop_loss : signal.take_profit;
-              const strength = signal.strength || 0;
-              const strengthColor = strength >= 70 ? '#10b981' : strength >= 50 ? '#3b82f6' : strength > 0 ? '#f59e0b' : '#6b7280';
+              
+              // Use exit_price from database (NEW column)
+              const exitPrice = signal.exit_price || 0;
+              const entryPrice = signal.entry_price || 0;
+              
+              // Calculate P/L percentage
+              const plPct = entryPrice > 0 
+                ? ((exitPrice - entryPrice) / entryPrice * 100) 
+                : 0;
+              
+              const plColor = plPct >= 0 ? '#10b981' : '#ef4444';
+              const plIcon = plPct >= 0 ? '📈' : '📉';
+              
               return (
                 <div key={signal.id || idx} style={{
                   background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
@@ -343,7 +354,7 @@ const getExitReason = (signal) => {
                   borderRadius: '14px',
                   padding: '16px',
                   marginBottom: '12px',
-                  borderLeft: '4px solid #ef4444'
+                  borderLeft: `4px solid ${plColor}`
                 }}>
                   {/* Header row */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
@@ -351,10 +362,6 @@ const getExitReason = (signal) => {
                       {signal.ticker || signal.code}
                     </strong>
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <span style={{
-                        padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold',
-                        background: strengthColor, color: 'white'
-                      }}>{strength > 0 ? `${strength.toFixed(0)}%` : 'N/A'}</span>
                       <span style={{
                         display: 'inline-flex', alignItems: 'center', gap: '4px',
                         padding: '4px 10px', borderRadius: '12px',
@@ -368,22 +375,61 @@ const getExitReason = (signal) => {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
                     <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
                       <div style={{ color: '#94a3b8', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>Giá vào</div>
-                      <div style={{ color: '#e2e8f0', fontWeight: '700', fontSize: '14px' }}>{signal.entry_price?.toLocaleString() || '-'}</div>
+                      <div style={{ color: '#e2e8f0', fontWeight: '700', fontSize: '14px' }}>
+                        {entryPrice > 0 ? entryPrice.toLocaleString() : '-'}
+                      </div>
                     </div>
                     <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
                       <div style={{ color: '#94a3b8', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>Giá ra</div>
-                      <div style={{ color: exitReason.color, fontWeight: '700', fontSize: '14px' }}>{exitPrice?.toLocaleString() || '-'}</div>
+                      <div style={{ color: exitReason.color, fontWeight: '700', fontSize: '14px' }}>
+                        {exitPrice > 0 ? exitPrice.toLocaleString() : '-'}
+                      </div>
                     </div>
                     <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
-                      <div style={{ color: '#94a3b8', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>Loại CP</div>
-                      <div style={{ color: '#e2e8f0', fontWeight: '700', fontSize: '12px' }}>{signal.stock_type || 'N/A'}</div>
+                      <div style={{ color: '#94a3b8', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>P/L</div>
+                      <div style={{ 
+                        color: plColor, 
+                        fontWeight: '700', 
+                        fontSize: '14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '2px'
+                      }}>
+                        {plIcon} {plPct >= 0 ? '+' : ''}{plPct.toFixed(1)}%
+                      </div>
                     </div>
                   </div>
 
                   {/* Footer */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#64748b', fontSize: '11px' }}>
-                      📅 {signal.date ? new Date(signal.date).toLocaleDateString('vi-VN') : 'N/A'}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <span style={{ 
+                      color: '#64748b', 
+                      fontSize: '11px',
+                      padding: '3px 8px',
+                      background: '#0f172a',
+                      borderRadius: '6px'
+                    }}>
+                      📅 Vào: {signal.date ? new Date(signal.date).toLocaleDateString('vi-VN') : 'N/A'}
+                    </span>
+                    <span style={{ 
+                      color: '#64748b', 
+                      fontSize: '11px',
+                      padding: '3px 8px',
+                      background: '#0f172a',
+                      borderRadius: '6px'
+                    }}>
+                      📅 Ra: {signal.exit_date ? new Date(signal.exit_date).toLocaleDateString('vi-VN') : 'N/A'}
+                    </span>
+                    <span style={{
+                      padding: '3px 8px',
+                      background: signal.stock_type === 'Blue Chip' ? '#1d4ed8' : signal.stock_type === 'Mid Cap' ? '#6d28d9' : '#374151',
+                      color: 'white',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: '600'
+                    }}>
+                      {signal.stock_type || 'N/A'}
                     </span>
                   </div>
                 </div>
@@ -486,7 +532,7 @@ const getExitReason = (signal) => {
             </table>
           )}
 
-          {/* ===== SELL TABLE: 7 cột + Lý do bán ===== */}
+          {/* ===== SELL TABLE: 8 cột + Exit Price, Exit Date, P/L ===== */}
           {activeTab === 'sell' && (
             <table className="signals-table">
               <thead>
@@ -494,16 +540,29 @@ const getExitReason = (signal) => {
                   <th>Mã CK</th>
                   <th>Giá vào</th>
                   <th>Giá ra</th>
+                  <th>P/L</th>
                   <th>Lý do bán</th>
-                  <th>Score</th>
                   <th>Loại</th>
-                  <th>Ngày</th>
+                  <th>Ngày vào</th>
+                  <th>Ngày ra</th>
                 </tr>
               </thead>
               <tbody>
                 {displaySignals.map((signal, idx) => {
                   const exitReason = getExitReason(signal);
-                  const exitPrice = signal.strategy === 'STOP_LOSS' ? signal.stop_loss : signal.take_profit;
+                  
+                  // Use exit_price from database (NEW column)
+                  const exitPrice = signal.exit_price || 0;
+                  const entryPrice = signal.entry_price || 0;
+                  
+                  // Calculate P/L percentage
+                  const plPct = entryPrice > 0 
+                    ? ((exitPrice - entryPrice) / entryPrice * 100) 
+                    : 0;
+                  
+                  const plColor = plPct >= 0 ? '#10b981' : '#ef4444';
+                  const plIcon = plPct >= 0 ? '📈' : '📉';
+                  
                   return (
                     <tr key={signal.id || idx}>
                       <td>
@@ -511,9 +570,22 @@ const getExitReason = (signal) => {
                           {signal.ticker || signal.code}
                         </strong>
                       </td>
-                      <td>{signal.entry_price?.toLocaleString()}</td>
-                      <td style={{ color: exitReason.color, fontWeight: '600' }}>
-                        {exitPrice?.toLocaleString() || '-'}
+                      <td style={{ color: '#94a3b8', fontSize: '14px' }}>
+                        {entryPrice > 0 ? entryPrice.toLocaleString() : '-'}
+                      </td>
+                      <td style={{ color: exitReason.color, fontWeight: '600', fontSize: '14px' }}>
+                        {exitPrice > 0 ? exitPrice.toLocaleString() : '-'}
+                      </td>
+                      <td>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                          padding: '4px 10px', borderRadius: '12px',
+                          backgroundColor: plPct >= 0 ? '#dcfce7' : '#fee2e2',
+                          color: plColor,
+                          fontSize: '12px', fontWeight: '700'
+                        }}>
+                          {plIcon} {plPct >= 0 ? '+' : ''}{plPct.toFixed(2)}%
+                        </span>
                       </td>
                       <td>
                         <span style={{
@@ -523,17 +595,6 @@ const getExitReason = (signal) => {
                           fontSize: '12px', fontWeight: '600'
                         }}>
                           {exitReason.icon} {exitReason.text}
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{
-                          padding: '4px 12px',
-                          background: (signal.strength || 0) >= 70 ? '#10b981' :
-                                     (signal.strength || 0) >= 50 ? '#3b82f6' :
-                                     (signal.strength || 0) > 0 ? '#f59e0b' : '#6b7280',
-                          color: 'white', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold'
-                        }}>
-                          {(signal.strength || 0) > 0 ? `${(signal.strength || 0).toFixed(0)}%` : 'N/A'}
                         </span>
                       </td>
                       <td>
@@ -548,6 +609,9 @@ const getExitReason = (signal) => {
                       </td>
                       <td style={{ color: '#94a3b8', fontSize: '13px' }}>
                         {signal.date ? new Date(signal.date).toLocaleDateString('vi-VN') : 'N/A'}
+                      </td>
+                      <td style={{ color: '#94a3b8', fontSize: '13px' }}>
+                        {signal.exit_date ? new Date(signal.exit_date).toLocaleDateString('vi-VN') : 'N/A'}
                       </td>
                     </tr>
                   );
