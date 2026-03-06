@@ -266,6 +266,11 @@ class Signal(Base):
     # Position tracking - MUST be in model for ORM to load from DB
     status = Column(String(20), default='open')       # open / partial / closed
     position_pct = Column(Integer, default=100)        # 0-100%
+    
+    # SELL signal exit tracking (for SELL signals)
+    exit_price = Column(Float, nullable=True)
+    exit_reason = Column(String(50), nullable=True)
+    exit_date = Column(String(20), nullable=True)
 
 
 class Portfolio(Base):
@@ -598,6 +603,10 @@ def signals_endpoint():
                     'buy_signal_code': s.buy_signal_code,
                     'status': s.status or ('open' if s.action == 'BUY' else 'closed'),
                     'position_pct': s.position_pct if s.position_pct is not None else (100 if s.action == 'BUY' else 0),
+                    # SELL signal exit fields (for SELL signals display)
+                    'exit_price': round(s.exit_price / 100) * 100 if s.exit_price else None,
+                    'exit_reason': s.exit_reason,
+                    'exit_date': s.exit_date,
                 })
             
             # Deduplicate: Keep BEST signal per ticker per date (highest strength)
