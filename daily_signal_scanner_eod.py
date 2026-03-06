@@ -102,6 +102,30 @@ TOP_343_STOCKS = [
     
 ]
 
+# Blue Chip stocks (Top 50 large caps from TOP_343_STOCKS)
+BLUE_CHIP_STOCKS = [
+    'VCB', 'VHM', 'VIC', 'VNM', 'HPG', 'TCB', 'VPB', 'MBB', 'STB', 'MSN',
+    'FPT', 'VRE', 'SSI', 'BID', 'CTG', 'PLX', 'GAS', 'MWG', 'VJC', 'HDB',
+    'BSR', 'POW', 'SAB', 'NVL', 'BCM', 'KDH', 'DGC', 'REE', 'TPB', 'ACB',
+    'GVR', 'PNJ', 'VGC', 'DHG', 'DPM', 'GMD', 'SHB', 'LPB', 'VCI', 'TCX',
+    'BVH', 'HVN', 'BMP', 'DXG', 'VPL', 'KBC', 'DIG', 'GEX', 'VIB', 'EIB',
+]
+
+def get_stock_type(ticker):
+    """
+    Classify stock based on ticker list, NOT price.
+    
+    Blue Chip: Top 50 large-cap stocks with high liquidity
+    Mid Cap: In TOP_343 but not Blue Chip  
+    Penny: Not in TOP_343
+    """
+    if ticker in BLUE_CHIP_STOCKS:
+        return "Blue Chip"
+    elif ticker in TOP_343_STOCKS:
+        return "Mid Cap"
+    else:
+        return "Penny"
+
 def get_top_343_stocks():
     """
     Return 343 highest liquidity stocks (HOSE + HNX)
@@ -292,12 +316,8 @@ def check_pullback_strategy(df, ticker):
             
             is_priority = strength >= 75
             
-            if close >= 50000:
-                stock_type = "Blue Chip"
-            elif close >= 20000:
-                stock_type = "Mid Cap"
-            else:
-                stock_type = "Penny"
+            # Classify stock by ticker list (not price)
+            stock_type = get_stock_type(ticker)
             
             signal = {
                 'ticker': ticker,
@@ -366,12 +386,8 @@ def check_ema_cross_strategy(df, ticker):
             
             is_priority = strength >= 80
             
-            if close >= 50000:
-                stock_type = "Blue Chip"
-            elif close >= 20000:
-                stock_type = "Mid Cap"
-            else:
-                stock_type = "Penny"
+            # Classify stock by ticker list (not price)
+            stock_type = get_stock_type(ticker)
             
             signal = {
                 'ticker': ticker,
