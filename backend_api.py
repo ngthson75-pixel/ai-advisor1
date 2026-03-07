@@ -1940,6 +1940,67 @@ def get_market_risk_history():
     finally:
         session.close()
 
+
+@app.route('/api/admin/fix-orphaned-signals', methods=['POST'])
+def fix_orphaned_signals():
+    """
+    Fix BUY signals that have exit_date/exit_reason but status still 'open'
+    
+    ADMIN ONLY endpoint for database cleanup
+    """
+    session = get_session()
+    
+    try:
+        # Find orphaned BUY signals
+        orphaned = session.query(Signal).filter(
+            Signal.action == 'buy',
+            Signal.status == 'open',
+            Signal.exit_date.isnot(None),
+            Signal.exit_date != ''
+        ).all()
+        
+        if not orphaned:
+            return jsonify({
+                'success': True,
+                'fixed': 0,
+                'message': 'No orphaned signals found'
+            })
+        
+        # Get list before fixing
+        orphaned_list = []
+        for sig in orphaned:
+            orphaned_list.append({
+                'id': sig.id,
+                'ticker': sig.ticker,
+                'entry_date': sig.entry_date,
+                'exit_date': sig.exit_date,
+                'exit_reason': sig.exit_reason,
+                'old_status': sig.status
+            })
+        
+        # Fix them
+        for sig in orphaned:
+            sig.status = 'closed'
+        
+        session.commit()
+        
+        return jsonify({
+            'success': True,
+            'fixed': len(orphaned),
+            'signals': orphaned_list,
+            'message': f'Fixed {len(orphaned)} orphaned BUY signals'
+        })
+        
+    except Exception as e:
+        session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+    finally:
+        session.close()
+
+
 if __name__ == '__main__':
     # Initialize database
     try:
