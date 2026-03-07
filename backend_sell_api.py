@@ -33,12 +33,18 @@ def register_sell_routes(app):
             202 Accepted - Scanner started in background
         """
         
-        def run_scanner():
+        # ✅ Read request data BEFORE thread (in request context!)
+        try:
+            data = request.json or {}
+        except:
+            data = {}
+        
+        days = data.get('days', 7)
+        delay = data.get('delay', 2.0)
+        
+        def run_scanner(days, delay):
+            """Thread function - receives parameters, no request access"""
             try:
-                data = request.json or {}
-                days = data.get('days', 7)
-                delay = data.get('delay', 2.0)
-                
                 print(f"🔍 Starting SELL scanner (days={days}, delay={delay}s)...")
                 
                 # Use PRODUCTION database URL from environment
@@ -61,8 +67,8 @@ def register_sell_routes(app):
                 traceback.print_exc()
         
         try:
-            # Run in background thread
-            thread = threading.Thread(target=run_scanner)
+            # Run in background thread with parameters
+            thread = threading.Thread(target=run_scanner, args=(days, delay))
             thread.daemon = True
             thread.start()
             
