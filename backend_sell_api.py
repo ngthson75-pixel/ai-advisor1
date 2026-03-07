@@ -16,7 +16,7 @@ def register_sell_routes(app):
         app: Flask application instance
     """
     
-    from sell_signal_scanner_v2 import SellSignalScannerV2
+    # No import needed - will run scanner as subprocess
     
     @app.route('/api/scan-sell', methods=['POST'])
     def scan_sell_signals():
@@ -45,22 +45,67 @@ def register_sell_routes(app):
         def run_scanner(days, delay):
             """Thread function - receives parameters, no request access"""
             try:
+                import subprocess
+                import sys
+                
                 print(f"🔍 Starting SELL scanner (days={days}, delay={delay}s)...")
                 
-                # Use PRODUCTION database URL from environment
+                # Path to scanner script
+                scanner_path = os.path.join(
+                    os.path.dirname(__file__),
+                    'scripts',
+                    'sell_signal_scanner.py'
+                )
+                
+                if not os.path.exists(scanner_path):
+                    print(f"❌ ERROR: Scanner script not found at {scanner_path}")
+                    print("❌ Deploy sell_signal_scanner.py to scripts/ folder")
+                    return
+                
+                # Run scanner as subprocess
+                print(f"✅ Running scanner: {scanner_path}")
+                
+                # Use production database from environment
                 db_url = os.getenv('DATABASE_URL')
                 
                 if not db_url:
-                    print("❌ ERROR: DATABASE_URL not set in environment!")
-                    print("❌ Cannot run SELL scanner without database connection")
+                    print("❌ ERROR: DATABASE_URL not set!")
                     return
                 
-                # Run scanner with PRODUCTION database
-                scanner = SellSignalScannerV2(db_url=db_url)
-                sell_signals = scanner.scan(days=days, delay=delay)
+                # Run with python
+                # Scanner v5.2 args: --days, --delay, --staging (optional), --dry-run (optional)
+                # For production auto-push: use --days, --delay only (no --staging, no --dry-run)
+                # Pass 'y\n' to stdin to auto-confirm push when scanner asks
+                process = subprocess.Popen(
+                    [sys.executable, scanner_path,
+                     '--days', str(days),
+                     '--delay', str(delay)],
+                    env={'DATABASE_URL': db_url, **os.environ},
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
                 
-                print(f"✅ Generated {len(sell_signals)} SELL signals")
+                # Auto-confirm 'y' when scanner asks
+                stdout, stderr = process.communicate(input='y\n', timeout=600)  # 10 min timeout
                 
+                if stdout:
+                    print("Scanner output:")
+                    print(stdout)
+                
+                if stderr:
+                    print("Scanner errors:")
+                    print(stderr)
+                
+                if process.returncode == 0:
+                    print(f"✅ Scanner completed successfully")
+                else:
+                    print(f"❌ Scanner exited with code {process.returncode}")
+                
+            except subprocess.TimeoutExpired:
+                print("⏱️  Scanner timeout (10 minutes) - may still be running")
+                process.kill()
             except Exception as e:
                 print(f"❌ Scanner error: {e}")
                 import traceback
