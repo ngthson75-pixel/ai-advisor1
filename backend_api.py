@@ -693,9 +693,7 @@ def signals_endpoint():
                 signal.status = 'closed'
                 signal.position_pct = 0
                 # Lấy sell_pct từ request (TAKE_PROFIT=50%, STOP_LOSS=100%)
-                sell_pct = data.get('sell_pct', 100)
-                if data.get('strategy') == 'TAKE_PROFIT' and 'sell_pct' not in data:
-                    sell_pct = 50  # TAKE_PROFIT mặc định bán 50%
+                sell_pct = data.get('exit_quantity_pct') or data.get('sell_pct', 100)
                 # Update BUY signal tương ứng (FIFO)
                 buy_update_info = auto_update_buy_status(signal.ticker, session, sell_pct=sell_pct)
                 # Link SELL â†’ BUY
