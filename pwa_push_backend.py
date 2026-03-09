@@ -43,7 +43,7 @@ except ImportError:
     print("   Push notifications disabled but app continues normally.")
 
 from flask import Blueprint, request, jsonify
-from sqlalchemy import Column, String, Text, Boolean, DateTime, Integer
+from sqlalchemy import Column, String, Text, Boolean, DateTime, Integer, text
 from sqlalchemy.ext.declarative import declarative_base
 
 logger = logging.getLogger(__name__)
@@ -143,7 +143,7 @@ class PushNotificationService:
         """
         try:
             result = db_session.execute(
-                "SELECT id, endpoint, p256dh_key, auth_key FROM push_subscriptions WHERE is_active = TRUE"
+                text("SELECT id, endpoint, p256dh_key, auth_key FROM push_subscriptions WHERE is_active = TRUE")
             ).fetchall()
 
             stats = {"sent": 0, "failed": 0, "removed": 0, "total": len(result)}
@@ -163,7 +163,7 @@ class PushNotificationService:
                 elif send_result is None:
                     # Subscription expired - deactivate
                     db_session.execute(
-                        "UPDATE push_subscriptions SET is_active = FALSE WHERE id = :id",
+                        text("UPDATE push_subscriptions SET is_active = FALSE WHERE id = :id"),
                         {"id": row[0]}
                     )
                     stats["removed"] += 1
@@ -185,7 +185,7 @@ class PushNotificationService:
         """
         try:
             result = db_session.execute(
-                "SELECT id, endpoint, p256dh_key, auth_key FROM push_subscriptions WHERE user_id = :uid AND is_active = TRUE",
+                text("SELECT id, endpoint, p256dh_key, auth_key FROM push_subscriptions WHERE user_id = :uid AND is_active = TRUE"),
                 {"uid": user_id}
             ).fetchall()
 
@@ -200,7 +200,7 @@ class PushNotificationService:
                     stats["sent"] += 1
                 elif ok is None:
                     db_session.execute(
-                        "UPDATE push_subscriptions SET is_active = FALSE WHERE id = :id",
+                        text("UPDATE push_subscriptions SET is_active = FALSE WHERE id = :id"),
                         {"id": row[0]}
                     )
                 else:
@@ -363,23 +363,23 @@ def init_push_routes(app, get_db_session):
 
             # Upsert subscription
             existing = session.execute(
-                "SELECT id FROM push_subscriptions WHERE endpoint = :ep",
+                text("SELECT id FROM push_subscriptions WHERE endpoint = :ep"),
                 {"ep": endpoint}
             ).fetchone()
 
             if existing:
                 session.execute(
-                    """UPDATE push_subscriptions 
+                    text("""UPDATE push_subscriptions 
                        SET user_id = :uid, p256dh_key = :p256dh, auth_key = :auth,
                            is_active = TRUE, last_used_at = NOW()
-                       WHERE endpoint = :ep""",
+                       WHERE endpoint = :ep"""),
                     {"uid": user_id, "p256dh": p256dh, "auth": auth, "ep": endpoint}
                 )
             else:
                 session.execute(
-                    """INSERT INTO push_subscriptions 
+                    text("""INSERT INTO push_subscriptions 
                        (user_id, endpoint, p256dh_key, auth_key, user_agent)
-                       VALUES (:uid, :ep, :p256dh, :auth, :ua)""",
+                       VALUES (:uid, :ep, :p256dh, :auth, :ua)"""),
                     {"uid": user_id, "ep": endpoint, "p256dh": p256dh,
                      "auth": auth, "ua": user_agent}
                 )
@@ -407,7 +407,7 @@ def init_push_routes(app, get_db_session):
         try:
             session = get_db_session()
             session.execute(
-                "UPDATE push_subscriptions SET is_active = FALSE WHERE endpoint = :ep",
+                text("UPDATE push_subscriptions SET is_active = FALSE WHERE endpoint = :ep"),
                 {"ep": endpoint}
             )
             session.commit()
