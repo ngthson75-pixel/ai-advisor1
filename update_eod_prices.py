@@ -2,11 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 AI ADVISOR - EOD PRICE UPDATER
-================================
-Download giá đóng cửa từ vnstock → lưu vào PostgreSQL.
 Chạy tự động lúc 4PM Vietnam qua GitHub Actions.
-
-Không dùng file JSON. Giá lưu trong DB → không mất khi Render redeploy.
+Ghi giá vào PostgreSQL - persistent across Render redeploys.
 """
 
 import os
@@ -23,8 +20,7 @@ if DATABASE_URL.startswith('postgresql://'):
     DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
 
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 Base = declarative_base()
 
@@ -42,7 +38,7 @@ Session = sessionmaker(bind=engine)
 
 
 def load_ticker_list():
-    """Đọc danh sách mã từ daily_signal_scanner_eod.py - tự động sync"""
+    """Đọc danh sách mã từ daily_signal_scanner_eod.py"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     for path in [
         os.path.join(script_dir, 'scripts', 'daily_signal_scanner_eod.py'),
@@ -72,14 +68,38 @@ def get_last_trading_day():
     return today.strftime('%Y-%m-%d')
 
 
-def update_eod_prices():
-    """Download giá từ vnstock và upsert vào PostgreSQL"""
+def fetch_price(ticker, start_date, end_date):
+    """Thử fetch giá từ VCI rồi TCBS"""
+    # Try multiple import styles for vnstock compatibility
     try:
         from vnstock import Quote
+        for source in ['VCI', 'TCBS']:
+            try:
+                df = Quote(symbol=ticker, source=source).history(start=start_date, end=end_date)
+                if df is not None and len(df) > 0:
+                    return float(df['close'].iloc[-1]) * 1000, source
+            except Exception as e:
+                if 'rate limit' in str(e).lower() or 'quá nhiều' in str(e).lower():
+                    raise e
+                continue
     except ImportError:
-        logger.error("vnstock not installed")
-        return {'success': False, 'error': 'vnstock not installed'}
+        pass
 
+    # Fallback: try vnstock3 style
+    try:
+        from vnstock3 import Vnstock
+        stock = Vnstock().stock(symbol=ticker, source='VCI')
+        df = stock.quote.history(start=start_date, end=end_date)
+        if df is not None and len(df) > 0:
+            return float(df['close'].iloc[-1]) * 1000, 'vnstock3'
+    except Exception:
+        pass
+
+    return None, None
+
+
+def update_eod_prices():
+    """Download giá từ vnstock và upsert vào PostgreSQL"""
     tickers = load_ticker_list()
     if not tickers:
         return {'success': False, 'error': 'No tickers loaded'}
@@ -101,35 +121,47 @@ def update_eod_prices():
     start_time = datetime.now()
 
     for i, ticker in enumerate(tickers):
-        success = False
+        try:
+            price, source = fetch_price(ticker, start_date, end_date)
+            
+            if price:
+                record = session.query(EodPrice).filter_by(ticker=ticker).first()
+                if record:
+                    record.price = price
+                    record.trade_date = trade_date
+                    record.updated_at = datetime.now()
+                else:
+                    session.add(EodPrice(ticker=ticker, price=price, trade_date=trade_date))
+                updated += 1
+                logger.info(f"[{i+1:3d}/{total}] ✅ {ticker}: {price:>10,.0f} ({source})")
+            else:
+                failed.append(ticker)
+                logger.warning(f"[{i+1:3d}/{total}] ❌ {ticker}: no data")
 
-        for source in ['VCI', 'TCBS']:
-            try:
-                df = Quote(symbol=ticker, source=source).history(start=start_date, end=end_date)
-                if df is not None and len(df) > 0:
-                    # vnstock returns price in thousands VND → multiply by 1000
-                    price = float(df['close'].iloc[-1]) * 1000
-                    # Upsert
-                    record = session.query(EodPrice).filter_by(ticker=ticker).first()
-                    if record:
-                        record.price = price
-                        record.trade_date = trade_date
-                        record.updated_at = datetime.now()
+        except Exception as e:
+            if 'rate limit' in str(e).lower() or 'quá nhiều' in str(e).lower():
+                logger.warning(f"⏳ Rate limit. Saving & waiting 60s...")
+                session.commit()
+                time.sleep(60)
+                # Retry
+                try:
+                    price, source = fetch_price(ticker, start_date, end_date)
+                    if price:
+                        record = session.query(EodPrice).filter_by(ticker=ticker).first()
+                        if record:
+                            record.price = price
+                            record.trade_date = trade_date
+                            record.updated_at = datetime.now()
+                        else:
+                            session.add(EodPrice(ticker=ticker, price=price, trade_date=trade_date))
+                        updated += 1
                     else:
-                        session.add(EodPrice(ticker=ticker, price=price, trade_date=trade_date))
-                    updated += 1
-                    logger.info(f"[{i+1:3d}/{total}] ✅ {ticker}: {price:>10,.0f} ({source})")
-                    success = True
-                    break
-            except Exception as e:
-                if 'rate limit' in str(e).lower() or 'quá nhiều' in str(e).lower():
-                    logger.warning(f"[{i+1:3d}/{total}] ⏳ Rate limit. Saving & waiting 60s...")
-                    session.commit()
-                    time.sleep(60)
-
-        if not success:
-            failed.append(ticker)
-            logger.warning(f"[{i+1:3d}/{total}] ❌ {ticker}: all sources failed")
+                        failed.append(ticker)
+                except:
+                    failed.append(ticker)
+            else:
+                failed.append(ticker)
+                logger.warning(f"[{i+1:3d}/{total}] ❌ {ticker}: {e}")
 
         time.sleep(2.0)
 
