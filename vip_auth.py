@@ -148,7 +148,7 @@ def push_vip_users(db_session, payload: dict) -> dict:
             SELECT ps.id, ps.endpoint, ps.p256dh_key, ps.auth_key
             FROM   push_subscriptions ps
             JOIN   vip_users          vu
-                   ON ps.user_id = CAST(vu.id AS VARCHAR)
+                   ON ps.user_id = vu.email
             WHERE  ps.is_active       = TRUE
               AND  vu.is_push_enabled = TRUE
               AND  vu.is_active       = TRUE
