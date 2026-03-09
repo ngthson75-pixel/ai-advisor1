@@ -339,7 +339,7 @@ def init_vip_system(app, engine, Session):
                     'is_push_enabled': u.is_push_enabled,
                     'is_active':       u.is_active,
                     'notes':           u.notes,
-                    'push_devices':    sub_counts.get(str(u.id), 0),
+                    'push_devices':    sub_counts.get(str(u.email), sub_counts.get(str(u.id), 0)),
                     'created_at':      u.created_at.isoformat() if u.created_at else None,
                     'last_login_at':   u.last_login_at.isoformat() if u.last_login_at else None,
                 })
