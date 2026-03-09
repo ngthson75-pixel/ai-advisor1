@@ -97,14 +97,30 @@ export default function PWANotificationManager({ userId, token, isPushEnabled })
     initPWA()
   }, [])
 
-  // Khi userId thay đổi (user vừa login), re-link subscription
+  // Khi userId có (user vừa login) → kiểm tra lại có nên hiện banner không
   useEffect(() => {
-    if (userId && isSubscribed) {
-      relinkSubscription()
+    if (!userId || !supported) return
+    // Re-link nếu đã subscribe
+    if (isSubscribed) { relinkSubscription(); return }
+    // Hiển thị banner nếu chưa subscribe và chưa dismiss
+    const dismissed   = localStorage.getItem(STORAGE_KEY_DISMISSED)
+    const dismissedAt = dismissed ? parseInt(dismissed) : 0
+    const daysSince   = (Date.now() - dismissedAt) / 86400000
+    if (!dismissed || daysSince > 7) {
+      setTimeout(() => setShowBanner(true), 1000)
     }
   }, [userId])
 
   const initPWA = async () => {
+    // iOS: chỉ hoạt động ở standalone mode
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+    if (isIOS && !isStandalone) {
+      console.log('[PWA v2] iOS detected but not standalone — push disabled')
+      return
+    }
+
     const reg = await registerServiceWorker()
     setSwReg(reg)
     if (!reg) return
@@ -113,20 +129,10 @@ export default function PWANotificationManager({ userId, token, isPushEnabled })
     if (existing) {
       setIsSubscribed(true)
       setPermission('granted')
+      console.log('[PWA v2] Existing subscription found')
       return
     }
-
-    // Hiển thị banner nếu chưa dismiss
-    const dismissed      = localStorage.getItem(STORAGE_KEY_DISMISSED)
-    const dismissedAt    = dismissed ? parseInt(dismissed) : 0
-    const daysSince      = (Date.now() - dismissedAt) / 86400000
-
-    if (!dismissed || daysSince > 7) {
-      setTimeout(() => {
-        // Chỉ hiển thị nếu user đã login
-        if (userId) setShowBanner(true)
-      }, 3500)
-    }
+    // Banner sẽ được hiện qua useEffect[userId]
   }
 
   // Re-link subscription với userId thật (trường hợp subscribe khi chưa login)
