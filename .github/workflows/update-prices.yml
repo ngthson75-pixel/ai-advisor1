@@ -21,29 +21,14 @@ jobs:
       - name: Install dependencies
         run: |
           pip install "sqlalchemy>=2.0" "psycopg[binary]" vnstock --quiet
-          python -c "from vnstock import Quote; print('✅ vnstock OK')"
+          python -c "from vnstock import Quote; print('vnstock OK')"
 
       - name: Run price update
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          echo "⏰ Starting EOD price update at $(date)"
-          python update_eod_prices.py
-          echo "✅ Done"
+        run: python update_eod_prices.py
 
       - name: Verify prices updated
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          python -c "
-import os
-from sqlalchemy import create_engine, text
-url = os.environ['DATABASE_URL'].replace('postgresql://', 'postgresql+psycopg://', 1)
-engine = create_engine(url)
-with engine.connect() as conn:
-    count = conn.execute(text('SELECT COUNT(*) FROM eod_prices')).scalar()
-    latest = conn.execute(text('SELECT trade_date FROM eod_prices ORDER BY updated_at DESC LIMIT 1')).scalar()
-    szc = conn.execute(text(\"SELECT price FROM eod_prices WHERE ticker='SZC'\")).scalar()
-    stb = conn.execute(text(\"SELECT price FROM eod_prices WHERE ticker='STB'\")).scalar()
-    print(f'✅ Tickers: {count} | Trade date: {latest} | SZC: {szc:,.0f} | STB: {stb:,.0f} VND')
-"
+        run: python verify_prices.py
