@@ -472,6 +472,8 @@ def push_sell_signal(sell_signal, api_url):
         'action': 'SELL',
         'strategy': sell_signal['exit_reason'],
         'entry_price': sell_signal['entry_price'],
+        'exit_price': sell_signal['exit_price'],  # ✅ FIX: Add exit_price!
+        'exit_date': datetime.now().strftime('%Y-%m-%d'),  # ✅ FIX: Add exit_date!
         'stop_loss': sell_signal.get('stop_loss', 0),
         'take_profit': sell_signal.get('take_profit', 0),
         'strength': 80,
