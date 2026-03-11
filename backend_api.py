@@ -674,7 +674,14 @@ def signals_endpoint():
                 stock_type=data.get('stock_type'),
                 rsi=data.get('rsi'),
                 date=data.get('date'),
-                action=data.get('action', 'BUY')
+                action=data.get('action', 'BUY'),
+                # ✅ FIX: Add exit fields for SELL signals (2026-03-11)
+                exit_price=data.get('exit_price'),
+                exit_date=data.get('exit_date'),
+                exit_reason=data.get('exit_reason'),
+                signal_code=data.get('signal_code'),
+                buy_signal_code=data.get('buy_signal_code'),
+                exit_quantity_pct=data.get('exit_quantity_pct')
             )
             
             # Save to database
