@@ -58,6 +58,7 @@ class VIPUser(VIPBase):
     is_push_enabled = Column(Boolean, default=False)           # Admin bật/tắt
     is_active       = Column(Boolean, default=True)
     notes           = Column(Text)                              # Admin private notes
+    telegram_chat_id = Column(String(50))                      # Telegram chat_id để gửi notification
     created_at      = Column(DateTime, default=datetime.now)
     last_login_at   = Column(DateTime)
 
@@ -126,6 +127,65 @@ def require_vip_auth(f):
         g.email   = payload['email']
         return f(*args, **kwargs)
     return decorated
+
+
+# ============================================================
+# ============================================================
+# TELEGRAM - Gửi notification đến VIP users qua Telegram
+# ============================================================
+
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
+
+def send_telegram_to_vip_users(db_session, message: str) -> dict:
+    """
+    Gửi Telegram message đến tất cả VIP users có telegram_chat_id.
+    Dùng sau khi có tín hiệu mới.
+    """
+    if not TELEGRAM_BOT_TOKEN:
+        logger.warning('[Telegram] TELEGRAM_BOT_TOKEN chưa được set')
+        return {'sent': 0, 'failed': 0, 'skipped': 0}
+
+    try:
+        users = db_session.query(VIPUser).filter(
+            VIPUser.is_active == True,
+            VIPUser.telegram_chat_id != None,
+            VIPUser.telegram_chat_id != '',
+        ).all()
+
+        if not users:
+            return {'sent': 0, 'failed': 0, 'skipped': 0,
+                    'note': 'Không có VIP user nào có Telegram chat_id'}
+
+        import requests as req_lib
+        stats = {'sent': 0, 'failed': 0, 'skipped': 0}
+
+        for user in users:
+            try:
+                resp = req_lib.post(
+                    f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage',
+                    json={
+                        'chat_id':    user.telegram_chat_id,
+                        'text':       message,
+                        'parse_mode': 'HTML',
+                        'disable_web_page_preview': True,
+                    },
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    stats['sent'] += 1
+                    logger.info(f'[Telegram] Sent to {user.email}')
+                else:
+                    stats['failed'] += 1
+                    logger.error(f'[Telegram] Failed {user.email}: {resp.text}')
+            except Exception as e:
+                stats['failed'] += 1
+                logger.error(f'[Telegram] Error {user.email}: {e}')
+
+        return stats
+
+    except Exception as e:
+        logger.error(f'[Telegram] send_telegram_to_vip_users error: {e}')
+        return {'sent': 0, 'failed': 0, 'error': str(e)}
 
 
 # ============================================================
@@ -340,6 +400,7 @@ def init_vip_system(app, engine, Session):
                     'is_active':       u.is_active,
                     'notes':           u.notes,
                     'push_devices':    sub_counts.get(str(u.email), sub_counts.get(str(u.id), 0)),
+                    'telegram_chat_id': u.telegram_chat_id or '',
                     'created_at':      u.created_at.isoformat() if u.created_at else None,
                     'last_login_at':   u.last_login_at.isoformat() if u.last_login_at else None,
                 })
@@ -454,7 +515,7 @@ def init_vip_system(app, engine, Session):
             if not user:
                 return jsonify({'error': 'User không tồn tại'}), 404
 
-            for field in ('notes', 'tier', 'full_name', 'phone'):
+            for field in ('notes', 'tier', 'full_name', 'phone', 'telegram_chat_id'):
                 if field in data:
                     setattr(user, field, data[field])
             if 'is_active' in data:
@@ -531,6 +592,142 @@ def init_vip_system(app, engine, Session):
             return jsonify({'success': True, 'stats': stats, 'user': user.email})
         except Exception as e:
             return jsonify({'error': str(e)}), 500
+        finally:
+            session.close()
+
+
+    @app.route('/api/admin/telegram/test/<int:user_id>', methods=['POST'])
+    @require_admin
+    def admin_test_telegram(user_id):
+        """
+        POST /api/admin/telegram/test/<user_id>
+        Gửi test Telegram message đến 1 user cụ thể.
+        """
+        session = Session()
+        try:
+            user = session.query(VIPUser).filter_by(id=user_id).first()
+            if not user:
+                return jsonify({'error': 'User không tồn tại'}), 404
+            if not user.telegram_chat_id:
+                return jsonify({'error': 'User chưa có Telegram chat_id'}), 400
+
+            import requests as _req
+            msg = (
+                f"🧪 <b>Test Notification</b>\n\n"
+                f"Xin chào <b>{user.full_name or user.email}</b>!\n\n"
+                f"✅ Telegram notification đang hoạt động.\n"
+                f"Bạn sẽ nhận tín hiệu VIP tại đây.\n\n"
+                f"🌐 <a href='https://ai-advisor.vn'>ai-advisor.vn</a>"
+            )
+            resp = _req.post(
+                f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage',
+                json={'chat_id': user.telegram_chat_id, 'text': msg,
+                      'parse_mode': 'HTML', 'disable_web_page_preview': True},
+                timeout=10,
+            )
+            ok = resp.status_code == 200
+            return jsonify({
+                'success': ok,
+                'user': user.email,
+                'telegram_chat_id': user.telegram_chat_id,
+                'telegram_response': resp.json(),
+            })
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+        finally:
+            session.close()
+
+
+    @app.route('/api/admin/telegram/broadcast', methods=['POST'])
+    @require_admin
+    def admin_broadcast_telegram():
+        """
+        POST /api/admin/telegram/broadcast
+        Multipart form: title (opt), body (required), file (opt)
+        Gửi tin nhắn Telegram đến tất cả VIP users có chat_id.
+        Hỗ trợ text, ảnh, file đính kèm (PDF, Excel...).
+        """
+        import requests as _req
+
+        title = request.form.get('title', '').strip()
+        body  = request.form.get('body', '').strip()
+        if not body:
+            return jsonify({'error': 'Nội dung không được trống'}), 400
+
+        # Build message text
+        msg = ''
+        if title:
+            msg += f'<b>{title}</b>\n\n'
+        msg += body
+        msg += '\n\n🌐 <a href="https://ai-advisor.vn">ai-advisor.vn</a>'
+
+        # Get file if attached
+        file_obj = request.files.get('file')
+        file_bytes = file_obj.read() if file_obj else None
+        file_name  = file_obj.filename if file_obj else None
+        file_mime  = file_obj.content_type if file_obj else None
+
+        session = Session()
+        try:
+            users = session.query(VIPUser).filter(
+                VIPUser.is_active == True,
+                VIPUser.telegram_chat_id != None,
+                VIPUser.telegram_chat_id != '',
+            ).all()
+
+            stats = {'sent': 0, 'failed': 0, 'skipped': len(
+                session.query(VIPUser).filter(
+                    VIPUser.is_active == True,
+                ).count() - len(users) if True else 0
+            )}
+            # recalculate skipped properly
+            total_active = session.query(VIPUser).filter(VIPUser.is_active == True).count()
+            stats['skipped'] = total_active - len(users)
+
+            for user in users:
+                try:
+                    if file_bytes and file_mime and file_mime.startswith('image/'):
+                        # Send photo
+                        resp = _req.post(
+                            f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto',
+                            data={'chat_id': user.telegram_chat_id, 'caption': msg,
+                                  'parse_mode': 'HTML'},
+                            files={'photo': (file_name, file_bytes, file_mime)},
+                            timeout=30,
+                        )
+                    elif file_bytes:
+                        # Send document (PDF, Excel, etc.)
+                        resp = _req.post(
+                            f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument',
+                            data={'chat_id': user.telegram_chat_id, 'caption': msg,
+                                  'parse_mode': 'HTML'},
+                            files={'document': (file_name, file_bytes, file_mime or 'application/octet-stream')},
+                            timeout=30,
+                        )
+                    else:
+                        # Text only
+                        resp = _req.post(
+                            f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage',
+                            json={'chat_id': user.telegram_chat_id, 'text': msg,
+                                  'parse_mode': 'HTML', 'disable_web_page_preview': False},
+                            timeout=15,
+                        )
+
+                    if resp.status_code == 200:
+                        stats['sent'] += 1
+                        logger.info(f'[Telegram broadcast] Sent to {user.email}')
+                    else:
+                        stats['failed'] += 1
+                        logger.error(f'[Telegram broadcast] Failed {user.email}: {resp.text}')
+
+                except Exception as e:
+                    stats['failed'] += 1
+                    logger.error(f'[Telegram broadcast] Error {user.email}: {e}')
+
+            return jsonify({'success': True, 'stats': stats})
+
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
         finally:
             session.close()
 

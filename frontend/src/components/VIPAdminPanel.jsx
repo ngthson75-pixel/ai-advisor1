@@ -15,7 +15,7 @@
  *  - Ghi notes về deal / khách hàng
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 // ─────────────────────────────────────────────
 // CONFIG
@@ -132,7 +132,14 @@ function useApi(adminKey) {
       method: 'POST', headers, body: JSON.stringify(data),
     }).then(r => r.json())
 
-  return { getUsers, createUser, togglePush, updateUser, testPush, broadcast }
+  const broadcastTelegram = (formData) =>
+    fetch(`${API}/api/admin/telegram/broadcast`, {
+      method: 'POST',
+      headers: { 'X-Admin-Key': key }, // NO Content-Type — browser sets multipart automatically
+      body: formData,
+    }).then(r => r.json())
+
+  return { getUsers, createUser, togglePush, updateUser, testPush, broadcast, broadcastTelegram }
 }
 
 // ─────────────────────────────────────────────
@@ -290,6 +297,18 @@ function CreateUserModal({ api, onClose, onSuccess }) {
               />
             </div>
 
+            <div style={S.formGroup}>
+              <label style={S.label}>Telegram Chat ID <span style={{color:'#64748b', fontWeight:400}}>(điền sau khi khách nhắn /start vào bot)</span></label>
+              <input
+                type="text" style={S.input}
+                placeholder="VD: 123456789"
+                value={form.telegram_chat_id || ''} onChange={set('telegram_chat_id')}
+              />
+              <p style={{color:'#64748b', fontSize:'11px', margin:'4px 0 0'}}>
+                Khách nhắn <b>/start</b> vào <b>@aiadvisorvn_bot</b> → bot trả về Chat ID → điền vào đây
+              </p>
+            </div>
+
             {err && <p style={{ color: '#f87171', fontSize: '13px', margin: '0 0 12px' }}>{err}</p>}
 
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -348,9 +367,10 @@ function CreateUserModal({ api, onClose, onSuccess }) {
 // ─────────────────────────────────────────────
 function UserRow({ user, api, onRefresh }) {
   const [loading, setLoading]   = useState(false)
-  const [editing, setEditing]   = useState(false)
-  const [notes, setNotes]       = useState(user.notes || '')
-  const [feedback, setFeedback] = useState('')
+  const [editing, setEditing]         = useState(false)
+  const [notes, setNotes]             = useState(user.notes || '')
+  const [telegramId, setTelegramId]   = useState(user.telegram_chat_id || '')
+  const [feedback, setFeedback]       = useState('')
 
   const doToggle = async () => {
     setLoading(true)
@@ -373,7 +393,7 @@ function UserRow({ user, api, onRefresh }) {
   }
 
   const saveNotes = async () => {
-    await api.updateUser(user.id, { notes })
+    await api.updateUser(user.id, { notes, telegram_chat_id: telegramId })
     setEditing(false)
     onRefresh()
   }
@@ -441,13 +461,25 @@ function UserRow({ user, api, onRefresh }) {
         <div>🔔 Push: <strong style={{ color: user.is_push_enabled ? '#4ade80' : '#64748b' }}>
           {user.is_push_enabled ? 'Đang bật' : 'Đang tắt'}
         </strong></div>
+        <div>💬 Telegram: <strong style={{ color: user.telegram_chat_id ? '#4ade80' : '#f87171' }}>
+          {user.telegram_chat_id ? `✅ ${user.telegram_chat_id}` : '❌ Chưa có'}
+        </strong></div>
         <div>📅 Tạo: {fmt(user.created_at)}</div>
         <div>🕐 Đăng nhập: {fmt(user.last_login_at)}</div>
       </div>
 
-      {/* Notes */}
+      {/* Notes + Telegram edit */}
       {editing ? (
         <div style={{ marginTop: '12px' }}>
+          <label style={{ ...S.label, fontSize: '11px', marginBottom: '4px' }}>💬 Telegram Chat ID</label>
+          <input
+            type="text"
+            style={{ ...S.input, marginBottom: '8px' }}
+            value={telegramId}
+            onChange={e => setTelegramId(e.target.value)}
+            placeholder="VD: 123456789 (khách nhắn /start vào @aiadvisorvn_bot)"
+          />
+          <label style={{ ...S.label, fontSize: '11px', marginBottom: '4px' }}>📝 Ghi chú</label>
           <textarea
             style={{ ...S.input, minHeight: '60px', marginBottom: '8px' }}
             value={notes}
@@ -521,6 +553,182 @@ function UserRow({ user, api, onRefresh }) {
           ⚠️ Chưa có thiết bị nào. Khách cần login và bật thông báo trên app trước.
         </p>
       )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────
+// COMPONENT: Telegram Broadcast Modal
+// ─────────────────────────────────────────────
+function TelegramBroadcastModal({ api, onClose }) {
+  const [title, setTitle]     = useState('')
+  const [body, setBody]       = useState('')
+  const [file, setFile]       = useState(null)
+  const [result, setResult]   = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [preview, setPreview] = useState(null)
+  const fileRef = useRef(null)
+
+  const onFileChange = (e) => {
+    const f = e.target.files[0]
+    if (!f) return
+    setFile(f)
+    if (f.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onload = (ev) => setPreview(ev.target.result)
+      reader.readAsDataURL(f)
+    } else {
+      setPreview(null)
+    }
+  }
+
+  const removeFile = () => { setFile(null); setPreview(null); if (fileRef.current) fileRef.current.value = '' }
+
+  const send = async () => {
+    if (!body.trim()) return
+    setLoading(true)
+    const fd = new FormData()
+    if (title) fd.append('title', title)
+    fd.append('body', body)
+    if (file) fd.append('file', file)
+    const data = await api.broadcastTelegram(fd)
+    setResult(data)
+    setLoading(false)
+  }
+
+  const fileIcon = file
+    ? file.type.startsWith('image/') ? '🖼️'
+    : file.name.match(/xlsx?$/i) ? '📊'
+    : file.name.match(/pdf$/i) ? '📄'
+    : '📎'
+    : null
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 9999, padding: '20px',
+    }}>
+      <div style={{ ...S.card, width: '100%', maxWidth: '520px', margin: 0, maxHeight: '90vh', overflowY: 'auto' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div>
+            <h3 style={{ margin: 0 }}>💬 Gửi Telegram VIP</h3>
+            <p style={{ color: '#64748b', fontSize: '12px', margin: '4px 0 0' }}>
+              Tin nhắn cá nhân đến từng VIP — như email riêng
+            </p>
+          </div>
+          <button style={S.btnGhost} onClick={onClose}>✕</button>
+        </div>
+
+        {!result ? (
+          <>
+            {/* Tiêu đề */}
+            <div style={S.formGroup}>
+              <label style={S.label}>📌 Tiêu đề <span style={{ color: '#64748b', fontWeight: 400 }}>(không bắt buộc)</span></label>
+              <input
+                style={S.input}
+                placeholder="VD: 📊 Cơ hội MBB tuần này"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+              />
+            </div>
+
+            {/* Nội dung */}
+            <div style={S.formGroup}>
+              <label style={S.label}>✏️ Nội dung <span style={{ color: '#ef4444' }}>*</span></label>
+              <textarea
+                style={{ ...S.input, minHeight: '140px', resize: 'vertical', fontFamily: 'monospace', fontSize: '13px' }}
+                placeholder={'VD:\nMBB đang tạo nền tốt ở vùng 24,500\n\n📈 Entry: 24,500 – 25,000\n🛑 Stop loss: 23,500\n🎯 Target: 27,000 (+10%)\n\nR/R = 1:2.5 — Chất lượng cao'}
+                value={body}
+                onChange={e => setBody(e.target.value)}
+              />
+              <p style={{ color: '#64748b', fontSize: '11px', margin: '4px 0 0' }}>
+                Hỗ trợ xuống dòng, emoji. HTML tags: &lt;b&gt;, &lt;i&gt;, &lt;code&gt;
+              </p>
+            </div>
+
+            {/* File đính kèm */}
+            <div style={S.formGroup}>
+              <label style={S.label}>📎 Đính kèm <span style={{ color: '#64748b', fontWeight: 400 }}>(ảnh, PDF, Excel...)</span></label>
+              {file ? (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  background: '#0f172a', borderRadius: '8px', padding: '10px 14px',
+                }}>
+                  {preview
+                    ? <img src={preview} style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '4px' }} alt="" />
+                    : <span style={{ fontSize: '28px' }}>{fileIcon}</span>
+                  }
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
+                    <div style={{ fontSize: '11px', color: '#64748b' }}>{(file.size / 1024).toFixed(0)} KB</div>
+                  </div>
+                  <button style={S.btnGhost} onClick={removeFile}>✕</button>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    border: '2px dashed #334155', borderRadius: '8px', padding: '20px',
+                    textAlign: 'center', cursor: 'pointer', color: '#64748b', fontSize: '13px',
+                  }}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  <div style={{ fontSize: '24px', marginBottom: '6px' }}>📁</div>
+                  Click để chọn file
+                  <div style={{ fontSize: '11px', marginTop: '4px' }}>PNG, JPG, PDF, XLSX, DOCX — tối đa 50MB</div>
+                </div>
+              )}
+              <input ref={fileRef} type="file" style={{ display: 'none' }}
+                accept="image/*,.pdf,.xlsx,.xls,.docx,.doc,.csv"
+                onChange={onFileChange}
+              />
+            </div>
+
+            {/* Preview */}
+            {(title || body) && (
+              <div style={{
+                background: '#0f172a', borderRadius: '8px', padding: '14px',
+                marginBottom: '16px', borderLeft: '3px solid #22c55e',
+              }}>
+                <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px' }}>👁️ Preview tin nhắn</div>
+                {title && <div style={{ fontWeight: '700', marginBottom: '6px' }}>📌 {title}</div>}
+                <div style={{ fontSize: '13px', color: '#cbd5e1', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{body}</div>
+                {file && <div style={{ marginTop: '8px', fontSize: '12px', color: '#94a3b8' }}>{fileIcon} {file.name}</div>}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                style={{ ...S.btn('#22c55e'), flex: 1, opacity: (!body.trim() || loading) ? 0.5 : 1 }}
+                onClick={send}
+                disabled={!body.trim() || loading}
+              >
+                {loading ? '⏳ Đang gửi...' : '💬 Gửi đến tất cả VIP'}
+              </button>
+              <button style={S.btnGhost} onClick={onClose}>Hủy</button>
+            </div>
+          </>
+        ) : (
+          <div>
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ fontSize: '40px', marginBottom: '8px' }}>
+                {result.success ? '✅' : '❌'}
+              </div>
+              <p style={{ color: result.success ? '#4ade80' : '#f87171', fontWeight: '700', margin: 0 }}>
+                {result.success ? 'Đã gửi thành công!' : 'Có lỗi xảy ra'}
+              </p>
+            </div>
+            <div style={{ background: '#0f172a', borderRadius: '8px', padding: '14px', fontSize: '13px', marginBottom: '16px' }}>
+              <div>💬 Gửi thành công: <strong style={{ color: '#4ade80' }}>{result.stats?.sent ?? 0}</strong> người</div>
+              <div>❌ Thất bại: <strong style={{ color: '#f87171' }}>{result.stats?.failed ?? 0}</strong> người</div>
+              <div>⏭️ Bỏ qua (chưa có Telegram): <strong style={{ color: '#f59e0b' }}>{result.stats?.skipped ?? 0}</strong> người</div>
+            </div>
+            <button style={{ ...S.btnGhost, width: '100%' }} onClick={onClose}>Đóng</button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -602,8 +810,9 @@ export default function VIPAdminPanel() {
   const [adminKey, setAdminKey]       = useState(() => sessionStorage.getItem('admin_key') || '')
   const [users, setUsers]             = useState([])
   const [loading, setLoading]         = useState(false)
-  const [showCreate, setShowCreate]   = useState(false)
-  const [showBroadcast, setShowBroadcast] = useState(false)
+  const [showCreate, setShowCreate]               = useState(false)
+  const [showBroadcast, setShowBroadcast]         = useState(false)
+  const [showTelegramBroadcast, setShowTelegramBroadcast] = useState(false)
   const [search, setSearch]           = useState('')
 
   const api = useApi(adminKey)
@@ -646,7 +855,10 @@ export default function VIPAdminPanel() {
           <h1 style={{ margin: 0, fontSize: '22px' }}>🛡️ VIP Admin Panel</h1>
           <p style={{ color: '#64748b', fontSize: '13px', margin: '4px 0 0' }}>AI Advisor — Quản lý tài khoản VIP</p>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button style={S.btn('#22c55e')} onClick={() => setShowTelegramBroadcast(true)}>
+            💬 Gửi Telegram VIP
+          </button>
           <button style={S.btn('#ef4444')} onClick={() => setShowBroadcast(true)}>
             📣 Broadcast Push
           </button>
@@ -715,6 +927,12 @@ export default function VIPAdminPanel() {
         <BroadcastModal
           api={api}
           onClose={() => setShowBroadcast(false)}
+        />
+      )}
+      {showTelegramBroadcast && (
+        <TelegramBroadcastModal
+          api={api}
+          onClose={() => setShowTelegramBroadcast(false)}
         />
       )}
     </div>
