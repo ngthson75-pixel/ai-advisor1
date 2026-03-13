@@ -128,7 +128,7 @@ const getExitReason = (signal) => {
       {/* NEW: Tabs */}
       <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         <button
-          onClick={() => { setActiveTab('buy'); trackSignalTabView('buy'); }}}
+          onClick={() => { setActiveTab('buy'); trackSignalTabView('buy'); }}
           style={{
             padding: '12px 24px',
             backgroundColor: activeTab === 'buy' ? '#10b981' : '#334155',
@@ -148,7 +148,7 @@ const getExitReason = (signal) => {
         </button>
         
         <button
-          onClick={() => { setActiveTab('sell'); trackSignalTabView('sell'); }}}
+          onClick={() => { setActiveTab('sell'); trackSignalTabView('sell'); }}
           style={{
             padding: '12px 24px',
             backgroundColor: activeTab === 'sell' ? '#ef4444' : '#334155',
