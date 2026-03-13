@@ -6,6 +6,7 @@ import AIPortfolioManager from './components/AIPortfolioManager'
 import SignalHistory from './components/SignalHistory'
 import PWANotificationManager from './components/PWANotificationManager'
 import VIPAdminPanel from './components/VIPAdminPanel'
+import VIPDashboard from './components/VIPDashboard'
 import { initGA, trackLogin, trackTabView } from './analytics'
 
 // API Configuration
@@ -35,6 +36,11 @@ function App() {
         if (data.success) {
           setVipUser(data.user)
           setVipToken(savedToken)
+          // Nếu là VIP user → tự động chuyển sang tab vip
+          const tier = data.user?.tier || ''
+          if (tier === 'vip' || tier === 'pro') {
+            setActiveTab('vip')
+          }
         } else {
           localStorage.removeItem('vip_token')
           setVipToken('')
@@ -99,9 +105,53 @@ function App() {
     setActiveTab('signals')
   }
 
+  // Helper: kiểm tra user có phải VIP/Pro không
+  const isVipUser = vipUser && (vipUser.tier === 'vip' || vipUser.tier === 'pro')
+
   // Show landing page if not logged in
   if (!user) {
     return <LandingPage onLogin={handleLogin} />
+  }
+
+  // Nếu đang ở tab VIP → render toàn trang VIPDashboard (full screen, không có header/nav chung)
+  if (activeTab === 'vip' && isVipUser) {
+    return (
+      <>
+        {/* Nút quay lại để thoát khỏi VIP dashboard */}
+        <div style={{
+          position: 'fixed',
+          top: '16px',
+          left: '16px',
+          zIndex: 9999,
+        }}>
+          <button
+            onClick={() => setActiveTab('signals')}
+            style={{
+              background: 'rgba(45,10,94,0.9)',
+              border: '1px solid rgba(139,92,246,0.4)',
+              color: '#c4b5fd',
+              padding: '8px 14px',
+              borderRadius: '10px',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              backdropFilter: 'blur(12px)',
+            }}
+          >
+            ← Quay lại
+          </button>
+        </div>
+        <VIPDashboard user={vipUser} token={vipToken} />
+        <PWANotificationManager
+          userId={vipUser?.id}
+          token={vipToken}
+          isPushEnabled={vipUser?.is_push_enabled ?? true}
+        />
+      </>
+    )
   }
 
   // Show main app if logged in
@@ -179,6 +229,36 @@ function App() {
               </svg>
               Quản trị đầu tư bằng AI
             </button>
+
+            {/* Tab VIP — chỉ hiện khi user có tier vip/pro */}
+            {isVipUser && (
+              <button
+                className={`tab ${activeTab === 'vip' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('vip'); trackTabView('vip') }}
+                style={{
+                  background: activeTab === 'vip'
+                    ? 'linear-gradient(135deg, rgba(124,58,237,0.3), rgba(139,92,246,0.2))'
+                    : 'transparent',
+                  borderColor: activeTab === 'vip' ? '#8b5cf6' : 'transparent',
+                  color: activeTab === 'vip' ? '#c4b5fd' : '#a78bfa',
+                  position: 'relative',
+                }}
+              >
+                <span>👑</span>
+                VIP Dashboard
+                {/* Glow dot để báo có tính năng mới */}
+                <span style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: '#8b5cf6',
+                  display: 'inline-block',
+                  marginLeft: 4,
+                  boxShadow: '0 0 6px #8b5cf6',
+                  animation: 'pulse 2s infinite',
+                }} />
+              </button>
+            )}
           </div>
         </div>
       </nav>
@@ -187,16 +267,16 @@ function App() {
       <main className="main-content">
         <div className="container">
           {activeTab === 'signals' && (
-  <>
-    <SignalHistory />
-    <SignalsModule
-      signals={signals}
-      loading={loading}
-      onRefresh={fetchSignals}
-    />
-  </>
-)}
-          
+            <>
+              <SignalHistory />
+              <SignalsModule
+                signals={signals}
+                loading={loading}
+                onRefresh={fetchSignals}
+              />
+            </>
+          )}
+
           {activeTab === 'portfolio' && <AIPortfolioManager userId={user.email} />}
         </div>
       </main>

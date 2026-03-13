@@ -33,6 +33,15 @@ except ImportError as e:
     push_vip_users = None
     print(f'⚠️  VIP/Push modules not found: {e}')
 
+# === VIP Signal Scanner (graceful import) ===
+try:
+    from vip_signal_scanner import init_vip_signal_routes
+    _has_vip_signals = True
+    print("\u2705 VIP Signal Scanner module loaded")
+except ImportError as e:
+    _has_vip_signals = False
+    print(f'\u26a0\ufe0f  VIP Signal Scanner not found: {e}')
+
 # SELL Signal Integration (graceful import)
 try:
     from backend_sell_api import register_sell_routes
@@ -115,6 +124,13 @@ if _has_vip:
         print("✅ VIP Auth + Push Notification routes registered")
     except Exception as _vip_err:
         print(f"⚠️  VIP init error: {_vip_err}")
+
+if _has_vip_signals:
+    try:
+        init_vip_signal_routes(app, engine, Session)
+        print("✅ VIP Signal routes registered")
+    except Exception as _vs_err:
+        print(f"⚠️  VIP Signal init error: {_vs_err}")
 
 # ========================================================================
 # AI SYSTEM PROMPT
@@ -2028,6 +2044,7 @@ if __name__ == '__main__':
     print(f"AI: {'Ã¢Å“â€¦ GPT-4o-mini (Strict Rules)' if openai_client else 'Ã¢ÂÅ’ Not configured'}")
     print("EOD Prices: Stored in PostgreSQL (eod_prices table)")
     print(f"VIP/Push: {'✅ Enabled' if _has_vip else '⚠️  Not loaded'}")
+    print(f"VIP Signals: {'✅ Enabled' if _has_vip_signals else '⚠️  Not loaded'}")
     print("Use /api/eod/status to check price count")
     print(f"Database: {DATABASE_URL}")
     print(f"Host: 0.0.0.0 (Render-ready)")
