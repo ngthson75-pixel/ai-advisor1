@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { trackPortfolioAction } from '../analytics'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 
@@ -107,6 +108,7 @@ export default function AIPortfolioManager({ userId = '1' }) {
       const d = await r.json()
       if (d.success) {
         setAddForm({ ticker: '', quantity: '', price: '' })
+        trackPortfolioAction('add_stock')
         loadPortfolio()
       } else {
         setAddError(d.error || 'Lỗi thêm cổ phiếu')
@@ -147,6 +149,7 @@ export default function AIPortfolioManager({ userId = '1' }) {
     setInput('')
     setMessages(prev => [...prev, { role: 'user', text: msg }])
     setChatLoading(true)
+    trackPortfolioAction('chat')
     try {
       const r = await fetch(`${API_BASE}/chat`, {
         method: 'POST',

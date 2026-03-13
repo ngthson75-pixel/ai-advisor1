@@ -6,6 +6,7 @@ import AIPortfolioManager from './components/AIPortfolioManager'
 import SignalHistory from './components/SignalHistory'
 import PWANotificationManager from './components/PWANotificationManager'
 import VIPAdminPanel from './components/VIPAdminPanel'
+import { initGA, trackLogin, trackTabView } from './analytics'
 
 // API Configuration
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
@@ -42,8 +43,9 @@ function App() {
       .catch(() => {/* server unreachable — giữ token, thử lại sau */})
   }, [])
 
-  // Check for existing user on mount
+  // Check for existing user on mount + init GA4
   useEffect(() => {
+    initGA()
     const storedUser = localStorage.getItem('user')
     if (storedUser) {
       try {
@@ -85,6 +87,7 @@ function App() {
 
   const handleLogin = (userData) => {
     setUser(userData)
+    trackLogin(userData.id || userData.email, userData.name)
   }
 
   const handleLogout = () => {
@@ -158,7 +161,7 @@ function App() {
           <div className="tabs">
             <button
               className={`tab ${activeTab === 'signals' ? 'active' : ''}`}
-              onClick={() => setActiveTab('signals')}
+              onClick={() => { setActiveTab('signals'); trackTabView('signals') }}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
@@ -169,7 +172,7 @@ function App() {
 
             <button
               className={`tab ${activeTab === 'portfolio' ? 'active' : ''}`}
-              onClick={() => setActiveTab('portfolio')}
+              onClick={() => { setActiveTab('portfolio'); trackTabView('portfolio') }}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
