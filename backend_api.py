@@ -17,7 +17,7 @@ import json
 import subprocess
 import sqlite3
 from openai import OpenAI
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, func, Boolean, and_, not_, exists
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Date, Text, func, Boolean, and_, not_, exists
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from vnstock import Vnstock
@@ -32,6 +32,15 @@ except ImportError as e:
     _has_vip = False
     push_vip_users = None
     print(f'⚠️  VIP/Push modules not found: {e}')
+
+# === VIP Signal Scanner (graceful import) ===
+try:
+    from vip_signal_scanner import init_vip_signal_routes
+    _has_vip_signals = True
+    print("\u2705 VIP Signal Scanner module loaded")
+except ImportError as e:
+    _has_vip_signals = False
+    print(f'\u26a0\ufe0f  VIP Signal Scanner not found: {e}')
 
 # SELL Signal Integration (graceful import)
 try:
@@ -115,6 +124,13 @@ if _has_vip:
         print("✅ VIP Auth + Push Notification routes registered")
     except Exception as _vip_err:
         print(f"⚠️  VIP init error: {_vip_err}")
+
+if _has_vip_signals:
+    try:
+        init_vip_signal_routes(app, engine, Session)
+        print("✅ VIP Signal routes registered")
+    except Exception as _vs_err:
+        print(f"⚠️  VIP Signal init error: {_vs_err}")
 
 # ========================================================================
 # AI SYSTEM PROMPT
@@ -270,7 +286,8 @@ class Signal(Base):
     # SELL signal exit tracking (for SELL signals)
     exit_price = Column(Float, nullable=True)
     exit_reason = Column(String(50), nullable=True)
-    exit_date = Column(String(20), nullable=True)
+    exit_date = Column(Date, nullable=True)          # DATE in DB — must pass date object or None
+    exit_quantity_pct = Column(Integer, nullable=True)  # % bán: 50 (partial) / 100 (full)
 
 
 class Portfolio(Base):
@@ -557,6 +574,19 @@ def health():
 # SIGNALS ENDPOINTS
 # ========================================================================
 
+
+def __parse_date(value):
+    """Convert 'YYYY-MM-DD' string to date object, or return None."""
+    if value is None:
+        return None
+    if hasattr(value, 'year'):   # already a date/datetime
+        return value
+    try:
+        from datetime import date as _date
+        return _date.fromisoformat(str(value)[:10])
+    except Exception:
+        return None
+
 @app.route('/api/signals', methods=['GET', 'POST'])
 def signals_endpoint():
     """
@@ -588,9 +618,9 @@ def signals_endpoint():
                     'ticker': s.ticker,
                     'code': s.ticker,
                     'strategy': s.strategy,
-                    'entry_price': round(s.entry_price / 100) * 100,  # Round to nearest 100 VND
-                    'stop_loss': round(s.stop_loss / 100) * 100,      # Round to nearest 100 VND
-                    'take_profit': round(s.take_profit / 100) * 100,  # Round to nearest 100 VND
+                    'entry_price': round(s.entry_price / 100) * 100 if s.entry_price else 0,
+                    'stop_loss': round(s.stop_loss / 100) * 100 if s.stop_loss else 0,
+                    'take_profit': round(s.take_profit / 100) * 100 if s.take_profit else 0,
                     'risk_reward': round(s.risk_reward, 2) if s.risk_reward else None,
                     'strength': s.strength or 0,
                     'stock_type': s.stock_type,
@@ -677,7 +707,7 @@ def signals_endpoint():
                 action=data.get('action', 'BUY'),
                 # ✅ FIX: Add exit fields for SELL signals (2026-03-11)
                 exit_price=data.get('exit_price'),
-                exit_date=data.get('exit_date'),
+                exit_date=__parse_date(data.get('exit_date')),
                 exit_reason=data.get('exit_reason'),
                 signal_code=data.get('signal_code'),
                 buy_signal_code=data.get('buy_signal_code'),
@@ -2028,6 +2058,7 @@ if __name__ == '__main__':
     print(f"AI: {'Ã¢Å“â€¦ GPT-4o-mini (Strict Rules)' if openai_client else 'Ã¢ÂÅ’ Not configured'}")
     print("EOD Prices: Stored in PostgreSQL (eod_prices table)")
     print(f"VIP/Push: {'✅ Enabled' if _has_vip else '⚠️  Not loaded'}")
+    print(f"VIP Signals: {'✅ Enabled' if _has_vip_signals else '⚠️  Not loaded'}")
     print("Use /api/eod/status to check price count")
     print(f"Database: {DATABASE_URL}")
     print(f"Host: 0.0.0.0 (Render-ready)")
