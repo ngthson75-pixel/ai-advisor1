@@ -15,6 +15,7 @@ export default function LandingPage({ onLogin }) {
 
   // Fetch recommendations from API + historical data
   const [recommendations, setRecommendations] = useState([])
+  const [closedSignals, setClosedSignals] = useState([])
   const [loading, setLoading] = useState(true)
   const [marketRisk, setMarketRisk] = useState(null)
 
@@ -178,11 +179,13 @@ export default function LandingPage({ onLogin }) {
       const data = await response.json()
       
       if (data.success && data.signals) {
-        // Map API signals to table format with correct date format
-        const apiSignals = data.signals.slice(0, 10).map((signal, index) => {
-          const dateStr = signal.date || signal.created_at
-          
-          return {
+        const allBuySignals = data.signals.filter(s => s.action === 'BUY' || !s.action)
+
+        // Active BUY signals → shown in current recommendations section
+        const activeApiSignals = allBuySignals
+          .filter(s => s.status === 'open' || s.status === 'partial' || !s.status)
+          .slice(0, 10)
+          .map((signal, index) => ({
             id: signal.id || `api-${index + 1}`,
             ticker: signal.ticker || signal.code,
             entryPrice: signal.entry_price,
@@ -190,22 +193,72 @@ export default function LandingPage({ onLogin }) {
             takeProfit: signal.take_profit,
             score: signal.strength || 75,
             type: signal.stock_type || 'Blue Chip',
-            date: formatDate(dateStr), // Fix date format here
+            date: formatDate(signal.date || signal.created_at),
             status: 'active',
             action: null
-          }
+          }))
+
+        // Closed BUY signals → shown in Lịch sử khuyến nghị
+        const closedApiSignals = allBuySignals
+          .filter(s => s.status === 'closed')
+          .map(signal => ({
+            id: signal.id,
+            ticker: signal.ticker || signal.code,
+            entryPrice: signal.entry_price,
+            exitPrice: signal.exit_price || null,
+            exitReason: signal.exit_reason || null,
+            exitDate: signal.exit_date || null,
+            score: signal.strength || 75,
+            type: signal.stock_type || 'Blue Chip',
+            date: formatDate(signal.date || signal.created_at),
+            status: 'closed'
+          }))
+
+        // Merge: API closed signals take priority over hardcoded historicals
+        const closedApiKeys = new Set(closedApiSignals.map(s => `${s.ticker}_${s.date}`))
+        const filteredHistorical = historicalSignals.filter(
+          s => !closedApiKeys.has(`${s.ticker}_${s.date}`)
+        )
+        const mergedClosed = [
+          ...closedApiSignals,
+          ...filteredHistorical.map(s => ({
+            id: s.id,
+            ticker: s.ticker,
+            entryPrice: s.entryPrice,
+            exitPrice: null,
+            exitReason: null,
+            exitDate: null,
+            score: s.score,
+            type: s.type,
+            date: s.date,
+            status: 'closed'
+          }))
+        ].sort((a, b) => {
+          // Sort by date descending (newest first)
+          const da = a.date ? a.date.split('/').reverse().join('') : ''
+          const db = b.date ? b.date.split('/').reverse().join('') : ''
+          return db.localeCompare(da)
         })
-        
-        // Combine historical + API signals
-        setRecommendations([...historicalSignals, ...apiSignals])
+
+        setRecommendations(activeApiSignals)
+        setClosedSignals(mergedClosed)
       } else {
-        // If no API signals, show only historical
-        setRecommendations(historicalSignals)
+        // Fallback: show only historical
+        setRecommendations([])
+        setClosedSignals(historicalSignals.map(s => ({
+          id: s.id, ticker: s.ticker, entryPrice: s.entryPrice,
+          exitPrice: null, exitReason: null, exitDate: null,
+          score: s.score, type: s.type, date: s.date, status: 'closed'
+        })))
       }
     } catch (error) {
       console.error('Error fetching signals:', error)
-      // On error, show historical signals
-      setRecommendations(historicalSignals)
+      setRecommendations([])
+      setClosedSignals(historicalSignals.map(s => ({
+        id: s.id, ticker: s.ticker, entryPrice: s.entryPrice,
+        exitPrice: null, exitReason: null, exitDate: null,
+        score: s.score, type: s.type, date: s.date, status: 'closed'
+      })))
     } finally {
       setLoading(false)
     }
@@ -252,20 +305,7 @@ export default function LandingPage({ onLogin }) {
             <div className="hero-text">
               <h1 className="hero-title">
                 Đầu tư thông minh với
-                <span className="gradient-text" style={{display:"inline-flex",alignItems:"center",gap:"10px",verticalAlign:"middle"}}>
-                  <svg width="56" height="56" viewBox="0 0 40 40" fill="none" style={{display:"inline-block",verticalAlign:"middle",marginLeft:"4px",flexShrink:0}}>
-                    <defs>
-                      <linearGradient id="heroLogoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" style={{stopColor:'#3b82f6',stopOpacity:1}}/>
-                        <stop offset="100%" style={{stopColor:'#8b5cf6',stopOpacity:1}}/>
-                      </linearGradient>
-                    </defs>
-                    <path d="M20 8L32 14V26L20 32L8 26V14L20 8Z" stroke="url(#heroLogoGradient)" strokeWidth="2" fill="none"/>
-                    <path d="M20 8V20M20 20L32 26M20 20L8 26" stroke="url(#heroLogoGradient)" strokeWidth="2"/>
-                    <circle cx="20" cy="20" r="3" fill="url(#heroLogoGradient)"/>
-                  </svg>
-                  AI Advisor
-                </span>
+                <span className="gradient-text"> AI Advisor</span>
               </h1>
               <p className="hero-subtitle">
                 Tín hiệu mua bán chính xác, quản trị danh mục tự động, và tư vấn AI 24/7 - 
@@ -339,7 +379,7 @@ export default function LandingPage({ onLogin }) {
                           color: marketRisk.market_mode === 'BULL' ? '#00E676'
                                : marketRisk.market_mode === 'BEAR' ? '#FF1744' : '#FFD600',
                         }}>
-                          {marketRisk.market_mode === 'BULL' ? '🟢' : marketRisk.market_mode === 'BEAR' ? '🔴' : '🟡'}{' '}
+                          {marketRisk.market_mode === 'BULL' ? 'ðŸŸ¢' : marketRisk.market_mode === 'BEAR' ? 'ðŸ”´' : 'ðŸŸ¡'}{' '}
                           {marketRisk.mode_label}
                         </div>
                       </div>
@@ -426,7 +466,7 @@ export default function LandingPage({ onLogin }) {
                     background: 'linear-gradient(135deg, #0B0F1A 0%, #1a1f3a 100%)',
                     borderRadius: '0 0 12px 12px',
                   }}>
-                    <div style={{ fontSize: '32px', marginBottom: '12px' }}>📊</div>
+                    <div style={{ fontSize: '32px', marginBottom: '12px' }}>ðŸ“Š</div>
                     <div style={{ color: '#64748b', fontSize: '14px' }}>Đang tải phân tích thị trường...</div>
                   </div>
                 )}
@@ -486,74 +526,288 @@ export default function LandingPage({ onLogin }) {
         <div className="container">
           <div className="section-header">
             <h2>Lịch sử khuyến nghị</h2>
-            <p>Các tín hiệu đã thành công trong thời gian gần đây</p>
+            <p>Các tín hiệu BUY đã đóng vị thế — dữ liệu minh bạch, cập nhật liên tục</p>
           </div>
 
           {loading ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
               <div style={{ fontSize: '16px' }}>⏳ Đang tải tín hiệu...</div>
             </div>
-          ) : recommendations.length === 0 ? (
+          ) : closedSignals.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
               <div style={{ fontSize: '48px', marginBottom: '20px' }}>📊</div>
-              <div style={{ fontSize: '18px', marginBottom: '10px' }}>Chưa có tín hiệu nào</div>
-              <div style={{ fontSize: '14px' }}>Hệ thống sẽ tự động tạo tín hiệu mới</div>
+              <div style={{ fontSize: '18px', marginBottom: '10px' }}>Chưa có lịch sử</div>
+              <div style={{ fontSize: '14px' }}>Hệ thống sẽ tự động cập nhật khi có tín hiệu đóng vị thế</div>
             </div>
           ) : (
             <>
-              <div className="signals-table-container">
+              {/* ===== MOBILE CARDS ===== */}
+              <div className="mobile-cards">
+                {closedSignals.map((signal, idx) => {
+                  const entryPrice = signal.entryPrice || 0
+                  const exitPrice = signal.exitPrice || 0
+                  const hasPL = exitPrice > 0 && entryPrice > 0
+                  const plPct = hasPL ? ((exitPrice - entryPrice) / entryPrice * 100) : null
+                  const plColor = plPct === null ? '#94a3b8' : plPct >= 0 ? '#10b981' : '#ef4444'
+                  const borderColor = plPct === null ? '#334155' : plPct >= 0 ? '#10b981' : '#ef4444'
+
+                  const exitReasonDisplay = (() => {
+                    if (!signal.exitReason) return { text: 'Thủ công', icon: '⚪' }
+                    if (signal.exitReason === 'STOP_LOSS')        return { text: 'Cắt lỗ (SL)',   icon: '🔴' }
+                    if (signal.exitReason === 'TAKE_PROFIT')      return { text: 'Chốt lời (TP)', icon: '🟢' }
+                    if (signal.exitReason === 'MA20_BREAK')       return { text: 'MA20 Cross',    icon: '🟠' }
+                    if (signal.exitReason === 'MA20_CONSECUTIVE') return { text: 'MA20 (2 ngày)', icon: '🟠' }
+                    if (signal.exitReason === 'MA20_HIGH_VOLUME') return { text: 'MA20 (Vol)',    icon: '🟠' }
+                    return { text: 'Thủ công', icon: '⚪' }
+                  })()
+
+                  return (
+                    <div key={signal.id || idx} style={{
+                      background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                      border: '1px solid #334155',
+                      borderRadius: '14px',
+                      padding: '16px',
+                      marginBottom: '12px',
+                      borderLeft: `4px solid ${borderColor}`
+                    }}>
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <strong style={{ color: '#3b82f6', fontSize: '22px', letterSpacing: '1px' }}>
+                          {signal.ticker}
+                        </strong>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          {signal.exitReason && (
+                            <span style={{
+                              padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: '600',
+                              background: '#1e293b', color: '#94a3b8', border: '1px solid #334155'
+                            }}>{exitReasonDisplay.icon} {exitReasonDisplay.text}</span>
+                          )}
+                          <span style={{
+                            padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '600',
+                            background: signal.type === 'Blue Chip' ? '#1d4ed8' : signal.type === 'Mid Cap' ? '#6d28d9' : '#374151',
+                            color: 'white'
+                          }}>{signal.type || 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      {/* Price grid */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                        <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
+                          <div style={{ color: '#94a3b8', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>Giá vào</div>
+                          <div style={{ color: '#e2e8f0', fontWeight: '700', fontSize: '13px' }}>
+                            {entryPrice > 0 ? formatCurrency(entryPrice) : '-'}
+                          </div>
+                        </div>
+                        <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
+                          <div style={{ color: '#94a3b8', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>Giá ra</div>
+                          <div style={{ color: plColor, fontWeight: '700', fontSize: '13px' }}>
+                            {exitPrice > 0 ? formatCurrency(exitPrice) : '-'}
+                          </div>
+                        </div>
+                        <div style={{ background: '#0f172a', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
+                          <div style={{ color: '#94a3b8', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>P/L</div>
+                          <div style={{ color: plColor, fontWeight: '700', fontSize: '14px' }}>
+                            {plPct !== null ? `${plPct >= 0 ? '+' : ''}${plPct.toFixed(1)}%` : '-'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Footer */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <span style={{ color: '#64748b', fontSize: '11px', padding: '3px 8px', background: '#0f172a', borderRadius: '6px' }}>
+                          📅 Vào: {signal.date || 'N/A'}
+                        </span>
+                        <span style={{ color: '#64748b', fontSize: '11px', padding: '3px 8px', background: '#0f172a', borderRadius: '6px' }}>
+                          📅 Ra: {signal.exitDate ? formatDate(signal.exitDate) : 'N/A'}
+                        </span>
+                        <span style={{ padding: '3px 8px', background: '#1e40af', color: 'white', borderRadius: '6px', fontSize: '11px', fontWeight: '600' }}>
+                          Score: {signal.score}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* ===== DESKTOP TABLE ===== */}
+              <div className="signals-table-container desktop-table">
                 <table className="signals-table">
                   <thead>
                     <tr>
                       <th>MÃ CK</th>
                       <th>GIÁ VÀO</th>
-                      <th>STOP LOSS</th>
-                      <th>TAKE PROFIT</th>
+                      <th>GIÁ RA</th>
+                      <th>P/L</th>
+                      <th>LÝ DO</th>
                       <th>SCORE</th>
                       <th>LOẠI</th>
-                      <th>NGÀY</th>
+                      <th>NGÀY VÀO</th>
+                      <th>NGÀY RA</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {recommendations.map((signal) => (
-                      <tr key={signal.id}>
-                        <td className="ticker-cell">{signal.ticker}</td>
-                        <td className="price-cell">{formatCurrency(signal.entryPrice)}</td>
-                        <td className="stoploss-cell">{formatCurrency(signal.stopLoss)}</td>
-                        <td className="takeprofit-cell">{formatCurrency(signal.takeProfit)}</td>
-                        <td className="score-cell">
-                          <span className="score-badge">{signal.score}</span>
-                        </td>
-                        <td className="type-cell">{signal.type}</td>
-                        <td className="date-cell">{signal.date}</td>
-                      </tr>
-                    ))}
+                    {closedSignals.map((signal, idx) => {
+                      const entryPrice = signal.entryPrice || 0
+                      const exitPrice = signal.exitPrice || 0
+                      const hasPL = exitPrice > 0 && entryPrice > 0
+                      const plPct = hasPL ? ((exitPrice - entryPrice) / entryPrice * 100) : null
+                      const plColor = plPct === null ? '#94a3b8' : plPct >= 0 ? '#10b981' : '#ef4444'
+
+                      const exitReasonDisplay = (() => {
+                        if (!signal.exitReason) return { text: '-', icon: '' }
+                        if (signal.exitReason === 'STOP_LOSS')        return { text: 'Cắt lỗ',     icon: '🔴' }
+                        if (signal.exitReason === 'TAKE_PROFIT')      return { text: 'Chốt lời',   icon: '🟢' }
+                        if (signal.exitReason === 'MA20_BREAK')       return { text: 'MA20 Cross', icon: '🟠' }
+                        if (signal.exitReason === 'MA20_CONSECUTIVE') return { text: 'MA20 (2N)',  icon: '🟠' }
+                        if (signal.exitReason === 'MA20_HIGH_VOLUME') return { text: 'MA20 (Vol)', icon: '🟠' }
+                        return { text: 'Thủ công', icon: '⚪' }
+                      })()
+
+                      return (
+                        <tr key={signal.id || idx}>
+                          <td className="ticker-cell">{signal.ticker}</td>
+                          <td className="price-cell">{entryPrice > 0 ? formatCurrency(entryPrice) : '-'}</td>
+                          <td style={{ color: plColor, fontWeight: '600' }}>
+                            {exitPrice > 0 ? formatCurrency(exitPrice) : '-'}
+                          </td>
+                          <td style={{ color: plColor, fontWeight: '700' }}>
+                            {plPct !== null ? `${plPct >= 0 ? '+' : ''}${plPct.toFixed(1)}%` : '-'}
+                          </td>
+                          <td>
+                            {signal.exitReason ? (
+                              <span style={{ fontSize: '12px' }}>{exitReasonDisplay.icon} {exitReasonDisplay.text}</span>
+                            ) : (
+                              <span style={{ color: '#475569' }}>-</span>
+                            )}
+                          </td>
+                          <td className="score-cell">
+                            <span className="score-badge">{signal.score}</span>
+                          </td>
+                          <td className="type-cell">{signal.type}</td>
+                          <td className="date-cell">{signal.date}</td>
+                          <td className="date-cell">
+                            {signal.exitDate ? formatDate(signal.exitDate) : '-'}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
 
-              {/* Sell Signal Strategy Info */}
-              <div className="strategy-info">
-                <div className="strategy-card">
-                  <div className="strategy-icon">📊</div>
-                  <div className="strategy-content">
-                    <h4>Chiến lược bán tự động</h4>
-                    <p>Hệ thống theo dõi các CP trong danh sách và đưa ra tín hiệu bán theo quy tắc:</p>
-                    <ul>
-                      <li><strong>Bán 1/2:</strong> Khi giá đạt Take Profit</li>
-                      <li><strong>Bán nốt 1/2:</strong> Khi giá cắt xuống MA20 (sau khi đã bán 1/2)</li>
-                      <li><strong>Nắm giữ:</strong> Khi giá trên MA20 (sau khi đã bán 1/2)</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
+
             </>
-          )}
+          )}          )}
 
           <div className="showcase-cta">
             <button className="btn-primary-large" onClick={() => setShowAuth(true)}>
               Truy cập tín hiệu mới nhất
             </button>
+          </div>
+        </div>
+      </section>
+
+
+      {/* Testimonials Section */}
+      <section style={{ padding: '80px 0', background: 'linear-gradient(180deg, #0B0F1A 0%, #0f172a 100%)' }}>
+        <div className="container">
+          <div className="section-header">
+            <h2>Nhà đầu tư nói gì về AI Advisor</h2>
+            <p>Phản hồi thực tế từ cộng đồng MVP đang sử dụng hệ thống</p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginTop: '40px' }}>
+
+            {/* Testimonial 1 - from: Hà Hoà Lạc, DGC exit */}
+            <div style={{
+              background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+              border: '1px solid #334155',
+              borderRadius: '16px',
+              padding: '28px',
+              position: 'relative'
+            }}>
+              <div style={{ fontSize: '36px', color: '#10b981', marginBottom: '16px', lineHeight: 1 }}>"</div>
+              <p style={{ color: '#cbd5e1', fontSize: '15px', lineHeight: '1.7', marginBottom: '24px', fontStyle: 'italic' }}>
+                Hôm trước hệ thống cảnh báo giảm tỷ trọng, tôi kịp thoát phần lớn vị thế trước khi tin xấu ra. 
+                Cảnh báo rủi ro của AI Advisor thực sự có tác dụng.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '44px', height: '44px', borderRadius: '50%', flexShrink: 0,
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '16px', fontWeight: '700', color: 'white'
+                }}>H</div>
+                <div>
+                  <div style={{ color: '#e2e8f0', fontWeight: '600', fontSize: '14px' }}>Nhà đầu tư cá nhân</div>
+                  <div style={{ color: '#64748b', fontSize: '12px' }}>3 năm kinh nghiệm · Hà Nội</div>
+                </div>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }}>
+                  {[1,2,3,4,5].map(i => <span key={i} style={{ color: '#f59e0b', fontSize: '13px' }}>★</span>)}
+                </div>
+              </div>
+            </div>
+
+            {/* Testimonial 2 - from: Kao;Hanh, HAH chốt 9% */}
+            <div style={{
+              background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+              border: '1px solid #334155',
+              borderRadius: '16px',
+              padding: '28px',
+              position: 'relative'
+            }}>
+              <div style={{ fontSize: '36px', color: '#3b82f6', marginBottom: '16px', lineHeight: 1 }}>"</div>
+              <p style={{ color: '#cbd5e1', fontSize: '15px', lineHeight: '1.7', marginBottom: '24px', fontStyle: 'italic' }}>
+                Theo tín hiệu của hệ thống, tôi vào HAH và chốt lời 9%. Tôi vẫn theo cảnh báo thị trường 
+                để quyết định có nên vào tiếp hay không — kỷ luật hơn hẳn so với trước.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '44px', height: '44px', borderRadius: '50%', flexShrink: 0,
+                  background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '16px', fontWeight: '700', color: 'white'
+                }}>K</div>
+                <div>
+                  <div style={{ color: '#e2e8f0', fontWeight: '600', fontSize: '14px' }}>Nhà đầu tư cá nhân</div>
+                  <div style={{ color: '#64748b', fontSize: '12px' }}>4 năm kinh nghiệm · Hà Nội</div>
+                </div>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }}>
+                  {[1,2,3,4,5].map(i => <span key={i} style={{ color: '#f59e0b', fontSize: '13px' }}>★</span>)}
+                </div>
+              </div>
+            </div>
+
+            {/* Testimonial 3 - from: Xít;Phuon, PVB chốt 17% */}
+            <div style={{
+              background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+              border: '1px solid #334155',
+              borderRadius: '16px',
+              padding: '28px',
+              position: 'relative'
+            }}>
+              <div style={{ fontSize: '36px', color: '#8b5cf6', marginBottom: '16px', lineHeight: 1 }}>"</div>
+              <p style={{ color: '#cbd5e1', fontSize: '15px', lineHeight: '1.7', marginBottom: '24px', fontStyle: 'italic' }}>
+                Mua PVB theo tín hiệu hệ thống, chốt được 17%. Tôi đang test với số lượng nhỏ nhưng kết quả 
+                rất khả quan — sẽ tăng tỷ trọng khi thị trường ổn định hơn.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '44px', height: '44px', borderRadius: '50%', flexShrink: 0,
+                  background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '16px', fontWeight: '700', color: 'white'
+                }}>P</div>
+                <div>
+                  <div style={{ color: '#e2e8f0', fontWeight: '600', fontSize: '14px' }}>Nhà đầu tư cá nhân</div>
+                  <div style={{ color: '#64748b', fontSize: '12px' }}>5 năm kinh nghiệm · Hà Nội</div>
+                </div>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }}>
+                  {[1,2,3,4,5].map(i => <span key={i} style={{ color: '#f59e0b', fontSize: '13px' }}>★</span>)}
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </section>
@@ -571,22 +825,8 @@ export default function LandingPage({ onLogin }) {
             </button>
 
             <div className="auth-header">
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"9px",marginBottom:"10px"}}>
-                <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
-                  <defs>
-                    <linearGradient id="authLogoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" style={{stopColor:'#3b82f6',stopOpacity:1}}/>
-                      <stop offset="100%" style={{stopColor:'#8b5cf6',stopOpacity:1}}/>
-                    </linearGradient>
-                  </defs>
-                  <path d="M20 8L32 14V26L20 32L8 26V14L20 8Z" stroke="url(#authLogoGradient)" strokeWidth="2" fill="none"/>
-                  <path d="M20 8V20M20 20L32 26M20 20L8 26" stroke="url(#authLogoGradient)" strokeWidth="2"/>
-                  <circle cx="20" cy="20" r="3" fill="url(#authLogoGradient)"/>
-                </svg>
-                <span style={{fontWeight:700,fontSize:"18px",background:"linear-gradient(135deg,#3b82f6,#8b5cf6)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>AI Advisor</span>
-              </div>
               <h2>{isLogin ? 'Đăng nhập' : 'Đăng ký'}</h2>
-              <p style={{color:"#64748b",fontSize:"13px",marginTop:"4px"}}>Đầu tư thông minh với AI</p>
+              <p>{isLogin ? 'Chào mừng trở lại!' : 'Tạo tài khoản miễn phí'}</p>
             </div>
 
             <form className="auth-form" onSubmit={handleSubmit}>
@@ -728,7 +968,7 @@ export default function LandingPage({ onLogin }) {
 
               <div className="about-section">
                 <div className="about-philosophy">
-                  <div className="philosophy-icon-large">💡</div>
+                  <div className="philosophy-icon-large">ðŸ’¡</div>
                   <h3>Triết lý cốt lõi</h3>
                   <p className="philosophy-quote-modal">
                     "Không thay nhà đầu tư quyết định – mà giúp nhà đầu tư ra quyết định tỉnh táo hơn."
@@ -1083,6 +1323,24 @@ export default function LandingPage({ onLogin }) {
 
           .strategy-icon {
             font-size: 36px;
+          }
+
+          .mobile-cards {
+            display: block !important;
+          }
+
+          .desktop-table {
+            display: none !important;
+          }
+        }
+
+        @media (min-width: 769px) {
+          .mobile-cards {
+            display: none !important;
+          }
+
+          .desktop-table {
+            display: block !important;
           }
         }
       `}</style>
