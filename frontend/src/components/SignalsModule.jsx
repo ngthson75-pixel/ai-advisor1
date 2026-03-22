@@ -53,8 +53,26 @@ export default function SignalsModule() {
   }, []);
 
   // Filter signals by tab
-  const buySignals = signals.filter(s => s.action === 'BUY' || !s.action);
-  const sellSignals = signals.filter(s => s.action === 'SELL');
+  const buySignals = signals
+    .filter(s => s.action === 'BUY' || !s.action)
+    .sort((a, b) => {
+      // Open/partial signals first, closed last
+      const statusOrder = { open: 0, partial: 1, closed: 2 };
+      const sa = statusOrder[a.status] ?? 0;
+      const sb = statusOrder[b.status] ?? 0;
+      if (sa !== sb) return sa - sb;
+      // Within same status: sort by signal date DESC (newest first)
+      const da = a.date ? new Date(a.date).getTime() : 0;
+      const db = b.date ? new Date(b.date).getTime() : 0;
+      return db - da;
+    });
+  const sellSignals = signals
+    .filter(s => s.action === 'SELL')
+    .sort((a, b) => {
+      const da = a.date ? new Date(a.date).getTime() : 0;
+      const db = b.date ? new Date(b.date).getTime() : 0;
+      return db - da;
+    });
   const displaySignals = activeTab === 'buy' ? buySignals : sellSignals;
 
   // === HELPER FUNCTIONS: Signal tracking display ===
