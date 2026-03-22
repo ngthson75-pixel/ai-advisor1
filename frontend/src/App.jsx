@@ -4,48 +4,23 @@ import LandingPage from './components/LandingPage'
 import SignalsModule from './components/SignalsModule'
 import AIPortfolioManager from './components/AIPortfolioManager'
 import SignalHistory from './components/SignalHistory'
-import PWANotificationManager from './components/PWANotificationManager'
+import VIPDashboard from './components/VIPDashboard'
 import VIPAdminPanel from './components/VIPAdminPanel'
-import { initGA, trackLogin, trackTabView } from './analytics'
 
 // API Configuration
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 
 function App() {
+  const isAdmin = window.location.pathname === '/admin'
+
   const [user, setUser] = useState(null)
   const [activeTab, setActiveTab] = useState('signals')
   const [signals, setSignals] = useState([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
 
-  // VIP Auth state (JWT — song song với free user flow, không đụng nhau)
-  const [vipToken, setVipToken] = useState(() => localStorage.getItem('vip_token') || '')
-  const [vipUser, setVipUser]   = useState(null)
-
-  // Restore VIP session khi app load
+  // Check for existing user on mount
   useEffect(() => {
-    const savedToken = localStorage.getItem('vip_token')
-    if (!savedToken) return
-    const base = API_URL.replace('/api', '')
-    fetch(`${base}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${savedToken}` }
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.success) {
-          setVipUser(data.user)
-          setVipToken(savedToken)
-        } else {
-          localStorage.removeItem('vip_token')
-          setVipToken('')
-        }
-      })
-      .catch(() => {/* server unreachable — giữ token, thử lại sau */})
-  }, [])
-
-  // Check for existing user on mount + init GA4
-  useEffect(() => {
-    initGA()
     const storedUser = localStorage.getItem('user')
     if (storedUser) {
       try {
@@ -87,19 +62,22 @@ function App() {
 
   const handleLogin = (userData) => {
     setUser(userData)
-    trackLogin(userData.id || userData.email, userData.name)
+    // VIP users land on VIP dashboard directly
+    if (userData.isVip) setActiveTab('vip')
   }
 
   const handleLogout = () => {
     localStorage.removeItem('user')
-    localStorage.removeItem('vip_token')
     setUser(null)
-    setVipUser(null)
-    setVipToken('')
     setActiveTab('signals')
   }
 
   // Show landing page if not logged in
+  // Admin route - show admin panel directly
+  if (isAdmin) {
+    return <VIPAdminPanel />
+  }
+
   if (!user) {
     return <LandingPage onLogin={handleLogin} />
   }
@@ -140,11 +118,24 @@ function App() {
               )}
               
               <div className="user-menu">
-                <div className="user-avatar">
+                <div className="user-avatar" style={user.isVip ? {
+                  background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
+                  boxShadow: '0 0 12px rgba(168,85,247,0.5)'
+                } : {}}>
                   {user.name?.charAt(0).toUpperCase() || 'U'}
                 </div>
                 <div className="user-info">
-                  <div className="user-name">{user.name}</div>
+                  <div className="user-name">
+                    {user.name}
+                    {user.isVip && (
+                      <span style={{
+                        marginLeft: '6px', fontSize: '10px', fontWeight: '700',
+                        background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
+                        color: '#fff', padding: '1px 6px', borderRadius: '4px',
+                        verticalAlign: 'middle',
+                      }}>💎 VIP</span>
+                    )}
+                  </div>
                   <button onClick={handleLogout} className="logout-btn">
                     Đăng xuất
                   </button>
@@ -159,26 +150,44 @@ function App() {
       <nav className="nav-tabs">
         <div className="container">
           <div className="tabs">
-            <button
-              className={`tab ${activeTab === 'signals' ? 'active' : ''}`}
-              onClick={() => { setActiveTab('signals'); trackTabView('signals') }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-              </svg>
-              Tín hiệu mua bán
-              <span className="badge">{signals.length}</span>
-            </button>
+            {!user.isVip && (
+              <>
+                <button
+                  className={`tab ${activeTab === 'signals' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('signals')}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                  </svg>
+                  Tín hiệu mua bán
+                  <span className="badge">{signals.length}</span>
+                </button>
 
-            <button
-              className={`tab ${activeTab === 'portfolio' ? 'active' : ''}`}
-              onClick={() => { setActiveTab('portfolio'); trackTabView('portfolio') }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-              </svg>
-              Quản trị đầu tư bằng AI
-            </button>
+                <button
+                  className={`tab ${activeTab === 'portfolio' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('portfolio')}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                  </svg>
+                  Quản trị đầu tư bằng AI
+                </button>
+              </>
+            )}
+
+            {user.isVip && (
+              <button
+                className={`tab ${activeTab === 'vip' ? 'active' : ''}`}
+                onClick={() => setActiveTab('vip')}
+                style={activeTab === 'vip' ? {
+                  background: 'linear-gradient(135deg, #7c3aed22, #a855f722)',
+                  borderBottom: '2px solid #a855f7',
+                  color: '#c084fc',
+                } : { color: '#a855f7' }}
+              >
+                💎 VIP Dashboard
+              </button>
+            )}
           </div>
         </div>
       </nav>
@@ -198,6 +207,7 @@ function App() {
 )}
           
           {activeTab === 'portfolio' && <AIPortfolioManager userId={user.email} />}
+          {activeTab === 'vip' && user.isVip && <VIPDashboard user={user} />}
         </div>
       </main>
 
@@ -210,23 +220,8 @@ function App() {
           </p>
         </div>
       </footer>
-
-      {/* PWA Push Notification — hiện với VIP users đã login */}
-      <PWANotificationManager
-        userId={vipUser?.id || user?.email}
-        token={vipToken}
-        isPushEnabled={vipUser?.is_push_enabled ?? true}
-      />
     </div>
   )
 }
 
-// Wrapper: route /admin → VIPAdminPanel, còn lại → App bình thường
-function AppWithAdmin() {
-  if (window.location.pathname === '/admin') {
-    return <VIPAdminPanel />
-  }
-  return <App />
-}
-
-export default AppWithAdmin
+export default App

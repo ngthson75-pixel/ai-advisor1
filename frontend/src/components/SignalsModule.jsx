@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, AlertCircle, RefreshCw } from 'lucide-react';
-import { trackSignalClick, trackSignalsLoaded, trackSignalRefresh, trackSignalTabView } from '../analytics';
 
-const API_BASE = 'https://ai-advisor1-backend.onrender.com/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api';
 
 export default function SignalsModule() {
   const [signals, setSignals] = useState([]);
@@ -20,7 +19,6 @@ export default function SignalsModule() {
       
       if (data.success) {
         setSignals(data.signals || []);
-        trackSignalsLoaded(data.signals?.length || 0);
       } else {
         setError('Không thể tải tín hiệu');
       }
@@ -124,7 +122,7 @@ const getExitReason = (signal) => {
         </div>
 
         <button 
-          onClick={() => { fetchSignals(); trackSignalRefresh(); }}
+          onClick={fetchSignals}
           disabled={scanning}
           style={{
             padding: '10px 20px',
@@ -146,7 +144,7 @@ const getExitReason = (signal) => {
       {/* NEW: Tabs */}
       <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         <button
-          onClick={() => { setActiveTab('buy'); trackSignalTabView('buy'); }}
+          onClick={() => setActiveTab('buy')}
           style={{
             padding: '12px 24px',
             backgroundColor: activeTab === 'buy' ? '#10b981' : '#334155',
@@ -166,7 +164,7 @@ const getExitReason = (signal) => {
         </button>
         
         <button
-          onClick={() => { setActiveTab('sell'); trackSignalTabView('sell'); }}
+          onClick={() => setActiveTab('sell')}
           style={{
             padding: '12px 24px',
             backgroundColor: activeTab === 'sell' ? '#ef4444' : '#334155',
@@ -280,14 +278,13 @@ const getExitReason = (signal) => {
               const strength = signal.strength || 0;
               const strengthColor = strength >= 70 ? '#10b981' : strength >= 50 ? '#3b82f6' : strength > 0 ? '#f59e0b' : '#6b7280';
               return (
-                <div key={signal.id || idx} onClick={() => trackSignalClick(signal.ticker || signal.code, 'BUY', signal.strength || 0)} style={{
+                <div key={signal.id || idx} style={{
                   background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
                   border: '1px solid #334155',
                   borderRadius: '14px',
                   padding: '16px',
                   marginBottom: '12px',
-                  borderLeft: '4px solid #10b981',
-                  cursor: 'pointer'
+                  borderLeft: '4px solid #10b981'
                 }}>
                   {/* Header row */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
