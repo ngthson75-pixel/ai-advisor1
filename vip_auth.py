@@ -59,6 +59,7 @@ class VIPUser(VIPBase):
     is_active       = Column(Boolean, default=True)
     notes           = Column(Text)                              # Admin private notes
     telegram_chat_id = Column(String(50))                      # Telegram chat_id để gửi notification
+    subscription_expires_at = Column(DateTime, nullable=True)   # ← THÊM DÒNG NÀY
     created_at      = Column(DateTime, default=datetime.now)
     last_login_at   = Column(DateTime)
 
@@ -332,6 +333,31 @@ def init_vip_system(app, engine, Session):
                     'is_push_enabled': user.is_push_enabled,
                 }
             })
+        finally:
+            session.close()
+
+
+    @app.route('/api/vip/notification/toggle', methods=['POST'])
+    @require_vip_auth
+    def vip_toggle_notification():
+        """POST /api/vip/notification/toggle — User tự bật/tắt nhận Telegram"""
+        session = Session()
+        try:
+            user = session.query(VIPUser).filter_by(id=g.user_id).first()
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+            if not user.telegram_chat_id:
+                return jsonify({'error': 'Bạn chưa kết nối Telegram. Nhắn /start vào @aiadvisorvn_bot rồi báo admin.'}), 400
+            user.is_push_enabled = not user.is_push_enabled
+            session.commit()
+            return jsonify({
+                'success': True,
+                'is_push_enabled': user.is_push_enabled,
+                'message': 'Đã bật nhận tín hiệu qua Telegram' if user.is_push_enabled else 'Đã tắt thông báo Telegram',
+            })
+        except Exception as e:
+            session.rollback()
+            return jsonify({'error': str(e)}), 500
         finally:
             session.close()
 
@@ -675,14 +701,8 @@ def init_vip_system(app, engine, Session):
                 VIPUser.telegram_chat_id != '',
             ).all()
 
-            stats = {'sent': 0, 'failed': 0, 'skipped': len(
-                session.query(VIPUser).filter(
-                    VIPUser.is_active == True,
-                ).count() - len(users) if True else 0
-            )}
-            # recalculate skipped properly
             total_active = session.query(VIPUser).filter(VIPUser.is_active == True).count()
-            stats['skipped'] = total_active - len(users)
+            stats = {'sent': 0, 'failed': 0, 'skipped': total_active - len(users)}
 
             for user in users:
                 try:

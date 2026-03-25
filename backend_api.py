@@ -42,6 +42,15 @@ except ImportError as e:
     _has_vip_signals = False
     print(f'\u26a0\ufe0f  VIP Signal Scanner not found: {e}')
 
+# === Campaign Registration (graceful import) ===
+try:
+    from campaign_api import init_campaign_routes
+    _has_campaign = True
+    print("✅ Campaign module loaded")
+except ImportError as e:
+    _has_campaign = False
+    print(f'⚠️  Campaign module not found: {e}')
+
 # SELL Signal Integration (graceful import)
 try:
     from backend_sell_api import register_sell_routes
@@ -110,7 +119,7 @@ print(f"{'='*70}\n")
 # ========================================================================
 
 Base = declarative_base()
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 Session = sessionmaker(bind=engine)
 
 # === INIT VIP + PUSH (module level — works with Gunicorn on Render) ===
@@ -131,6 +140,14 @@ if _has_vip_signals:
         print("✅ VIP Signal routes registered")
     except Exception as _vs_err:
         print(f"⚠️  VIP Signal init error: {_vs_err}")
+
+# === Init Campaign Routes ===
+if _has_campaign:
+    try:
+        init_campaign_routes(app, engine, Session)
+    except Exception as _camp_err:
+        print(f"⚠️  Campaign init error: {_camp_err}")
+
 
 # ========================================================================
 # AI SYSTEM PROMPT
