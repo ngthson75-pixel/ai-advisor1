@@ -52,6 +52,7 @@ from email.mime.multipart import MIMEMultipart
 from functools import wraps
 
 import requests as req_lib
+import threading
 from flask import request, jsonify
 from sqlalchemy import Column, Integer, String, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
@@ -296,12 +297,14 @@ def init_campaign_routes(app, engine, Session):
                     db.rollback()
                     logger.error(f'[Campaign] VIPUser error: {e}')
 
-                _email_activated(reg, temp_pwd)
-                _send_telegram(
-                    f"🆕 <b>User mới #{slot_num}/{CAMPAIGN_LIMIT}</b>\n"
-                    f"👤 {full_name}  📧 {email}  📱 {phone}\n"
-                    f"📌 {source or '—'}  ✅ Free đến 10/4"
-                )
+                def _notify_activated(r, pwd, sn):
+                    _email_activated(r, pwd)
+                    _send_telegram(
+                        f"🆕 <b>User mới #{sn}/{CAMPAIGN_LIMIT}</b>\n"
+                        f"👤 {r.full_name}  📧 {r.email}  📱 {r.phone}\n"
+                        f"✅ Free đến 10/4"
+                    )
+                threading.Thread(target=_notify_activated, args=(reg, temp_pwd, slot_num), daemon=True).start()
                 return jsonify({
                     'success': True, 'status': 'activated', 'slot': slot_num,
                     'message': 'Tài khoản đã được tạo! Kiểm tra email để lấy thông tin đăng nhập.',
@@ -313,11 +316,13 @@ def init_campaign_routes(app, engine, Session):
                 db.add(reg)
                 db.commit()
                 pos = db.query(CampaignRegistration).filter_by(status='waiting').count()
-                _email_waiting(reg, pos)
-                _send_telegram(
-                    f"⏳ <b>Waiting list #{pos}</b>\n"
-                    f"👤 {full_name}  📧 {email}  📌 {source or '—'}"
-                )
+                def _notify_waiting(r, p):
+                    _email_waiting(r, p)
+                    _send_telegram(
+                        f"⏳ <b>Waiting list #{p}</b>\n"
+                        f"👤 {r.full_name}  📧 {r.email}"
+                    )
+                threading.Thread(target=_notify_waiting, args=(reg, pos), daemon=True).start()
                 return jsonify({
                     'success': True, 'status': 'waiting', 'position': pos,
                     'message': 'Chương trình đã đủ 30 người. Bạn đã được thêm vào danh sách chờ!',
