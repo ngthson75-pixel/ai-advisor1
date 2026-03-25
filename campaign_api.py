@@ -44,7 +44,6 @@ import string
 import random
 import hashlib
 import hmac
-import smtplib
 import logging
 from datetime import datetime
 from email.mime.text import MIMEText
@@ -71,10 +70,11 @@ CAMPAIGN_END   = datetime(2026, 4, 10, 23, 59, 59)
 TRIAL_EXPIRES  = datetime(2026, 4, 10, 23, 59, 59)
 SLOT_OFFSET    = int(os.getenv('CAMPAIGN_SLOT_OFFSET', '0'))
 
-SMTP_HOST = os.getenv('SMTP_HOST', 'smtp.gmail.com')
-SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
-SMTP_USER = os.getenv('SMTP_USER', '')
-SMTP_PASS = os.getenv('SMTP_PASS', '')
+# Gmail API config (thay thế SMTP)
+GMAIL_SENDER       = os.getenv('SMTP_USER', 'aiadvisorhotline@gmail.com')
+GMAIL_CLIENT_ID     = os.getenv('GMAIL_CLIENT_ID', '')
+GMAIL_CLIENT_SECRET = os.getenv('GMAIL_CLIENT_SECRET', '')
+GMAIL_REFRESH_TOKEN = os.getenv('GMAIL_REFRESH_TOKEN', '')
 
 
 # ── DB MODEL ────────────────────────────────────────────────
@@ -124,19 +124,59 @@ def _send_telegram(message: str):
 
 
 def _send_email(to: str, subject: str, html: str):
-    if not SMTP_USER or not SMTP_PASS:
-        logger.warning('[Email] SMTP chưa config — bỏ qua')
+    """Gửi email qua Gmail API (OAuth2) — không bị chặn bởi Render free tier."""
+    if not GMAIL_CLIENT_ID or not GMAIL_CLIENT_SECRET or not GMAIL_REFRESH_TOKEN:
+        logger.warning('[Email] Gmail API chưa config — bỏ qua')
         return False
     try:
+        import base64
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        import urllib.request
+        import urllib.parse
+
+        # 1. Lấy access token từ refresh token
+        token_data = urllib.parse.urlencode({
+            'client_id':     GMAIL_CLIENT_ID,
+            'client_secret': GMAIL_CLIENT_SECRET,
+            'refresh_token': GMAIL_REFRESH_TOKEN,
+            'grant_type':    'refresh_token',
+        }).encode()
+        req = urllib.request.Request(
+            'https://oauth2.googleapis.com/token',
+            data=token_data,
+            headers={'Content-Type': 'application/x-www-form-urlencoded'}
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            token_resp = json.loads(resp.read())
+        access_token = token_resp.get('access_token')
+        if not access_token:
+            logger.error(f'[Email] Không lấy được access token: {token_resp}')
+            return False
+
+        # 2. Build email message
         msg = MIMEMultipart('alternative')
         msg['Subject'] = subject
-        msg['From']    = f'AI Advisor <{SMTP_USER}>'
+        msg['From']    = f'AI Advisor <{GMAIL_SENDER}>'
         msg['To']      = to
         msg.attach(MIMEText(html, 'html', 'utf-8'))
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            s.ehlo(); s.starttls(); s.login(SMTP_USER, SMTP_PASS)
-            s.sendmail(SMTP_USER, to, msg.as_string())
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+
+        # 3. Gửi qua Gmail API
+        send_data = json.dumps({'raw': raw}).encode()
+        send_req = urllib.request.Request(
+            'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+            data=send_data,
+            headers={
+                'Authorization': f'Bearer {access_token}',
+                'Content-Type': 'application/json',
+            }
+        )
+        with urllib.request.urlopen(send_req, timeout=15) as resp:
+            result = json.loads(resp.read())
+        logger.info(f'[Email] Gửi thành công → {to} (id: {result.get("id")})')
         return True
+
     except Exception as e:
         logger.error(f'[Email] {e}')
         return False
@@ -297,6 +337,15 @@ def init_campaign_routes(app, engine, Session):
                     db.rollback()
                     logger.error(f'[Campaign] VIPUser error: {e}')
 
+                # Copy data ra khỏi db session trước khi close
+                _reg_copy = type('R', (), {
+                    'email': reg.email, 'full_name': reg.full_name,
+                    'phone': reg.phone,
+                })()
+                _pwd_copy = temp_pwd
+                _slot_copy = slot_num
+                db.close()
+
                 def _notify_activated(r, pwd, sn):
                     _email_activated(r, pwd)
                     _send_telegram(
@@ -304,7 +353,7 @@ def init_campaign_routes(app, engine, Session):
                         f"👤 {r.full_name}  📧 {r.email}  📱 {r.phone}\n"
                         f"✅ Free đến 10/4"
                     )
-                threading.Thread(target=_notify_activated, args=(reg, temp_pwd, slot_num), daemon=True).start()
+                threading.Thread(target=_notify_activated, args=(_reg_copy, _pwd_copy, _slot_copy), daemon=True).start()
                 return jsonify({
                     'success': True, 'status': 'activated', 'slot': slot_num,
                     'message': 'Tài khoản đã được tạo! Kiểm tra email để lấy thông tin đăng nhập.',
@@ -316,13 +365,19 @@ def init_campaign_routes(app, engine, Session):
                 db.add(reg)
                 db.commit()
                 pos = db.query(CampaignRegistration).filter_by(status='waiting').count()
+                _reg_copy2 = type('R', (), {
+                    'email': reg.email, 'full_name': reg.full_name,
+                })()
+                _pos_copy = pos
+                db.close()
+
                 def _notify_waiting(r, p):
                     _email_waiting(r, p)
                     _send_telegram(
                         f"⏳ <b>Waiting list #{p}</b>\n"
                         f"👤 {r.full_name}  📧 {r.email}"
                     )
-                threading.Thread(target=_notify_waiting, args=(reg, pos), daemon=True).start()
+                threading.Thread(target=_notify_waiting, args=(_reg_copy2, _pos_copy), daemon=True).start()
                 return jsonify({
                     'success': True, 'status': 'waiting', 'position': pos,
                     'message': 'Chương trình đã đủ 30 người. Bạn đã được thêm vào danh sách chờ!',
