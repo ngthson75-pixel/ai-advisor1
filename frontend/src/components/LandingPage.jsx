@@ -6,6 +6,7 @@ export default function LandingPage({ onLogin }) {
   const [showAuth, setShowAuth] = useState(false)
   const [showTerms, setShowTerms] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
+  const [showCampaign, setShowCampaign] = useState(false)
   const [isLogin, setIsLogin] = useState(true)
   const [formData, setFormData] = useState({
     email: '',
@@ -333,7 +334,7 @@ export default function LandingPage({ onLogin }) {
               </div>
 
               <div className="hero-cta">
-                <button className="btn-primary-large" onClick={() => setShowAuth(true)}>
+                <button className="btn-primary-large" onClick={() => setShowCampaign(true)}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
                     <polyline points="10 17 15 12 10 7"/>
@@ -1296,6 +1297,304 @@ export default function LandingPage({ onLogin }) {
           }
         }
       `}</style>
+
+      {/* ── CAMPAIGN POPUP ── */}
+      {showCampaign && (
+        <CampaignPopup onClose={() => setShowCampaign(false)} />
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// CAMPAIGN POPUP — 30 Beta Users · 25/03–10/4/2026
+// ─────────────────────────────────────────────────────────────
+function CampaignPopup({ onClose }) {
+  const API_URL = window.location.hostname.includes('staging')
+    ? 'https://ai-advisor1-staging.onrender.com'
+    : 'https://ai-advisor1-backend.onrender.com'
+
+  const [slots, setSlots] = useState({ taken: 0, remaining: 30, is_full: false })
+  const [form, setForm] = useState({ fullName: '', email: '', phone: '', experience: '', source: '' })
+  const [phase, setPhase] = useState('form') // form | success | waiting
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [agreed, setAgreed] = useState(false)
+  const [countdown, setCountdown] = useState({ d: '--', h: '--', m: '--', s: '--' })
+
+  // Load slots
+  useEffect(() => {
+    fetch(`${API_URL}/api/campaign/slots`)
+      .then(r => r.json())
+      .then(d => setSlots(d))
+      .catch(() => {})
+  }, [])
+
+  // Countdown to April 10
+  useEffect(() => {
+    const tick = () => {
+      const diff = Math.max(0, new Date('2026-04-10T23:59:59+07:00') - Date.now())
+      setCountdown({
+        d: String(Math.floor(diff / 86400000)).padStart(2, '0'),
+        h: String(Math.floor((diff % 86400000) / 3600000)).padStart(2, '0'),
+        m: String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0'),
+        s: String(Math.floor((diff % 60000) / 1000)).padStart(2, '0'),
+      })
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const handleSubmit = async () => {
+    if (!form.fullName.trim()) return setError('Vui lòng nhập họ tên')
+    if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return setError('Email chưa hợp lệ')
+    if (!form.phone || form.phone.replace(/\D/g, '').length < 9) return setError('Số điện thoại chưa hợp lệ')
+    if (!agreed) return setError('Vui lòng đồng ý điều khoản')
+    setError(''); setLoading(true)
+    try {
+      const res = await fetch(`${API_URL}/api/campaign/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setPhase(data.status === 'waiting' ? 'waiting' : 'success')
+      } else {
+        setError(data.error || 'Lỗi không xác định. Thử lại sau.')
+      }
+    } catch {
+      setError('Không thể kết nối server. Vui lòng thử lại.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const pct = Math.min(100, ((slots.taken) / 30) * 100)
+
+  const styles = {
+    backdrop: { position:'fixed', inset:0, background:'rgba(5,6,8,0.9)', display:'flex', alignItems:'center', justifyContent:'center', padding:16, zIndex:9999, fontFamily:"'Be Vietnam Pro', Arial, sans-serif" },
+    popup: { position:'relative', background:'#11141a', border:'1px solid rgba(201,168,76,0.25)', borderRadius:4, width:'100%', maxWidth:500, maxHeight:'92vh', overflowY:'auto', boxShadow:'0 32px 80px rgba(0,0,0,0.8)', scrollbarWidth:'none' },
+    topBar: { height:2, background:'linear-gradient(90deg,transparent,#c9a84c 30%,#f0d690 50%,#c9a84c 70%,transparent)', borderRadius:'4px 4px 0 0' },
+    closeBtn: { position:'absolute', top:12, right:12, width:26, height:26, border:'1px solid rgba(201,168,76,0.25)', borderRadius:2, background:'transparent', color:'#666', fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' },
+    header: { padding:'22px 28px 0' },
+    eyebrow: { fontSize:10, fontWeight:700, letterSpacing:'2px', textTransform:'uppercase', color:'#c9a84c', marginBottom:10 },
+    title: { fontFamily:'Georgia,serif', fontSize:'clamp(20px,4vw,24px)', lineHeight:1.2, color:'#f7f5f0', marginBottom:8 },
+    sub: { fontSize:13, color:'#888d96', lineHeight:1.65, marginBottom:18 },
+    urgencyBar: { margin:'0 28px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, background:'rgba(201,168,76,0.07)', border:'1px solid rgba(201,168,76,0.18)', borderRadius:2, padding:'10px 14px' },
+    urgItem: { display:'flex', flexDirection:'column', alignItems:'center', flex:1, textAlign:'center' },
+    urgVal: { fontSize:18, fontWeight:900, color:'#c9a84c', lineHeight:1 },
+    urgValRed: { fontSize:18, fontWeight:900, color:'#ef4444', lineHeight:1 },
+    urgLabel: { fontSize:9, color:'#555a63', textTransform:'uppercase', letterSpacing:'0.5px', marginTop:2 },
+    urgSep: { width:1, height:30, background:'rgba(201,168,76,0.18)', flexShrink:0 },
+    cdRow: { display:'flex', alignItems:'center', gap:3, marginBottom:2 },
+    cdNum: { fontSize:15, fontWeight:900, color:'#f7f5f0', minWidth:22, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:2, padding:'1px 3px', textAlign:'center' },
+    cdSep: { fontSize:13, fontWeight:700, color:'#c9a84c', lineHeight:2 },
+    slotsWrap: { padding:'12px 28px 0' },
+    slotsHeader: { display:'flex', justifyContent:'space-between', marginBottom:5 },
+    slotsText: { fontSize:11, color:'#555a63' },
+    slotsCount: { fontSize:11, fontWeight:700, color:'#ef4444' },
+    track: { height:3, background:'rgba(255,255,255,0.06)', borderRadius:2, overflow:'hidden', marginBottom:14 },
+    fill: { height:'100%', background:'linear-gradient(90deg,#8a6b28,#c9a84c)', borderRadius:2, transition:'width 1.2s ease' },
+    offerSection: { padding:'0 28px 14px' },
+    sectionLabel: { fontSize:10, fontWeight:700, letterSpacing:'2px', textTransform:'uppercase', color:'#8a6b28', marginBottom:10, display:'flex', alignItems:'center', gap:8 },
+    offerCards: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:10 },
+    card: { background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:2, padding:'10px 12px', display:'flex', alignItems:'flex-start', gap:8 },
+    cardHi: { background:'rgba(201,168,76,0.05)', border:'1px solid rgba(201,168,76,0.28)', borderRadius:2, padding:'10px 12px', display:'flex', alignItems:'flex-start', gap:8 },
+    cardIcon: { width:24, height:24, background:'rgba(201,168,76,0.1)', borderRadius:2, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, flexShrink:0 },
+    cardName: { fontSize:11, fontWeight:700, color:'#f7f5f0', marginBottom:2 },
+    cardDesc: { fontSize:10, color:'#555a63', lineHeight:1.4 },
+    priceRow: { display:'flex', alignItems:'center', gap:8, background:'rgba(201,168,76,0.06)', border:'1px solid rgba(201,168,76,0.15)', borderRadius:2, padding:'9px 12px' },
+    priceOrig: { fontSize:12, color:'#444', textDecoration:'line-through', textDecorationColor:'#d63c3c' },
+    priceNew: { fontSize:18, fontWeight:900, color:'#c9a84c' },
+    priceSub: { fontSize:10, color:'#555a63', marginLeft:'auto', textAlign:'right', lineHeight:1.3 },
+    formSection: { padding:'0 28px 22px' },
+    fieldRow: { marginBottom:9 },
+    fieldLabel: { display:'block', fontSize:11, fontWeight:600, color:'#555a63', marginBottom:4 },
+    input: { width:'100%', background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:2, padding:'10px 12px', fontSize:13, color:'#f7f5f0', outline:'none', boxSizing:'border-box', fontFamily:'inherit' },
+    twoCol: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 },
+    select: { width:'100%', background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:2, padding:'10px 12px', fontSize:13, color:'#f7f5f0', outline:'none', appearance:'none', boxSizing:'border-box', fontFamily:'inherit', cursor:'pointer' },
+    checkRow: { display:'flex', alignItems:'flex-start', gap:8, marginBottom:10, cursor:'pointer' },
+    checkText: { fontSize:11, color:'#555a63', lineHeight:1.5 },
+    errorBox: { background:'rgba(214,60,60,0.1)', border:'1px solid rgba(214,60,60,0.25)', borderRadius:2, padding:'8px 12px', fontSize:12, color:'#ef8888', marginBottom:10 },
+    btn: { width:'100%', padding:'14px', background:'#c9a84c', color:'#0d0f12', border:'none', borderRadius:2, fontSize:13, fontWeight:800, cursor:'pointer', textTransform:'uppercase', letterSpacing:'0.5px' },
+    btnSub: { textAlign:'center', fontSize:10, color:'#2e3239', marginTop:7 },
+    footer: { padding:'10px 28px 16px', borderTop:'1px solid rgba(255,255,255,0.05)', display:'flex', alignItems:'center', gap:7 },
+    footerDot: { width:5, height:5, borderRadius:'50%', background:'#1a7a4a', animation:'none', flexShrink:0 },
+    footerNote: { fontSize:10, color:'#2e3239', lineHeight:1.5 },
+    successCenter: { padding:'40px 28px', textAlign:'center' },
+    successIcon: { width:50, height:50, background:'rgba(26,122,74,0.15)', border:'1px solid rgba(26,122,74,0.4)', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, margin:'0 auto 14px' },
+    waitingIcon: { width:50, height:50, background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.3)', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, margin:'0 auto 14px' },
+    successTitle: { fontFamily:'Georgia,serif', fontSize:20, color:'#f7f5f0', marginBottom:8 },
+    successSub: { fontSize:13, color:'#888d96', lineHeight:1.65, maxWidth:320, margin:'0 auto 18px' },
+    steps: { textAlign:'left', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:2, padding:14, marginBottom:16 },
+    stepItem: { display:'flex', alignItems:'flex-start', gap:8, fontSize:12, color:'#888d96', padding:'4px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' },
+    stepNum: { width:16, height:16, background:'rgba(201,168,76,0.15)', border:'1px solid rgba(201,168,76,0.3)', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:8, fontWeight:800, color:'#c9a84c', flexShrink:0, marginTop:1 },
+  }
+
+  return (
+    <div style={styles.backdrop} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={styles.popup}>
+        <div style={styles.topBar} />
+        <button style={styles.closeBtn} onClick={onClose}>✕</button>
+
+        {/* ── FORM ── */}
+        {phase === 'form' && (<>
+          <div style={styles.header}>
+            <div style={styles.eyebrow}>✦ Chiến dịch beta · 25/3 – 10/4/2026</div>
+            <div style={styles.title}>Tham gia <em style={{color:'#c9a84c'}}>30 nhà đầu tư</em><br/>đầu tiên — Miễn phí hoàn toàn</div>
+            <div style={styles.sub}>AI Advisor mở cửa cho đúng <strong style={{color:'#f7f5f0'}}>30 tài khoản mới</strong>. Không mất tiền — chỉ cần cam kết trải nghiệm và phản hồi thực tế.</div>
+          </div>
+
+          {/* Urgency */}
+          <div style={styles.urgencyBar}>
+            <div style={styles.urgItem}>
+              <div style={styles.urgValRed}>{slots.remaining}</div>
+              <div style={styles.urgLabel}>Suất còn lại</div>
+            </div>
+            <div style={styles.urgSep}/>
+            <div style={styles.urgItem}>
+              <div style={styles.cdRow}>
+                {['d','h','m','s'].map((k,i) => (
+                  <span key={k} style={{display:'flex',alignItems:'center',gap:2}}>
+                    <span style={styles.cdNum}>{countdown[k]}</span>
+                    {i < 3 && <span style={styles.cdSep}>:</span>}
+                  </span>
+                ))}
+              </div>
+              <div style={styles.urgLabel}>Thời gian còn lại</div>
+            </div>
+            <div style={styles.urgSep}/>
+            <div style={styles.urgItem}>
+              <div style={{...styles.urgVal, fontSize:13}}>đến 10/4</div>
+              <div style={styles.urgLabel}>Miễn phí</div>
+            </div>
+          </div>
+
+          {/* Progress */}
+          <div style={styles.slotsWrap}>
+            <div style={styles.slotsHeader}>
+              <span style={styles.slotsText}>Đã đăng ký</span>
+              <span style={styles.slotsCount}>{slots.taken}/30 suất</span>
+            </div>
+            <div style={styles.track}><div style={{...styles.fill, width:`${pct}%`}}/></div>
+          </div>
+
+          {/* Offer */}
+          <div style={styles.offerSection}>
+            <div style={styles.sectionLabel}>Bạn nhận được gì</div>
+            <div style={styles.offerCards}>
+              {[
+                {icon:'📈',name:'Tín hiệu Mua/Bán',desc:'VN30 blue-chip hàng ngày',hi:true},
+                {icon:'🛡️',name:'AI Risk Shield',desc:'Cảnh báo danh mục'},
+                {icon:'🧘',name:'AI Coach',desc:'Ngăn FOMO & panic'},
+              ].map((c,i) => (
+                <div key={i} style={c.hi ? styles.cardHi : styles.card}>
+                  <div style={styles.cardIcon}>{c.icon}</div>
+                  <div><div style={styles.cardName}>{c.name}</div><div style={styles.cardDesc}>{c.desc}</div></div>
+                </div>
+              ))}
+            </div>
+            <div style={styles.priceRow}>
+              <span style={styles.priceOrig}>199.000đ/tháng</span>
+              <span style={{color:'#c9a84c',fontSize:11}}>→</span>
+              <span style={styles.priceNew}>MIỄN PHÍ</span>
+              <div style={styles.priceSub}>Miễn phí đến<br/><strong>hết 10/4/2026</strong></div>
+            </div>
+          </div>
+
+          {/* Form */}
+          <div style={styles.formSection}>
+            <div style={styles.sectionLabel}>Đăng ký ngay</div>
+            {error && <div style={styles.errorBox}>⚠ {error}</div>}
+            <div style={styles.fieldRow}>
+              <label style={styles.fieldLabel}>Họ và tên <span style={{color:'#c9a84c'}}>*</span></label>
+              <input style={styles.input} placeholder="Nguyễn Văn A" value={form.fullName} onChange={e=>setForm({...form,fullName:e.target.value})} />
+            </div>
+            <div style={styles.twoCol}>
+              <div style={styles.fieldRow}>
+                <label style={styles.fieldLabel}>Email <span style={{color:'#c9a84c'}}>*</span></label>
+                <input style={styles.input} type="email" placeholder="ban@email.com" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} />
+              </div>
+              <div style={styles.fieldRow}>
+                <label style={styles.fieldLabel}>Số điện thoại <span style={{color:'#c9a84c'}}>*</span></label>
+                <input style={styles.input} type="tel" placeholder="09xx xxx xxx" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} />
+              </div>
+            </div>
+            <div style={styles.twoCol}>
+              <div style={styles.fieldRow}>
+                <label style={styles.fieldLabel}>Kinh nghiệm</label>
+                <select style={styles.select} value={form.experience} onChange={e=>setForm({...form,experience:e.target.value})}>
+                  <option value="">Chọn...</option>
+                  <option value="new">Mới bắt đầu</option>
+                  <option value="mid">1–3 năm</option>
+                  <option value="senior">3–5 năm</option>
+                  <option value="expert">&gt;5 năm</option>
+                </select>
+              </div>
+              <div style={styles.fieldRow}>
+                <label style={styles.fieldLabel}>Nguồn biết đến</label>
+                <select style={styles.select} value={form.source} onChange={e=>setForm({...form,source:e.target.value})}>
+                  <option value="">Chọn...</option>
+                  <option value="facebook">Facebook</option>
+                  <option value="zalo">Zalo</option>
+                  <option value="friend">Bạn bè</option>
+                  <option value="search">Google</option>
+                  <option value="other">Khác</option>
+                </select>
+              </div>
+            </div>
+            <label style={styles.checkRow}>
+              <input type="checkbox" checked={agreed} onChange={e=>setAgreed(e.target.checked)} style={{accentColor:'#c9a84c',marginTop:2,flexShrink:0}} />
+              <span style={styles.checkText}>Tôi đồng ý với <span style={{color:'#c9a84c'}}>Điều khoản sử dụng</span> và <span style={{color:'#c9a84c'}}>Chính sách bảo mật</span>. Tôi hiểu AI Advisor là công cụ hỗ trợ, không phải tư vấn đầu tư.</span>
+            </label>
+            <button style={{...styles.btn, opacity: loading ? 0.7 : 1}} onClick={handleSubmit} disabled={loading}>
+              {loading ? 'Đang gửi...' : '✦ ĐĂNG KÝ THAM GIA NGAY'}
+            </button>
+            <div style={styles.btnSub}>Còn <strong style={{color:'#ef4444'}}>{slots.remaining}</strong> suất · Miễn phí · Không cần thẻ ngân hàng</div>
+          </div>
+
+          <div style={styles.footer}>
+            <div style={{...styles.footerDot, background:'#1a7a4a'}}/>
+            <div style={styles.footerNote}>AI Advisor là công cụ hỗ trợ, không phải tư vấn đầu tư. Đầu tư có rủi ro. · ai-advisor.vn</div>
+          </div>
+        </>)}
+
+        {/* ── SUCCESS ── */}
+        {phase === 'success' && (
+          <div style={styles.successCenter}>
+            <div style={styles.successIcon}>✓</div>
+            <div style={styles.successTitle}>Tài khoản đã sẵn sàng!</div>
+            <div style={styles.successSub}>Kiểm tra email ngay — mật khẩu tạm đã được gửi đến hòm thư của bạn.</div>
+            <div style={styles.steps}>
+              {['Mở email từ AI Advisor, lấy mật khẩu tạm (kiểm tra cả spam)', 'Đăng nhập tại ai-advisor.vn/login → đổi mật khẩu', 'Tài khoản miễn phí đến hết 10/04/2026 🎉'].map((s,i)=>(
+                <div key={i} style={{...styles.stepItem, borderBottom: i<2?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                  <div style={styles.stepNum}>{i+1}</div><span>{s}</span>
+                </div>
+              ))}
+            </div>
+            <button style={styles.btn} onClick={onClose}>Đóng</button>
+          </div>
+        )}
+
+        {/* ── WAITING ── */}
+        {phase === 'waiting' && (
+          <div style={styles.successCenter}>
+            <div style={styles.waitingIcon}>⏳</div>
+            <div style={styles.successTitle}>Bạn đã vào danh sách chờ</div>
+            <div style={styles.successSub}>Chương trình đã đủ 30 người. Chúng tôi sẽ <strong style={{color:'#c9a84c'}}>thông báo qua email</strong> ngay khi có suất mới.</div>
+            <div style={styles.steps}>
+              {['Kiểm tra email xác nhận vị trí chờ từ AI Advisor','Khi có suất mới, bạn sẽ được thông báo tự động'].map((s,i)=>(
+                <div key={i} style={{...styles.stepItem, borderBottom: i<1?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                  <div style={styles.stepNum}>{i+1}</div><span>{s}</span>
+                </div>
+              ))}
+            </div>
+            <button style={styles.btn} onClick={onClose}>Đóng</button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
