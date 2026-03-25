@@ -7,6 +7,9 @@ export default function LandingPage({ onLogin }) {
   const [showTerms, setShowTerms] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
   const [showCampaign, setShowCampaign] = useState(false)
+  const [showChangePwd, setShowChangePwd] = useState(false)
+  const [loginToken, setLoginToken] = useState('')
+  const [loginUserData, setLoginUserData] = useState(null)
   const [isLogin, setIsLogin] = useState(true)
   const [formData, setFormData] = useState({
     email: '',
@@ -260,18 +263,49 @@ export default function LandingPage({ onLogin }) {
     failureRate: 21.5
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    
-    // Mock authentication
-    const userData = {
-      email: formData.email,
-      name: formData.name || formData.email.split('@')[0],
-      loginTime: new Date().toISOString()
+
+    const API_URL = window.location.hostname.includes('staging')
+      ? 'https://ai-advisor1-staging.onrender.com'
+      : 'https://ai-advisor1-backend.onrender.com'
+
+    try {
+      const res = await fetch(`${API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email, password: formData.password }),
+      })
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Email hoặc mật khẩu không đúng')
+        return
+      }
+
+      const userData = {
+        email: data.user.email,
+        name: data.user.full_name || data.user.email.split('@')[0],
+        tier: data.user.tier,
+        token: data.token,
+        loginTime: new Date().toISOString()
+      }
+
+      localStorage.setItem('user', JSON.stringify(userData))
+      localStorage.setItem('authToken', data.token)
+
+      if (data.is_first_login) {
+        // Lần đầu đăng nhập → bắt đổi mật khẩu
+        setLoginToken(data.token)
+        setLoginUserData(userData)
+        setShowAuth(false)
+        setShowChangePwd(true)
+      } else {
+        onLogin(userData)
+      }
+    } catch (err) {
+      alert('Không thể kết nối server. Vui lòng thử lại.')
     }
-    
-    localStorage.setItem('user', JSON.stringify(userData))
-    onLogin(userData)
   }
 
   const formatCurrency = (value) => {
@@ -1298,6 +1332,15 @@ export default function LandingPage({ onLogin }) {
         }
       `}</style>
 
+      {/* ── CHANGE PASSWORD MODAL (first login) ── */}
+      {showChangePwd && (
+        <ChangePwdModal
+          token={loginToken}
+          userData={loginUserData}
+          onSuccess={() => { setShowChangePwd(false); onLogin(loginUserData); }}
+        />
+      )}
+
       {/* ── CAMPAIGN POPUP ── */}
       {showCampaign && (
         <CampaignPopup onClose={() => setShowCampaign(false)} />
@@ -1577,6 +1620,141 @@ function CampaignPopup({ onClose }) {
             <button style={S.btn} onClick={onClose}>Đóng</button>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// CHANGE PASSWORD MODAL — Hiện khi đăng nhập lần đầu
+// ─────────────────────────────────────────────────────────────
+function ChangePwdModal({ token, userData, onSuccess }) {
+  const API_URL = window.location.hostname.includes('staging')
+    ? 'https://ai-advisor1-staging.onrender.com'
+    : 'https://ai-advisor1-backend.onrender.com'
+
+  const [oldPwd, setOldPwd]   = useState('')
+  const [newPwd, setNewPwd]   = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [error, setError]     = useState('')
+  const [loading, setLoading] = useState(false)
+  const [showPwd, setShowPwd] = useState(false)
+
+  const strength = [/.{8,}/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(r => r.test(newPwd)).length
+  const strengthLabel = ['', 'Yếu', 'Trung bình', 'Khá', 'Mạnh'][strength]
+  const strengthColor = ['', '#ef4444', '#f59e0b', '#3b82f6', '#22c55e'][strength]
+
+  const handleSubmit = async () => {
+    if (!oldPwd) return setError('Vui lòng nhập mật khẩu tạm từ email')
+    if (newPwd.length < 8) return setError('Mật khẩu mới phải ít nhất 8 ký tự')
+    if (newPwd !== confirm) return setError('Mật khẩu xác nhận không khớp')
+    setError(''); setLoading(true)
+    try {
+      const res = await fetch(`${API_URL}/api/auth/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        onSuccess()
+      } else {
+        setError(data.error || 'Lỗi không xác định')
+      }
+    } catch { setError('Không thể kết nối server') }
+    finally { setLoading(false) }
+  }
+
+  const S = {
+    backdrop: { position:'fixed', inset:0, background:'rgba(5,6,8,0.92)', display:'flex', alignItems:'center', justifyContent:'center', padding:16, zIndex:10000, fontFamily:"'Be Vietnam Pro', Arial, sans-serif" },
+    card: { background:'#11141a', border:'1px solid rgba(201,168,76,0.25)', borderRadius:4, width:'100%', maxWidth:420, boxShadow:'0 32px 80px rgba(0,0,0,0.8)' },
+    topBar: { height:2, background:'linear-gradient(90deg,transparent,#c9a84c 30%,#f0d690 50%,#c9a84c 70%,transparent)', borderRadius:'4px 4px 0 0' },
+    body: { padding:'28px 28px 24px' },
+    iconWrap: { width:48, height:48, background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.3)', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, margin:'0 auto 16px' },
+    title: { fontFamily:'Georgia,serif', fontSize:20, color:'#f7f5f0', textAlign:'center', marginBottom:6 },
+    sub: { fontSize:12, color:'#888d96', textAlign:'center', lineHeight:1.65, marginBottom:20 },
+    notice: { background:'rgba(201,168,76,0.08)', border:'1px solid rgba(201,168,76,0.2)', borderRadius:2, padding:'10px 14px', fontSize:12, color:'#c9a84c', marginBottom:18, lineHeight:1.6 },
+    fRow: { marginBottom:12 },
+    fLabel: { display:'block', fontSize:11, fontWeight:600, color:'#888d96', marginBottom:4 },
+    inputWrap: { position:'relative' },
+    input: { width:'100%', background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:2, padding:'10px 36px 10px 12px', fontSize:13, color:'#f7f5f0', outline:'none', boxSizing:'border-box', fontFamily:'inherit' },
+    eyeBtn: { position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', fontSize:14, opacity:0.5, color:'#f7f5f0' },
+    strengthRow: { display:'flex', gap:3, marginTop:6 },
+    strengthBar: (i) => ({ flex:1, height:3, borderRadius:2, transition:'background .3s', background: i < strength ? strengthColor : 'rgba(255,255,255,0.08)' }),
+    strengthLabel: { fontSize:10, color: strengthColor, marginTop:4 },
+    matchMsg: { fontSize:10, marginTop:4, color: confirm && confirm !== newPwd ? '#ef4444' : '#22c55e' },
+    errBox: { background:'rgba(214,60,60,0.1)', border:'1px solid rgba(214,60,60,0.25)', borderRadius:2, padding:'8px 12px', fontSize:12, color:'#ef8888', marginBottom:12 },
+    btn: { width:'100%', padding:'13px', background:'#c9a84c', color:'#0d0f12', border:'none', borderRadius:2, fontSize:13, fontWeight:800, cursor:'pointer', textTransform:'uppercase' },
+    hint: { fontSize:10, color:'#3d4249', textAlign:'center', marginTop:8, lineHeight:1.5 },
+  }
+
+  return (
+    <div style={S.backdrop}>
+      <div style={S.card}>
+        <div style={S.topBar}/>
+        <div style={S.body}>
+          <div style={S.iconWrap}>🔐</div>
+          <div style={S.title}>Đặt mật khẩu mới</div>
+          <div style={S.sub}>Đây là lần đăng nhập đầu tiên của bạn.<br/>Vui lòng đổi mật khẩu tạm để bảo mật tài khoản.</div>
+
+          <div style={S.notice}>
+            📧 Mật khẩu tạm đã được gửi đến email của bạn khi đăng ký.<br/>
+            Hãy kiểm tra hộp thư (kể cả spam) và nhập vào ô bên dưới.
+          </div>
+
+          {error && <div style={S.errBox}>⚠ {error}</div>}
+
+          {/* Mật khẩu tạm */}
+          <div style={S.fRow}>
+            <label style={S.fLabel}>Mật khẩu tạm (từ email) <span style={{color:'#c9a84c'}}>*</span></label>
+            <div style={S.inputWrap}>
+              <input
+                style={S.input}
+                type={showPwd ? 'text' : 'password'}
+                placeholder="Nhập mật khẩu tạm..."
+                value={oldPwd}
+                onChange={e => setOldPwd(e.target.value)}
+              />
+              <button style={S.eyeBtn} onClick={() => setShowPwd(v => !v)} tabIndex={-1}>{showPwd ? '🙈' : '👁'}</button>
+            </div>
+          </div>
+
+          {/* Mật khẩu mới */}
+          <div style={S.fRow}>
+            <label style={S.fLabel}>Mật khẩu mới <span style={{color:'#c9a84c'}}>*</span></label>
+            <div style={S.inputWrap}>
+              <input
+                style={S.input}
+                type={showPwd ? 'text' : 'password'}
+                placeholder="Ít nhất 8 ký tự..."
+                value={newPwd}
+                onChange={e => setNewPwd(e.target.value)}
+              />
+            </div>
+            {newPwd && (<>
+              <div style={S.strengthRow}>{[0,1,2,3].map(i => <div key={i} style={S.strengthBar(i)}/>)}</div>
+              {strengthLabel && <div style={S.strengthLabel}>{strengthLabel}</div>}
+            </>)}
+          </div>
+
+          {/* Xác nhận */}
+          <div style={{...S.fRow, marginBottom:20}}>
+            <label style={S.fLabel}>Xác nhận mật khẩu mới <span style={{color:'#c9a84c'}}>*</span></label>
+            <input
+              style={{...S.input, border: confirm && confirm !== newPwd ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.1)'}}
+              type={showPwd ? 'text' : 'password'}
+              placeholder="Nhập lại mật khẩu mới..."
+              value={confirm}
+              onChange={e => setConfirm(e.target.value)}
+            />
+            {confirm && <div style={S.matchMsg}>{confirm === newPwd ? '✓ Khớp' : '✗ Chưa khớp'}</div>}
+          </div>
+
+          <button style={{...S.btn, opacity: loading ? 0.7 : 1}} onClick={handleSubmit} disabled={loading}>
+            {loading ? 'Đang xử lý...' : '🔐 XÁC NHẬN ĐỔI MẬT KHẨU'}
+          </button>
+          <div style={S.hint}>Sau khi đổi mật khẩu thành công bạn sẽ vào trang chính ngay lập tức</div>
+        </div>
       </div>
     </div>
   )

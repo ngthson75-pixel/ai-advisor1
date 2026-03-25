@@ -59,7 +59,6 @@ class VIPUser(VIPBase):
     is_active       = Column(Boolean, default=True)
     notes           = Column(Text)                              # Admin private notes
     telegram_chat_id = Column(String(50))                      # Telegram chat_id để gửi notification
-    subscription_expires_at = Column(DateTime, nullable=True)   # ← THÊM DÒNG NÀY
     created_at      = Column(DateTime, default=datetime.now)
     last_login_at   = Column(DateTime)
 
@@ -295,6 +294,7 @@ def init_vip_system(app, engine, Session):
             if not user or not _check_password(password, user.password_hash):
                 return jsonify({'error': 'Email hoặc mật khẩu không đúng'}), 401
 
+            is_first_login = user.last_login_at is None  # chưa đăng nhập lần nào
             user.last_login_at = datetime.now()
             session.commit()
 
@@ -302,6 +302,7 @@ def init_vip_system(app, engine, Session):
             return jsonify({
                 'success': True,
                 'token': token,
+                'is_first_login': is_first_login,
                 'user': {
                     'id':              user.id,
                     'email':           user.email,
