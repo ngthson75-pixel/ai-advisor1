@@ -44,6 +44,7 @@ import string
 import random
 import hashlib
 import hmac
+import json
 import logging
 from datetime import datetime
 from email.mime.text import MIMEText
