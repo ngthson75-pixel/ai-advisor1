@@ -330,8 +330,7 @@ def init_campaign_routes(app, engine, Session):
                             email=email, password_hash=password_hash,
                             full_name=full_name, phone=phone,
                             tier='free', is_active=True,
-                            subscription_expires_at=TRIAL_EXPIRES,
-                            notes=f'Beta campaign · Free đến 10/4/2026 · {source}',
+                                notes=f'Beta campaign · Free đến 10/4/2026 · {source}',
                         ))
                     db.commit()
                 except Exception as e:
@@ -442,7 +441,6 @@ def init_campaign_routes(app, engine, Session):
                         password_hash=hashlib.sha256(temp_pwd.encode()).hexdigest(),
                         full_name=reg.full_name, phone=reg.phone,
                         tier='free', is_active=True,
-                        subscription_expires_at=TRIAL_EXPIRES,
                         notes='Beta campaign (waiting list) · Free đến 10/4/2026',
                     ))
                 except Exception as e:
@@ -518,7 +516,6 @@ def init_campaign_routes(app, engine, Session):
                         password_hash=hashlib.sha256(temp_pwd.encode()).hexdigest(),
                         full_name=next_w.full_name, phone=next_w.phone,
                         tier='free', is_active=True,
-                        subscription_expires_at=TRIAL_EXPIRES,
                         notes='Beta campaign (auto-fill) · Free đến 10/4/2026',
                     ))
                 except Exception as e:
