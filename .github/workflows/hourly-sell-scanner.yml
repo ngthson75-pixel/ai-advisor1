@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install vnstock3 psycopg2-binary python-dotenv pandas numpy
+          pip install vnstock psycopg2-binary python-dotenv pandas numpy
       
       - name: Run Sell Scanner v5.3
         env:
