@@ -29,12 +29,35 @@ load_dotenv()
 
 def get_db_connection():
     """Connect to PostgreSQL database"""
+    db_host = os.getenv('DB_HOST')
+    db_name = os.getenv('DB_NAME')
+    db_user = os.getenv('DB_USER')
+    db_password = os.getenv('DB_PASSWORD')
+    db_port = os.getenv('DB_PORT', '5432')
+    
+    # Debug logging
+    print(f"🔍 DB Connection Debug:")
+    print(f"   Host: {db_host[:20]}... (length: {len(db_host) if db_host else 0})")
+    print(f"   Database: {db_name}")
+    print(f"   User: {db_user}")
+    print(f"   Port: {db_port}")
+    print(f"   Password: {'***SET***' if db_password else 'MISSING'}")
+    
+    if not db_host:
+        raise ValueError("❌ DB_HOST not set! Check GitHub Secrets")
+    if not db_name:
+        raise ValueError("❌ DB_NAME not set! Check GitHub Secrets")
+    if not db_user:
+        raise ValueError("❌ DB_USER not set! Check GitHub Secrets")
+    if not db_password:
+        raise ValueError("❌ DB_PASSWORD not set! Check GitHub Secrets")
+    
     return psycopg2.connect(
-        host=os.getenv('DB_HOST'),
-        database=os.getenv('DB_NAME'),
-        user=os.getenv('DB_USER'),
-        password=os.getenv('DB_PASSWORD'),
-        port=os.getenv('DB_PORT', 5432)
+        host=db_host,
+        database=db_name,
+        user=db_user,
+        password=db_password,
+        port=int(db_port)
     )
 
 
