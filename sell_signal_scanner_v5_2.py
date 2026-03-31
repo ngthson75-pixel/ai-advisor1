@@ -978,12 +978,15 @@ if __name__ == '__main__':
     
     # Execute signals
     if sell_signals:
-        # Auto-execute in CI/GitHub Actions
-        if os.getenv('CI') == 'true' or os.getenv('GITHUB_ACTIONS') == 'true':
-            print(f"\n🤖 CI Environment - Auto-executing {len(sell_signals)} signals...")
+        # Check if running in CI environment
+        is_ci = os.getenv('CI') == 'true' or os.getenv('GITHUB_ACTIONS') == 'true'
+        
+        if is_ci:
+            # Auto-execute in CI
+            print(f"\n🤖 CI MODE: Auto-executing {len(sell_signals)} sell signals")
             execute_sell_signals(sell_signals)
         else:
-            # Manual confirmation for local runs
+            # Manual confirmation in local/interactive mode
             response = input(f"\n⚠️ Execute {len(sell_signals)} sell signals? (y/n): ")
             if response.lower() == 'y':
                 execute_sell_signals(sell_signals)

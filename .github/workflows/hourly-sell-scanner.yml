@@ -2,22 +2,17 @@ name: Hourly Sell Signal Scanner v5.3
 
 on:
   schedule:
-    # Chạy MỖI GIỜ từ 9:30-15:30 VN time (Mon-Fri)
-    # VN time = UTC+7
-    # 9:30 VN = 2:30 UTC
-    # 10:30 VN = 3:30 UTC
-    # 11:30 VN = 4:30 UTC
-    # 12:30 VN = 5:30 UTC (lunch - optional skip)
-    # 13:30 VN = 6:30 UTC
-    # 14:30 VN = 7:30 UTC
-    # 15:30 VN = 8:30 UTC
-    - cron: '30 2,3,4,5,6,7,8 * * 1-5'  # Every hour at :30, Mon-Fri
+    # Runs every hour from 9:30-15:30 VN time (2:30-8:30 UTC)
+    # Cron format: minute hour day month weekday
+    - cron: '30 2,3,4,5,6,7,8 * * 1-5'
   
-  workflow_dispatch:  # Manual trigger
+  # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   scan-sell-signals:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     
     steps:
       - name: Checkout code
@@ -26,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.10'
       
       - name: Install dependencies
         run: |
