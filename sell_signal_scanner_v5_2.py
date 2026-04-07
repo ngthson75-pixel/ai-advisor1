@@ -968,15 +968,24 @@ def execute_sell_signals(signals_to_sell):
 
 if __name__ == '__main__':
     # Check if running during trading hours (9:30-15:30 VN time)
-    now = datetime.now()
-    current_hour = now.hour
-    current_minute = now.minute
+    from datetime import timezone, timedelta
+    
+    # Get current time in VN timezone (UTC+7)
+    vn_tz = timezone(timedelta(hours=7))
+    now_utc = datetime.now(timezone.utc)
+    now_vn = now_utc.astimezone(vn_tz)
+    
+    current_hour = now_vn.hour
+    current_minute = now_vn.minute
+    
+    print(f"🕐 UTC Time: {now_utc.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    print(f"🕐 VN Time:  {now_vn.strftime('%Y-%m-%d %H:%M:%S VN')}")
     
     # Weekend check (Saturday=5, Sunday=6)
-    if now.weekday() >= 5:
+    if now_vn.weekday() >= 5:
         day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         print("\n" + "="*80)
-        print(f"⏰ TODAY IS {day_names[now.weekday()].upper()}")
+        print(f"⏰ TODAY IS {day_names[now_vn.weekday()].upper()}")
         print("="*80)
         print("\n📅 Stock market is CLOSED on weekends")
         print("   Markets are open Monday-Friday only")
@@ -985,14 +994,14 @@ if __name__ == '__main__':
         print("\n" + "="*80 + "\n")
         sys.exit(0)
     
-    # VN time check (assuming server is UTC+7)
+    # VN time check (now using actual VN time, not UTC)
     if current_hour < 9 or (current_hour == 9 and current_minute < 30):
-        print(f"⏰ Before market hours ({now.strftime('%H:%M')})")
+        print(f"⏰ Before market hours ({now_vn.strftime('%H:%M')} VN time)")
         print("   Scanner runs 9:30-15:30 VN time")
         sys.exit(0)
     
     if current_hour > 15 or (current_hour == 15 and current_minute > 30):
-        print(f"⏰ After market hours ({now.strftime('%H:%M')})")
+        print(f"⏰ After market hours ({now_vn.strftime('%H:%M')} VN time)")
         print("   Use daily_eod_workflow.py for EOD scan")
         sys.exit(0)
     
