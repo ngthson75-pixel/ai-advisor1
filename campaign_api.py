@@ -66,9 +66,9 @@ ADMIN_EMAIL   = os.getenv('ADMIN_EMAIL', 'ngthson75@gmail.com')
 FRONTEND_URL  = os.getenv('FRONTEND_URL', 'https://ai-advisor.vn')
 ADMIN_SECRET  = os.getenv('ADMIN_SECRET', 'ai-advisor-admin-2026')
 
-CAMPAIGN_LIMIT = 30
-CAMPAIGN_END   = datetime(2026, 4, 10, 23, 59, 59)
-TRIAL_EXPIRES  = datetime(2026, 4, 10, 23, 59, 59)
+CAMPAIGN_LIMIT = 15
+CAMPAIGN_END   = datetime(2026, 5, 15, 23, 59, 59)
+TRIAL_EXPIRES  = datetime(2026, 4, 30, 23, 59, 59)
 SLOT_OFFSET    = int(os.getenv('CAMPAIGN_SLOT_OFFSET', '0'))
 
 # Gmail API config (thay thế SMTP)
@@ -536,6 +536,58 @@ def init_campaign_routes(app, engine, Session):
                     'message': f'Đã hủy {email}. Waiting list trống — suất sẽ mở cho đăng ký mới.',
                 })
 
+        except Exception as e:
+            db.rollback()
+            return jsonify({'success': False, 'error': str(e)}), 500
+        finally:
+            db.close()
+
+
+    # ── Admin: reset password user bất kỳ ──────────────────
+    @app.route('/api/campaign/admin/reset-password', methods=['POST'])
+    @_require_admin
+    def campaign_reset_password():
+        """
+        Reset password cho user bất kỳ.
+        Body: { "email": "user@email.com", "new_password": "NewPass123" }
+        Nếu không truyền new_password → tự generate 10 ký tự random.
+        """
+        data     = request.get_json() or {}
+        email    = (data.get('email') or '').strip().lower()
+        new_pwd  = data.get('new_password') or _gen_temp_password()
+
+        if not email:
+            return jsonify({'success': False, 'error': 'Thiếu email'}), 400
+
+        db = Session()
+        try:
+            from vip_auth import VIPUser
+            user = db.query(VIPUser).filter_by(email=email).first()
+            if not user:
+                return jsonify({'success': False, 'error': f'Không tìm thấy user: {email}'}), 404
+
+            user.password_hash = hashlib.sha256(new_pwd.encode()).hexdigest()
+            user.last_login_at = None  # force đổi mật khẩu lần sau login
+            db.commit()
+
+            # Gửi email thông báo
+            def _notify():
+                _email_activated(type('R', (), {
+                    'email': email, 'full_name': user.full_name or email,
+                })(), new_pwd)
+            threading.Thread(target=_notify, daemon=True).start()
+
+            _send_telegram(
+                f"🔑 <b>Reset password:</b> {email}\n"
+                f"Mật khẩu mới: <code>{new_pwd}</code>"
+            )
+
+            return jsonify({
+                'success': True,
+                'email': email,
+                'new_password': new_pwd,
+                'message': f'Đã reset password cho {email}. Email thông báo đã gửi.',
+            })
         except Exception as e:
             db.rollback()
             return jsonify({'success': False, 'error': str(e)}), 500
