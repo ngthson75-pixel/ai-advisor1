@@ -84,12 +84,25 @@ def get_daily_data(ticker, days_back=100):
         df = stock.quote.history(start=start_date, end=end_date)
         
         if df is None or len(df) == 0:
+            print(f"⚠️ {ticker}: No data returned from API")
+            return None
+        
+        # Verify required columns exist
+        required_cols = ['open', 'high', 'low', 'close', 'volume']
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            print(f"⚠️ {ticker}: Missing columns: {missing_cols}")
+            print(f"   Available columns: {list(df.columns)}")
             return None
         
         return df
         
     except Exception as e:
+        import traceback
         print(f"⚠️ {ticker}: Error getting daily data - {e}")
+        print(f"   Error type: {type(e).__name__}")
+        if hasattr(e, '__traceback__'):
+            traceback.print_exc()
         return None
 
 
@@ -910,6 +923,14 @@ def execute_sell_signals(signals_to_sell):
     
     for sig in signals_to_sell:
         try:
+            # Convert numpy types to native Python types for PostgreSQL
+            entry_price = float(sig['entry_price']) if sig['entry_price'] is not None else None
+            exit_price = float(sig['exit_price']) if sig['exit_price'] is not None else None
+            stop_loss = float(sig['stop_loss']) if sig['stop_loss'] is not None else None
+            take_profit = float(sig['take_profit']) if sig['take_profit'] is not None else None
+            profit_loss_pct = float(sig['profit_loss_pct']) if sig['profit_loss_pct'] is not None else None
+            exit_quantity_pct = int(sig['exit_quantity_pct']) if sig['exit_quantity_pct'] is not None else None
+            
             # Insert SELL signal
             cursor.execute("""
                 INSERT INTO signals 
@@ -919,12 +940,12 @@ def execute_sell_signals(signals_to_sell):
                 VALUES (%s, 'SELL', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_DATE, 'executed')
             """, (
                 sig['ticker'],
-                sig['entry_price'],
-                sig['exit_price'],
-                sig['stop_loss'],
-                sig['take_profit'],
-                sig['profit_loss_pct'],
-                sig['exit_quantity_pct'],
+                entry_price,
+                exit_price,
+                stop_loss,
+                take_profit,
+                profit_loss_pct,
+                exit_quantity_pct,
                 sig['exit_reason'],
                 f"{sig['ticker']}-SELL-{datetime.now().strftime('%Y%m%d%H%M')}",
                 sig['signal_code'],
@@ -932,7 +953,7 @@ def execute_sell_signals(signals_to_sell):
             ))
             
             # Update BUY signal position
-            new_position_pct = sig['position_pct'] - sig['exit_quantity_pct']
+            new_position_pct = int(sig['position_pct'] - sig['exit_quantity_pct'])
             
             if new_position_pct <= 0:
                 # Full exit
