@@ -2,7 +2,16 @@ name: Update EOD Prices
 
 on:
   schedule:
-    # 4PM Vietnam = 9AM UTC, Monday-Friday
+    # Vietnam time (UTC+7) - Monday to Friday
+    # 9:30 AM VN  = 2:30 UTC
+    - cron: '30 2 * * 1-5'
+    # 11:30 AM VN = 4:30 UTC
+    - cron: '30 4 * * 1-5'
+    # 1:30 PM VN  = 6:30 UTC
+    - cron: '30 6 * * 1-5'
+    # 2:30 PM VN  = 7:30 UTC
+    - cron: '30 7 * * 1-5'
+    # 4:00 PM VN  = 9:00 UTC (EOD - after market close)
     - cron: '0 9 * * 1-5'
   workflow_dispatch:
 
