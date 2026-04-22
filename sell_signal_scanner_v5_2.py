@@ -5,11 +5,11 @@ Sell Signal Scanner v5.3
 Replaced MA20_STRICT with 3 Technical Exit Criteria
 
 NEW EXIT RULES:
-1. Daily MACD + RSI>80 + Support break → BÁN 100% (CRITICAL)
-2. 4H MACD + Volume divergence → BÁN 50% (HIGH)
-3. 1H Volume Climax (BSR pattern) → BÁN 100% (HIGH)
+1. Daily MACD + RSI>80 + Support break â†’ BÃN 100% (CRITICAL)
+2. 4H MACD + Volume divergence â†’ BÃN 50% (HIGH)
+3. 1H Volume Climax (BSR pattern) â†’ BÃN 100% (HIGH)
 
-SCHEDULE: Mỗi giờ 9:30-15:30 VN time (trading hours)
+SCHEDULE: Má»—i giá» 9:30-15:30 VN time (trading hours)
 """
 
 import os
@@ -36,7 +36,7 @@ def get_db_connection():
     db_port = os.getenv('DB_PORT', '5432')
     
     # Debug logging
-    print(f"🔍 DB Connection Debug:")
+    print(f"ðŸ” DB Connection Debug:")
     print(f"   Host: {db_host[:20]}... (length: {len(db_host) if db_host else 0})")
     print(f"   Database: {db_name}")
     print(f"   User: {db_user}")
@@ -44,13 +44,13 @@ def get_db_connection():
     print(f"   Password: {'***SET***' if db_password else 'MISSING'}")
     
     if not db_host:
-        raise ValueError("❌ DB_HOST not set! Check GitHub Secrets")
+        raise ValueError("âŒ DB_HOST not set! Check GitHub Secrets")
     if not db_name:
-        raise ValueError("❌ DB_NAME not set! Check GitHub Secrets")
+        raise ValueError("âŒ DB_NAME not set! Check GitHub Secrets")
     if not db_user:
-        raise ValueError("❌ DB_USER not set! Check GitHub Secrets")
+        raise ValueError("âŒ DB_USER not set! Check GitHub Secrets")
     if not db_password:
-        raise ValueError("❌ DB_PASSWORD not set! Check GitHub Secrets")
+        raise ValueError("âŒ DB_PASSWORD not set! Check GitHub Secrets")
     
     return psycopg2.connect(
         host=db_host,
@@ -77,21 +77,21 @@ def get_daily_data(ticker, days_back=100):
         DataFrame: Daily OHLCV data
     """
     try:
-        stock = Vnstock().stock(symbol=ticker, source='VCI')
+        stock = Vnstock().stock(symbol=ticker, source='TCBS')
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
         
         df = stock.quote.history(start=start_date, end=end_date)
         
         if df is None or len(df) == 0:
-            print(f"⚠️ {ticker}: No data returned from API")
+            print(f"âš ï¸ {ticker}: No data returned from API")
             return None
         
         # Verify required columns exist
         required_cols = ['open', 'high', 'low', 'close', 'volume']
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
-            print(f"⚠️ {ticker}: Missing columns: {missing_cols}")
+            print(f"âš ï¸ {ticker}: Missing columns: {missing_cols}")
             print(f"   Available columns: {list(df.columns)}")
             return None
         
@@ -99,7 +99,7 @@ def get_daily_data(ticker, days_back=100):
         
     except Exception as e:
         import traceback
-        print(f"⚠️ {ticker}: Error getting daily data - {e}")
+        print(f"âš ï¸ {ticker}: Error getting daily data - {e}")
         print(f"   Error type: {type(e).__name__}")
         if hasattr(e, '__traceback__'):
             traceback.print_exc()
@@ -118,13 +118,13 @@ def get_intraday_4h_data(ticker, days_back=15):
         DataFrame: 4H OHLCV data
     """
     try:
-        stock = Vnstock().stock(symbol=ticker, source='VCI')
+        stock = Vnstock().stock(symbol=ticker, source='TCBS')
         
         # Try to get intraday data
         intraday_df = stock.quote.intraday(symbol=ticker, page_size=200)
         
         if intraday_df is None or len(intraday_df) == 0:
-            print(f"⚠️ {ticker}: No intraday data for 4H aggregation")
+            print(f"âš ï¸ {ticker}: No intraday data for 4H aggregation")
             return None
         
         # Convert to datetime
@@ -145,13 +145,13 @@ def get_intraday_4h_data(ticker, days_back=15):
         df_4h = df_4h.between_time('09:00', '15:00')
         
         if len(df_4h) < 20:  # Need minimum data
-            print(f"⚠️ {ticker}: Not enough 4H bars ({len(df_4h)})")
+            print(f"âš ï¸ {ticker}: Not enough 4H bars ({len(df_4h)})")
             return None
         
         return df_4h
         
     except Exception as e:
-        print(f"⚠️ {ticker}: Error getting 4H data - {e}")
+        print(f"âš ï¸ {ticker}: Error getting 4H data - {e}")
         return None
 
 
@@ -167,7 +167,7 @@ def get_intraday_1h_data(ticker, days_back=10):
         DataFrame: 1H OHLCV data
     """
     try:
-        stock = Vnstock().stock(symbol=ticker, source='VCI')
+        stock = Vnstock().stock(symbol=ticker, source='TCBS')
         
         # Get intraday data
         intraday_df = stock.quote.intraday(symbol=ticker, page_size=200)
@@ -198,7 +198,7 @@ def get_intraday_1h_data(ticker, days_back=10):
         return df_1h
         
     except Exception as e:
-        print(f"⚠️ {ticker}: Error getting 1H data - {e}")
+        print(f"âš ï¸ {ticker}: Error getting 1H data - {e}")
         return None
 
 
@@ -382,7 +382,7 @@ def check_support_break(df, support_levels):
 def check_daily_critical_exit(df):
     """
     EXIT CRITERION 1: Daily MACD + RSI>80 + Support break
-    → BÁN 100% (CRITICAL)
+    â†’ BÃN 100% (CRITICAL)
     
     Returns:
         dict: Exit signal if all 3 conditions met
@@ -476,7 +476,7 @@ def detect_volume_divergence(df, lookback=20):
 def check_4h_medium_exit(df_4h):
     """
     EXIT CRITERION 2: 4H MACD + Volume divergence
-    → BÁN 50% (HIGH)
+    â†’ BÃN 50% (HIGH)
     
     Returns:
         dict: Exit signal if both conditions met
@@ -646,7 +646,7 @@ def detect_distribution_pattern_1h(df_1h, lookback_hours=60):
 def check_1h_climax_exit(df_1h):
     """
     EXIT CRITERION 3: 1H Volume Climax (BSR pattern)
-    → BÁN 100% (HIGH)
+    â†’ BÃN 100% (HIGH)
     
     Checks both:
     - Distribution pattern (multiple spikes) - PRIORITY
@@ -681,17 +681,17 @@ def scan_for_sell_signals():
     
     PRIORITY ORDER:
     1. Stop Loss (URGENT!)
-    2. Daily Critical Exit (MACD+RSI+Support) → 100%
-    3. 1H Volume Climax (BSR pattern) → 100%
-    4. 4H Medium Exit (MACD+Volume div) → 50%
+    2. Daily Critical Exit (MACD+RSI+Support) â†’ 100%
+    3. 1H Volume Climax (BSR pattern) â†’ 100%
+    4. 4H Medium Exit (MACD+Volume div) â†’ 50%
     5. Take Profit
     
     Returns:
         list: Sell signals to execute
     """
     print("\n" + "="*80)
-    print("🔍 SELL SIGNAL SCANNER v5.3 - TECHNICAL EXIT CRITERIA")
-    print(f"⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("ðŸ” SELL SIGNAL SCANNER v5.3 - TECHNICAL EXIT CRITERIA")
+    print(f"â° Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*80)
     
     conn = get_db_connection()
@@ -717,10 +717,10 @@ def scan_for_sell_signals():
     conn.close()
     
     if not open_signals:
-        print("\n✅ Không có signal nào đang open")
+        print("\nâœ… KhÃ´ng cÃ³ signal nÃ o Ä‘ang open")
         return []
     
-    print(f"\n📋 Checking {len(open_signals)} open positions\n")
+    print(f"\nðŸ“‹ Checking {len(open_signals)} open positions\n")
     
     signals_to_sell = []
     
@@ -733,14 +733,14 @@ def scan_for_sell_signals():
         position_pct = signal[5]
         entry_date = signal[6]
         
-        print(f"🔍 {ticker} ({signal_code})...", end=" ")
+        print(f"ðŸ” {ticker} ({signal_code})...", end=" ")
         
         try:
             # Get daily data
             df_daily = get_daily_data(ticker, days_back=100)
             
             if df_daily is None or len(df_daily) == 0:
-                print("⚠️ No data")
+                print("âš ï¸ No data")
                 continue
             
             current_price = df_daily['close'].iloc[-1] * 1000
@@ -750,7 +750,7 @@ def scan_for_sell_signals():
             # PRIORITY 1: STOP LOSS (URGENT!)
             # ========================================
             if current_price <= stop_loss:
-                print(f"🚨 STOP LOSS @ {current_price:,.0f}")
+                print(f"ðŸš¨ STOP LOSS @ {current_price:,.0f}")
                 
                 signals_to_sell.append({
                     'ticker': ticker,
@@ -770,12 +770,12 @@ def scan_for_sell_signals():
             
             # ========================================
             # PRIORITY 2: DAILY CRITICAL EXIT
-            # MACD + RSI>80 + Support break → 100%
+            # MACD + RSI>80 + Support break â†’ 100%
             # ========================================
             daily_exit = check_daily_critical_exit(df_daily)
             
             if daily_exit:
-                print(f"🚨 DAILY CRITICAL! RSI={daily_exit['rsi']:.0f}")
+                print(f"ðŸš¨ DAILY CRITICAL! RSI={daily_exit['rsi']:.0f}")
                 
                 signals_to_sell.append({
                     'ticker': ticker,
@@ -796,7 +796,7 @@ def scan_for_sell_signals():
             
             # ========================================
             # PRIORITY 3: 1H VOLUME CLIMAX
-            # BSR pattern → 100%
+            # BSR pattern â†’ 100%
             # ========================================
             df_1h = get_intraday_1h_data(ticker, days_back=10)
             
@@ -804,7 +804,7 @@ def scan_for_sell_signals():
                 climax_1h = check_1h_climax_exit(df_1h)
                 
                 if climax_1h:
-                    print(f"⚠️ 1H CLIMAX! {climax_1h['signal']}")
+                    print(f"âš ï¸ 1H CLIMAX! {climax_1h['signal']}")
                     
                     signals_to_sell.append({
                         'ticker': ticker,
@@ -825,7 +825,7 @@ def scan_for_sell_signals():
             
             # ========================================
             # PRIORITY 4: 4H MEDIUM EXIT
-            # MACD + Volume div → 50%
+            # MACD + Volume div â†’ 50%
             # ========================================
             df_4h = get_intraday_4h_data(ticker, days_back=15)
             
@@ -833,7 +833,7 @@ def scan_for_sell_signals():
                 medium_4h = check_4h_medium_exit(df_4h)
                 
                 if medium_4h:
-                    print(f"⚠️ 4H MEDIUM! Bán 50%")
+                    print(f"âš ï¸ 4H MEDIUM! BÃ¡n 50%")
                     
                     signals_to_sell.append({
                         'ticker': ticker,
@@ -864,7 +864,7 @@ def scan_for_sell_signals():
                 else:
                     exit_qty = position_pct
                 
-                print(f"✅ TP! Exit {exit_qty}%")
+                print(f"âœ… TP! Exit {exit_qty}%")
                 
                 signals_to_sell.append({
                     'ticker': ticker,
@@ -883,10 +883,10 @@ def scan_for_sell_signals():
                 continue
             
             # No signal
-            print(f"✅ No signal (P/L: {pnl_pct:+.2f}%)")
+            print(f"âœ… No signal (P/L: {pnl_pct:+.2f}%)")
             
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"âŒ Error: {e}")
             import traceback
             traceback.print_exc()
             continue
@@ -894,7 +894,7 @@ def scan_for_sell_signals():
     # Summary
     if signals_to_sell:
         print("\n" + "="*80)
-        print(f"🚨 FOUND {len(signals_to_sell)} SELL SIGNALS!")
+        print(f"ðŸš¨ FOUND {len(signals_to_sell)} SELL SIGNALS!")
         print("="*80)
         
         for sig in signals_to_sell:
@@ -902,7 +902,7 @@ def scan_for_sell_signals():
         
         print("="*80)
     else:
-        print("\n✅ No sell signals detected")
+        print("\nâœ… No sell signals detected")
     
     return signals_to_sell
 
@@ -970,17 +970,17 @@ def execute_sell_signals(signals_to_sell):
                     WHERE signal_code = %s
                 """, (new_position_pct, sig['signal_code']))
             
-            print(f"✅ {sig['ticker']}: Saved SELL signal")
+            print(f"âœ… {sig['ticker']}: Saved SELL signal")
             
         except Exception as e:
-            print(f"❌ {sig['ticker']}: Error - {e}")
+            print(f"âŒ {sig['ticker']}: Error - {e}")
             conn.rollback()
             continue
     
     conn.commit()
     conn.close()
     
-    print(f"\n✅ Executed {len(signals_to_sell)} sell signals!")
+    print(f"\nâœ… Executed {len(signals_to_sell)} sell signals!")
 
 
 # ============================================================================
@@ -999,30 +999,30 @@ if __name__ == '__main__':
     current_hour = now_vn.hour
     current_minute = now_vn.minute
     
-    print(f"🕐 UTC Time: {now_utc.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-    print(f"🕐 VN Time:  {now_vn.strftime('%Y-%m-%d %H:%M:%S VN')}")
+    print(f"ðŸ• UTC Time: {now_utc.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    print(f"ðŸ• VN Time:  {now_vn.strftime('%Y-%m-%d %H:%M:%S VN')}")
     
     # Weekend check (Saturday=5, Sunday=6)
     if now_vn.weekday() >= 5:
         day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         print("\n" + "="*80)
-        print(f"⏰ TODAY IS {day_names[now_vn.weekday()].upper()}")
+        print(f"â° TODAY IS {day_names[now_vn.weekday()].upper()}")
         print("="*80)
-        print("\n📅 Stock market is CLOSED on weekends")
+        print("\nðŸ“… Stock market is CLOSED on weekends")
         print("   Markets are open Monday-Friday only")
-        print("\n✅ Scanner will exit gracefully")
+        print("\nâœ… Scanner will exit gracefully")
         print("   Run again on Monday during trading hours (9:30-15:30)")
         print("\n" + "="*80 + "\n")
         sys.exit(0)
     
     # VN time check (now using actual VN time, not UTC)
     if current_hour < 9 or (current_hour == 9 and current_minute < 30):
-        print(f"⏰ Before market hours ({now_vn.strftime('%H:%M')} VN time)")
+        print(f"â° Before market hours ({now_vn.strftime('%H:%M')} VN time)")
         print("   Scanner runs 9:30-15:30 VN time")
         sys.exit(0)
     
     if current_hour > 15 or (current_hour == 15 and current_minute > 30):
-        print(f"⏰ After market hours ({now_vn.strftime('%H:%M')} VN time)")
+        print(f"â° After market hours ({now_vn.strftime('%H:%M')} VN time)")
         print("   Use daily_eod_workflow.py for EOD scan")
         sys.exit(0)
     
@@ -1036,14 +1036,15 @@ if __name__ == '__main__':
         
         if is_ci:
             # Auto-execute in CI
-            print(f"\n🤖 CI MODE: Auto-executing {len(sell_signals)} sell signals")
+            print(f"\nðŸ¤– CI MODE: Auto-executing {len(sell_signals)} sell signals")
             execute_sell_signals(sell_signals)
         else:
             # Manual confirmation in local/interactive mode
-            response = input(f"\n⚠️ Execute {len(sell_signals)} sell signals? (y/n): ")
+            response = input(f"\nâš ï¸ Execute {len(sell_signals)} sell signals? (y/n): ")
             if response.lower() == 'y':
                 execute_sell_signals(sell_signals)
             else:
-                print("❌ Cancelled - signals not executed")
+                print("âŒ Cancelled - signals not executed")
     
-    print("\n✅ Scanner completed!")
+    print("\nâœ… Scanner completed!")
+
