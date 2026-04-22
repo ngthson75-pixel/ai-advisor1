@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 AI ADVISOR - EOD PRICE UPDATER
-Chạy tự động lúc 4PM Vietnam qua GitHub Actions.
-Ghi giá vào PostgreSQL - persistent across Render redeploys.
+Cháº¡y tá»± Ä‘á»™ng lÃºc 4PM Vietnam qua GitHub Actions.
+Ghi giÃ¡ vÃ o PostgreSQL - persistent across Render redeploys.
 """
 
 import os
@@ -38,7 +38,7 @@ Session = sessionmaker(bind=engine)
 
 
 def load_ticker_list():
-    """Đọc danh sách mã từ daily_signal_scanner_eod.py"""
+    """Äá»c danh sÃ¡ch mÃ£ tá»« daily_signal_scanner_eod.py"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     for path in [
         os.path.join(script_dir, 'scripts', 'daily_signal_scanner_eod.py'),
@@ -51,11 +51,11 @@ def load_ticker_list():
                 scanner = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(scanner)
                 tickers = list(dict.fromkeys(scanner.TOP_343_STOCKS))
-                logger.info(f"✅ Loaded {len(tickers)} tickers from scanner")
+                logger.info(f"âœ… Loaded {len(tickers)} tickers from scanner")
                 return tickers
             except Exception as e:
                 logger.warning(f"Could not load from {path}: {e}")
-    logger.error("❌ Scanner file not found!")
+    logger.error("âŒ Scanner file not found!")
     return []
 
 
@@ -69,7 +69,7 @@ def get_last_trading_day():
 
 
 def fetch_price(ticker, start_date, end_date):
-    """Thử fetch giá từ VCI rồi TCBS"""
+    """Thá»­ fetch giÃ¡ tá»« VCI rá»“i TCBS"""
     # Try multiple import styles for vnstock compatibility
     try:
         from vnstock import Quote
@@ -79,7 +79,7 @@ def fetch_price(ticker, start_date, end_date):
                 if df is not None and len(df) > 0:
                     return float(df['close'].iloc[-1]) * 1000, source
             except Exception as e:
-                if 'rate limit' in str(e).lower() or 'quá nhiều' in str(e).lower():
+                if 'rate limit' in str(e).lower() or 'quÃ¡ nhiá»u' in str(e).lower():
                     raise e
                 continue
     except ImportError:
@@ -88,7 +88,7 @@ def fetch_price(ticker, start_date, end_date):
     # Fallback: try vnstock3 style
     try:
         from vnstock3 import Vnstock
-        stock = Vnstock().stock(symbol=ticker, source='VCI')
+        stock = Vnstock().stock(symbol=ticker, source='TCBS')
         df = stock.quote.history(start=start_date, end=end_date)
         if df is not None and len(df) > 0:
             return float(df['close'].iloc[-1]) * 1000, 'vnstock3'
@@ -99,7 +99,7 @@ def fetch_price(ticker, start_date, end_date):
 
 
 def update_eod_prices():
-    """Download giá từ vnstock và upsert vào PostgreSQL"""
+    """Download giÃ¡ tá»« vnstock vÃ  upsert vÃ o PostgreSQL"""
     tickers = load_ticker_list()
     if not tickers:
         return {'success': False, 'error': 'No tickers loaded'}
@@ -110,9 +110,9 @@ def update_eod_prices():
     start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=7)).strftime('%Y-%m-%d')
 
     logger.info(f"\n{'='*60}")
-    logger.info(f"🚀 EOD Price Update → PostgreSQL")
+    logger.info(f"ðŸš€ EOD Price Update â†’ PostgreSQL")
     logger.info(f"   Tickers: {total} | Date: {trade_date}")
-    logger.info(f"   ~{total * 2 / 60:.0f} phút")
+    logger.info(f"   ~{total * 2 / 60:.0f} phÃºt")
     logger.info(f"{'='*60}\n")
 
     session = Session()
@@ -133,14 +133,14 @@ def update_eod_prices():
                 else:
                     session.add(EodPrice(ticker=ticker, price=price, trade_date=trade_date))
                 updated += 1
-                logger.info(f"[{i+1:3d}/{total}] ✅ {ticker}: {price:>10,.0f} ({source})")
+                logger.info(f"[{i+1:3d}/{total}] âœ… {ticker}: {price:>10,.0f} ({source})")
             else:
                 failed.append(ticker)
-                logger.warning(f"[{i+1:3d}/{total}] ❌ {ticker}: no data")
+                logger.warning(f"[{i+1:3d}/{total}] âŒ {ticker}: no data")
 
         except Exception as e:
-            if 'rate limit' in str(e).lower() or 'quá nhiều' in str(e).lower():
-                logger.warning(f"⏳ Rate limit. Saving & waiting 60s...")
+            if 'rate limit' in str(e).lower() or 'quÃ¡ nhiá»u' in str(e).lower():
+                logger.warning(f"â³ Rate limit. Saving & waiting 60s...")
                 session.commit()
                 time.sleep(60)
                 # Retry
@@ -161,20 +161,20 @@ def update_eod_prices():
                     failed.append(ticker)
             else:
                 failed.append(ticker)
-                logger.warning(f"[{i+1:3d}/{total}] ❌ {ticker}: {e}")
+                logger.warning(f"[{i+1:3d}/{total}] âŒ {ticker}: {e}")
 
         time.sleep(2.0)
 
         if (i + 1) % 20 == 0:
             session.commit()
-            logger.info(f"--- 💾 {updated} saved. Pausing 10s ---")
+            logger.info(f"--- ðŸ’¾ {updated} saved. Pausing 10s ---")
             time.sleep(10)
 
     session.commit()
     session.close()
 
     elapsed = (datetime.now() - start_time).total_seconds()
-    logger.info(f"\n✅ Done! Updated {updated}/{total} | Failed {len(failed)} | {elapsed/60:.1f} min")
+    logger.info(f"\nâœ… Done! Updated {updated}/{total} | Failed {len(failed)} | {elapsed/60:.1f} min")
 
     return {
         'success': True,
@@ -187,4 +187,4 @@ def update_eod_prices():
 
 if __name__ == '__main__':
     result = update_eod_prices()
-    print(f"\n📊 Result: {result}")
+    print(f"\nðŸ“Š Result: {result}")
