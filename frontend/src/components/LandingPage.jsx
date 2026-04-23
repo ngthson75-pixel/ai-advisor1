@@ -287,12 +287,17 @@ export default function LandingPage({ onLogin }) {
         email: data.user.email,
         name: data.user.full_name || data.user.email.split('@')[0],
         tier: data.user.tier,
+        isVip: data.user.tier === 'vip',          // App.jsx dùng isVip để route VIPDashboard
         token: data.token,
         loginTime: new Date().toISOString()
       }
 
       localStorage.setItem('user', JSON.stringify(userData))
       localStorage.setItem('authToken', data.token)
+      // Lưu thêm vip_token để VIPDashboard.getVipToken() tìm thấy
+      if (data.user.tier === 'vip') {
+        localStorage.setItem('vip_token', data.token)
+      }
 
       if (data.is_first_login) {
         // Lần đầu đăng nhập → bắt đổi mật khẩu
@@ -826,6 +831,7 @@ export default function LandingPage({ onLogin }) {
               </div>
               <h2>{isLogin ? 'Đăng nhập' : 'Đăng ký'}</h2>
               <p style={{color:"#64748b",fontSize:"13px",marginTop:"4px"}}>Đầu tư thông minh với AI</p>
+
             </div>
 
             <form className="auth-form" onSubmit={handleSubmit}>

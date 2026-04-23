@@ -244,9 +244,18 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
         days: Số ngày nhìn lại. 0 hoặc None = không giới hạn (lấy tất cả)
     """
     # Xây dựng date filter clause
+    # Dùng COALESCE(created_at, entry_date::timestamp, NOW()) để xử lý NULL created_at
     # days=0 hoặc days >= 999 → không filter ngày (lấy toàn bộ lịch sử)
     if days and days < 999:
-        date_clause = "AND created_at >= NOW() - (:days * INTERVAL '1 day')"
+        # COALESCE fallback: nếu created_at NULL thì dùng cột date (string 'YYYY-MM-DD')
+        # NULLIF('', '') tránh cast empty string → error
+        date_clause = """
+            AND COALESCE(
+                created_at,
+                NULLIF(date, '')::timestamp,
+                NOW() - INTERVAL '999 days'
+            ) >= NOW() - (:days * INTERVAL '1 day')
+        """
         date_params = {'days': days}
     else:
         date_clause = ""
@@ -263,7 +272,7 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
                       (confidence >= 75)
                   )
                   {date_clause}
-                ORDER BY created_at DESC
+                ORDER BY COALESCE(created_at, NOW() - INTERVAL '999 days') DESC
                 LIMIT 200
             """), {
                 'vn30_list': list(VN30_TICKERS),
@@ -280,7 +289,7 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
                       (confidence >= 75 OR strength >= 75)
                   )
                   {date_clause}
-                ORDER BY created_at DESC
+                ORDER BY COALESCE(created_at, NOW() - INTERVAL '999 days') DESC
                 LIMIT 200
             """), {
                 'vn30_list': list(VN30_TICKERS),
