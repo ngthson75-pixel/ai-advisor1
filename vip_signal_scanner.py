@@ -280,13 +280,13 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
                 **date_params,
             }).fetchall()
         except Exception:
-            # Fallback: bảng signals (production schema)
+            # Fallback: bảng signals (production schema — chỉ có cột strength, không có confidence)
             rows = db_session.execute(text(f"""
                 SELECT * FROM signals
                 WHERE (
-                      (ticker = ANY(:vn30_list) AND (confidence >= :min_conf OR strength >= :min_conf))
+                      (ticker = ANY(:vn30_list) AND strength >= :min_conf)
                       OR
-                      (confidence >= 75 OR strength >= 75)
+                      (strength >= 75)
                   )
                   {date_clause}
                 ORDER BY COALESCE(created_at, NOW() - INTERVAL '999 days') DESC
