@@ -418,11 +418,47 @@ function InlineAIChat({ userId }) {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
+  // ─── Load chat history + inject market summary nếu chưa có lịch sử ───
   useEffect(() => {
-    fetch(`${API_BASE}/chat/history?user_id=${userId}&limit=30`, { headers: authHeaders() })
-      .then(r => r.json())
-      .then(d => { if (d.success && d.messages?.length > 0) { setMessages(d.messages); setExpanded(true) } })
-      .catch(() => {})
+    async function initChat() {
+      // 1. Thử load lịch sử chat
+      try {
+        const r = await fetch(`${API_BASE}/chat/history?user_id=${userId}&limit=30`, { headers: authHeaders() })
+        const d = await r.json()
+        if (d.success && d.messages?.length > 0) {
+          setMessages(d.messages)
+          setExpanded(true)
+          return  // Đã có lịch sử → không inject market summary
+        }
+      } catch {}
+
+      // 2. Chưa có lịch sử → fetch market risk và tạo tin nhắn chào
+      try {
+        const mr = await fetch(`${VIP_API}/api/market-risk`)
+        const md = await mr.json()
+        if (md.success && md.data) {
+          const m = md.data
+          const mode       = m.market_mode || '—'
+          const risk       = m.risk_score ?? '—'
+          const allocation = m.allocation ?? '—'
+          const date       = m.date ? new Date(m.date).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit' }) : ''
+
+          // Màu theo risk score
+          const riskEmoji = risk <= 40 ? '🟢' : risk <= 65 ? '🟡' : '🔴'
+
+          const summary = `Xin chào! Đây là tóm tắt thị trường hôm nay (${date}):
+
+${riskEmoji} Chế độ thị trường: ${mode}
+📊 Điểm rủi ro: ${risk}/100
+💼 Tỷ trọng khuyến nghị: ${allocation}%
+
+Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục hiện tại không?`
+
+          setMessages([{ role: 'assistant', content: summary }])
+        }
+      } catch {}
+    }
+    initChat()
   }, [userId])
 
   async function handleSend(e) {
