@@ -76,34 +76,32 @@ def get_daily_data(ticker, days_back=100):
     Returns:
         DataFrame: Daily OHLCV data
     """
-    try:
-        stock = Vnstock().stock(symbol=ticker, source='TCBS')
-        end_date = datetime.now().strftime('%Y-%m-%d')
-        start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
-        
-        df = stock.quote.history(start=start_date, end=end_date)
-        
-        if df is None or len(df) == 0:
-            print(f"âš ï¸ {ticker}: No data returned from API")
-            return None
-        
-        # Verify required columns exist
-        required_cols = ['open', 'high', 'low', 'close', 'volume']
-        missing_cols = [col for col in required_cols if col not in df.columns]
-        if missing_cols:
-            print(f"âš ï¸ {ticker}: Missing columns: {missing_cols}")
-            print(f"   Available columns: {list(df.columns)}")
-            return None
-        
-        return df
-        
-    except Exception as e:
-        import traceback
-        print(f"âš ï¸ {ticker}: Error getting daily data - {e}")
-        print(f"   Error type: {type(e).__name__}")
-        if hasattr(e, '__traceback__'):
-            traceback.print_exc()
+    df = None
+    for _source in ['VCI', 'KBS']:
+        try:
+            stock = Vnstock().stock(symbol=ticker, source=_source)
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+            df = stock.quote.history(start=start_date, end=end_date)
+            if df is not None and len(df) > 0:
+                break  # Got data, stop trying
+        except Exception as _e:
+            print(f"⚠️ {ticker}: source={_source} failed - {_e}")
+            continue  # Try next source
+
+    if df is None or len(df) == 0:
+        print(f"⚠️ {ticker}: No data returned from any source (VCI, KBS)")
         return None
+
+    # Verify required columns exist
+    required_cols = ['open', 'high', 'low', 'close', 'volume']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        print(f"⚠️ {ticker}: Missing columns: {missing_cols}")
+        print(f"   Available columns: {list(df.columns)}")
+        return None
+
+    return df
 
 
 def get_intraday_4h_data(ticker, days_back=15):
@@ -118,7 +116,7 @@ def get_intraday_4h_data(ticker, days_back=15):
         DataFrame: 4H OHLCV data
     """
     try:
-        stock = Vnstock().stock(symbol=ticker, source='TCBS')
+        stock = Vnstock().stock(symbol=ticker, source='VCI')
         
         # Try to get intraday data
         intraday_df = stock.quote.intraday(symbol=ticker, page_size=200)
@@ -167,7 +165,7 @@ def get_intraday_1h_data(ticker, days_back=10):
         DataFrame: 1H OHLCV data
     """
     try:
-        stock = Vnstock().stock(symbol=ticker, source='TCBS')
+        stock = Vnstock().stock(symbol=ticker, source='VCI')
         
         # Get intraday data
         intraday_df = stock.quote.intraday(symbol=ticker, page_size=200)
