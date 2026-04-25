@@ -264,11 +264,10 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
     try:
         # Thử bảng trading_signals trước, fallback sang signals
         try:
-            _vn30_in = ','.join([f"'{t}'" for t in VN30_TICKERS])
             rows = db_session.execute(text(f"""
                 SELECT * FROM trading_signals
                 WHERE (
-                      (ticker IN ({_vn30_in}) AND confidence >= :min_conf)
+                      (ticker IN ('ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG','MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB','TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE') AND confidence >= :min_conf)
                       OR
                       (confidence >= 75)
                   )
@@ -276,17 +275,16 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
                 ORDER BY COALESCE(created_at, NOW() - INTERVAL '999 days') DESC
                 LIMIT 200
             """), {
-                'min_conf':  VIP_MIN_CONFIDENCE,
+                                'min_conf':  VIP_MIN_CONFIDENCE,
                 **date_params,
             }).fetchall()
         except Exception:
-            # Fallback: bảng signals (production schema — chỉ có cột strength)
-            # Dùng IN thay ANY() vì psycopg3 không hỗ trợ ANY với list param
-            vn30_placeholders = ','.join([f"'{{t}}'" for t in VN30_TICKERS])
-            rows = db_session.execute(text(f"""
+            # Fallback: bảng signals (production schema — chỉ có cột strength, không có confidence)
+            # KHÔNG dùng date filter vì created_at có thể NULL và date là string → cast lỗi
+            rows = db_session.execute(text("""
                 SELECT * FROM signals
                 WHERE (
-                      (ticker IN ({vn30_placeholders}) AND strength >= :min_conf)
+                      (ticker IN ('ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG','MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB','TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE') AND strength >= :min_conf)
                       OR
                       (strength >= 75)
                   )
@@ -295,7 +293,7 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
                     date DESC NULLS LAST
                 LIMIT 200
             """), {
-                'min_conf': VIP_MIN_CONFIDENCE,
+                                'min_conf':  VIP_MIN_CONFIDENCE,
             }).fetchall()
 
         signals = [_signal_to_dict(row) for row in rows]
