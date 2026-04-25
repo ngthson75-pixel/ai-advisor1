@@ -2084,3 +2084,4 @@ if __name__ == '__main__':
     
     # CRITICAL: Bind to 0.0.0.0 and use PORT from environment!
     app.run(debug=False, host='0.0.0.0', port=port)
+# redeploy trigger 2026-04-26
