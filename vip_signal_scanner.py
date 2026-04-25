@@ -264,10 +264,11 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
     try:
         # Thử bảng trading_signals trước, fallback sang signals
         try:
+            _vn30_in = ','.join([f"'{t}'" for t in VN30_TICKERS])
             rows = db_session.execute(text(f"""
                 SELECT * FROM trading_signals
                 WHERE (
-                      (ticker = ANY(:vn30_list) AND confidence >= :min_conf)
+                      (ticker IN ({_vn30_in}) AND confidence >= :min_conf)
                       OR
                       (confidence >= 75)
                   )
@@ -275,17 +276,17 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
                 ORDER BY COALESCE(created_at, NOW() - INTERVAL '999 days') DESC
                 LIMIT 200
             """), {
-                'vn30_list': list(VN30_TICKERS),
                 'min_conf':  VIP_MIN_CONFIDENCE,
                 **date_params,
             }).fetchall()
         except Exception:
-            # Fallback: bảng signals (production schema — chỉ có cột strength, không có confidence)
-            # KHÔNG dùng date filter vì created_at có thể NULL và date là string → cast lỗi
-            rows = db_session.execute(text("""
+            # Fallback: bảng signals (production schema — chỉ có cột strength)
+            # Dùng IN thay ANY() vì psycopg3 không hỗ trợ ANY với list param
+            vn30_placeholders = ','.join([f"'{{t}}'" for t in VN30_TICKERS])
+            rows = db_session.execute(text(f"""
                 SELECT * FROM signals
                 WHERE (
-                      (ticker = ANY(:vn30_list) AND strength >= :min_conf)
+                      (ticker IN ({vn30_placeholders}) AND strength >= :min_conf)
                       OR
                       (strength >= 75)
                   )
@@ -294,8 +295,7 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
                     date DESC NULLS LAST
                 LIMIT 200
             """), {
-                'vn30_list': list(VN30_TICKERS),
-                'min_conf':  VIP_MIN_CONFIDENCE,
+                'min_conf': VIP_MIN_CONFIDENCE,
             }).fetchall()
 
         signals = [_signal_to_dict(row) for row in rows]
@@ -448,13 +448,13 @@ def init_vip_signal_routes(app, engine, Session):
                     SELECT * FROM trading_signals
                     WHERE created_at >= NOW() - (:days * INTERVAL '1 day')
                       AND (
-                          ticker = ANY(:vn30_list)
+                          ticker IN ('ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG','MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB','TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE')
                           OR confidence >= :min_conf
                           OR strength >= :min_conf
                       )
                     ORDER BY created_at DESC
                     LIMIT :lim
-                """), {'days': days, 'vn30_list': list(VN30_TICKERS), 'min_conf': VIP_MIN_CONFIDENCE, 'lim': limit}).fetchall()
+                """), {'days': days, 'min_conf': VIP_MIN_CONFIDENCE, 'lim': limit}).fetchall()
             except Exception:
                 rows = session.execute(text("""
                     SELECT * FROM signals
@@ -545,8 +545,8 @@ def init_vip_signal_routes(app, engine, Session):
                 today_count = session.execute(text("""
                     SELECT COUNT(*) FROM trading_signals
                     WHERE created_at >= CURRENT_DATE
-                      AND (ticker = ANY(:vn30_list) OR confidence >= :min_conf)
-                """), {'vn30_list': list(VN30_TICKERS), 'min_conf': VIP_MIN_CONFIDENCE}).scalar()
+                      AND (ticker IN ('ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG','MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB','TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE') OR strength >= :min_conf)
+                """), {'min_conf': VIP_MIN_CONFIDENCE}).scalar()
             except Exception:
                 today_count = 0
 
