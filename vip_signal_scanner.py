@@ -296,7 +296,7 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
                       (strength >= 75)
                   )
                 ORDER BY
-                    CASE WHEN created_at IS NOT NULL THEN created_at ELSE NULL END DESC NULLS LAST,
+                    CASE WHEN status = 'open' THEN 0 WHEN status = 'partial' THEN 1 ELSE 2 END ASC,
                     date DESC NULLS LAST
                 LIMIT 200
             """), {
