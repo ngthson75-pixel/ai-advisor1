@@ -1007,14 +1007,31 @@ def init_database():
         return False
 
 def save_signals_to_db(signals):
-    """Save signals using SQLAlchemy (works with SQLite and PostgreSQL)"""
+    """Save signals using SQLAlchemy (works with SQLite and PostgreSQL)
+    FIXED: Không xóa signals cũ — chỉ INSERT signals mới, tránh duplicate bằng signal_code
+    """
     try:
         with engine.connect() as conn:
-            # Delete old signals
-            conn.execute(text('DELETE FROM signals'))
-            
-            # Insert new signals
+            inserted = 0
+            skipped  = 0
             for signal in signals:
+                # Kiểm tra đã tồn tại chưa (tránh duplicate theo ticker+date+action)
+                existing = conn.execute(text('''
+                    SELECT id FROM signals
+                    WHERE ticker = :ticker
+                      AND date  = :date
+                      AND action = :action
+                    LIMIT 1
+                '''), {
+                    'ticker': signal.get('ticker'),
+                    'date':   signal.get('date'),
+                    'action': signal.get('action', 'BUY'),
+                }).fetchone()
+
+                if existing:
+                    skipped += 1
+                    continue  # Đã có rồi, bỏ qua
+
                 conn.execute(text('''
                     INSERT INTO signals (
                         ticker, strategy, entry_price, stop_loss, take_profit,
@@ -1037,16 +1054,16 @@ def save_signals_to_db(signals):
                     'date': signal['date'],
                     'action': signal['action']
                 })
-            
+                inserted += 1
+
             conn.commit()
-        
-        logger.info(f"âœ“ Saved {len(signals)} signals")
+
+        logger.info(f"✅ Signals: {inserted} inserted, {skipped} skipped (duplicate)")
         return True
-        
+
     except Exception as e:
         logger.error(f"Save error: {str(e)}")
         return False
-
 def scan_all_stocks():
     """Scan stocks - PRIORITY SIGNALS ONLY"""
     logger.info("=" * 60)
