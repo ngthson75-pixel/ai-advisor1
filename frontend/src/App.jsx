@@ -150,29 +150,31 @@ function App() {
       <nav className="nav-tabs">
         <div className="container">
           <div className="tabs">
-            {/* Basic tabs — hiển thị cho tất cả users kể cả VIP */}
-            <button
-              className={`tab ${activeTab === 'signals' ? 'active' : ''}`}
-              onClick={() => setActiveTab('signals')}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-              </svg>
-              Tín hiệu mua bán
-              <span className="badge">{signals.length}</span>
-            </button>
+            {!user.isVip && (
+              <>
+                <button
+                  className={`tab ${activeTab === 'signals' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('signals')}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                  </svg>
+                  Tín hiệu mua bán
+                  <span className="badge">{signals.length}</span>
+                </button>
 
-            <button
-              className={`tab ${activeTab === 'portfolio' ? 'active' : ''}`}
-              onClick={() => setActiveTab('portfolio')}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-              </svg>
-              Quản trị đầu tư bằng AI
-            </button>
+                <button
+                  className={`tab ${activeTab === 'portfolio' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('portfolio')}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                  </svg>
+                  Quản trị đầu tư bằng AI
+                </button>
+              </>
+            )}
 
-            {/* VIP tab — chỉ hiện với VIP users */}
             {user.isVip && (
               <button
                 className={`tab ${activeTab === 'vip' ? 'active' : ''}`}
@@ -205,7 +207,7 @@ function App() {
 )}
           
           {activeTab === 'portfolio' && <AIPortfolioManager userId={user.email} />}
-          {activeTab === 'vip' && user.isVip && <VIPDashboard user={user} />}
+          {activeTab === 'vip' && user.isVip && <VIPDashboard user={user} onSwitchBasic={() => setActiveTab('signals')} />}
         </div>
       </main>
 
