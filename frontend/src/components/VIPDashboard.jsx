@@ -120,7 +120,6 @@ function SignalCard({ signal }) {
           <span style={{ fontSize: '20px', fontWeight: '800', color: '#fff' }}>{ticker}</span>
           <span style={badge(isBuy ? C.green : C.red)}>{isBuy ? '▲ MUA' : '▼ BÁN'}</span>
           {isVN30 && <span style={badge(C.purpleLight)}>VN30</span>}
-          {signal.strategy_type && <span style={badge('#64748b')}>{signal.strategy_type}</span>}
           {signal.confidence > 0 && (
             <span style={badge(signal.confidence >= 75 ? C.green : C.yellow)}>
               {Math.round(signal.confidence)}%
@@ -138,7 +137,7 @@ function SignalCard({ signal }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px' }}>
         {[
           { label: '📍 Entry', val: fmt(signal.entry_price), color: C.text },
-          { label: '🛑 Stop Loss', val: fmt(signal.stop_loss), color: C.red },
+          { label: '🛑 Stop Loss', val: fmt(signal.stop_loss ? Math.round(signal.stop_loss / 100) * 100 : 0), color: C.red },
           { label: '🎯 Target', val: fmt(signal.take_profit), color: C.green },
         ].map(({ label, val, color }) => (
           <div key={label} style={{ background: '#ffffff06', borderRadius: '8px', padding: '8px 10px', border: '1px solid #ffffff08' }}>
@@ -162,9 +161,11 @@ function SignalCard({ signal }) {
 function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysChange }) {
   const [filter, setFilter] = useState('vn30')
 
-  const vn30Buy = signals.filter(s => VN30_TICKERS.has((s.ticker || s.code || '').toUpperCase()) && (s.action || 'BUY') === 'BUY')
-  const allBuy  = signals.filter(s => (s.action || 'BUY') === 'BUY')
-  const allSell = signals.filter(s => s.action === 'SELL')
+  // Chỉ hiển thị signals đang mở (open/partial) — ẩn đã đóng
+  const isOpen  = s => !s.status || s.status === 'open' || s.status === 'partial'
+  const vn30Buy = signals.filter(s => VN30_TICKERS.has((s.ticker || s.code || '').toUpperCase()) && (s.action || 'BUY') === 'BUY' && isOpen(s))
+  const allBuy  = signals.filter(s => (s.action || 'BUY') === 'BUY' && isOpen(s))
+  const allSell = signals.filter(s => s.action === 'SELL' && isOpen(s))
   const filtered = filter === 'vn30' ? vn30Buy : filter === 'buy' ? allBuy : filter === 'sell' ? allSell : signals
 
   // BUG5 FIX: Hiển thị label date filter rõ ràng
