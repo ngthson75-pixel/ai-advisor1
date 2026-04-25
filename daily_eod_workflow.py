@@ -35,7 +35,16 @@ BREADTH_FILE = os.path.join(SCRIPT_DIR, 'market_breadth_eod.json')
 MARKET_RISK_FILE = os.path.join(SCRIPT_DIR, 'market_risk_latest.json')
 
 # Production API
-PROD_API = 'https://ai-advisor1-backend.onrender.com'
+PROD_API          = 'https://ai-advisor1-backend.onrender.com'
+SIGNAL_DB_PATH    = os.path.join(SCRIPT_DIR, 'signals.db')
+VIP_MIN_SCORE     = 65   # Score tối thiểu để push lên VIP Dashboard
+
+# VN30 tickers (30 mã bluechip)
+VN30_TICKERS = {
+    'ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG',
+    'MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB',
+    'TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE',
+}
 
 # ========================================================================
 # MAIN WORKFLOW
@@ -154,19 +163,110 @@ def main():
     except Exception as e:
         print(f"   ❌ Lỗi: {e}")
     
+    # ── BƯỚC 4: Preview VIP Signals ──
+    print("\n" + "─" * 50)
+    print("💎 BƯỚC 4/5: Preview VIP Signals từ local DB...")
+    print("─" * 50)
+
+    import sqlite3
+    vip_preview = []
+    try:
+        conn = sqlite3.connect(SIGNAL_DB_PATH)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT * FROM signals WHERE action='BUY' ORDER BY strength DESC, date DESC"
+        ).fetchall()
+        conn.close()
+
+        vn30_signals  = [r for r in rows if r['ticker'] in VN30_TICKERS and (r['strength'] or 0) >= VIP_MIN_SCORE]
+        other_signals = [r for r in rows if r['ticker'] not in VN30_TICKERS and (r['strength'] or 0) >= VIP_MIN_SCORE]
+        vip_preview   = vn30_signals + other_signals
+
+        print(f"   💎 VN30 signals  : {len(vn30_signals)}")
+        print(f"   📊 Non-VN30 score cao: {len(other_signals)}")
+        print(f"   📋 Tổng VIP-eligible: {len(vip_preview)}")
+        print()
+        if vn30_signals:
+            print("   VN30 signals sẽ push:")
+            for r in vn30_signals:
+                rr = round((r['take_profit'] - r['entry_price']) / (r['entry_price'] - r['stop_loss']), 1) \
+                     if r['entry_price'] and r['stop_loss'] and r['entry_price'] > r['stop_loss'] > 0 \
+                     and r['take_profit'] > r['entry_price'] else 0
+                print(f"   💎 {r['ticker']:<6} Score:{r['strength']:.0f}% "
+                      f"Entry:{r['entry_price']:>10,.0f}  R/R:{rr}x  {r['date']}")
+        else:
+            print("   ⚠️  Không có VN30 signals trong local DB hôm nay")
+    except Exception as e:
+        print(f"   ❌ Lỗi đọc signals.db: {e}")
+
+    # ── BƯỚC 5: Push VIP Signals ──
+    print("\n" + "─" * 50)
+    print("💎 BƯỚC 5/5: Push VIP Signals lên Production...")
+    print("─" * 50)
+
+    if not vip_preview:
+        print("   ⚠️  Không có signals đủ tiêu chuẩn VIP — bỏ qua bước này")
+        push_vip = False
+    else:
+        print(f"   Sẽ push {len(vip_preview)} signals lên VIP Dashboard")
+        push_choice = input("\n   Push loại nào?\n   a. Chỉ VN30 ({}) — Khuyến nghị\n   b. Tất cả ({})\n   n. Bỏ qua\n   Chọn (a/b/n): ".format(
+            len(vn30_signals), len(vip_preview))).strip().lower()
+        push_vip = push_choice in ('a', 'b')
+        signals_to_push = vn30_signals if push_choice == 'a' else vip_preview
+
+    if push_vip and signals_to_push:
+        pushed = 0
+        skipped_dup = 0
+        failed = 0
+        for r in signals_to_push:
+            payload = {
+                'ticker':      r['ticker'],
+                'strategy':    r['strategy'] or 'PULLBACK',
+                'entry_price': float(r['entry_price'] or 0),
+                'stop_loss':   float(r['stop_loss']   or 0),
+                'take_profit': float(r['take_profit'] or 0),
+                'risk_reward': float(round(
+                    (r['take_profit'] - r['entry_price']) / (r['entry_price'] - r['stop_loss']), 2
+                )) if r['entry_price'] and r['stop_loss'] and r['entry_price'] > r['stop_loss'] > 0 else 0,
+                'strength':    float(r['strength'] or 0),
+                'stock_type':  r['stock_type'] or 'Mid Cap',
+                'is_priority': 1 if r['ticker'] in VN30_TICKERS else 0,
+                'rsi':         float(r['rsi']) if r['rsi'] else None,
+                'date':        r['date'] or datetime.now().strftime('%Y-%m-%d'),
+                'action':      'BUY',
+            }
+            try:
+                resp = requests.post(f"{PROD_API}/api/signals", json=payload, timeout=15)
+                if resp.status_code == 200 and resp.json().get('success'):
+                    pushed += 1
+                elif resp.status_code == 409:
+                    skipped_dup += 1
+                else:
+                    failed += 1
+                    print(f"   ⚠️  {r['ticker']}: HTTP {resp.status_code}")
+            except Exception as e:
+                failed += 1
+                print(f"   ❌ {r['ticker']}: {e}")
+
+        print(f"   ✅ Đã push: {pushed} | Bỏ qua: {skipped_dup} (dup) | Lỗi: {failed}")
+        if pushed > 0:
+            print("   → VIP Dashboard sẽ hiển thị signals sau khi refresh 🔄")
+    else:
+        print("   ⏭️  Bỏ qua push VIP signals")
+
     # ── TỔNG KẾT ──
     print("\n" + "=" * 70)
     print("📋 TỔNG KẾT")
     print("=" * 70)
-    print(f"   ✅ Scanner: Đã quét 346 mã")
-    print(f"   ✅ Breadth: Đã tạo market_breadth_eod.json")
-    print(f"   ✅ Market Risk: {mode_emoji} {mode_label} (Score: {risk_score})")
-    print(f"   ✅ Production: Đã cập nhật")
+    print(f"   ✅ Bước 1 — Scanner: Đã quét 346 mã")
+    print(f"   ✅ Bước 2 — Breadth: Đã tạo market_breadth_eod.json")
+    print(f"   ✅ Bước 3 — Market Risk: {mode_emoji} {mode_label} (Score: {risk_score})")
+    print(f"   ✅ Bước 4 — VIP Preview: {len(vip_preview)} signals eligible")
+    print(f"   ✅ Bước 5 — VIP Push: {'Đã push' if push_vip else 'Bỏ qua'}")
     print()
-    print("   📌 VIỆC CẦN LÀM:")
-    print("   → Review signals trong signals.db (local)")
-    print("   → Lọc kỹ tín hiệu mua chất lượng")
-    print("   → Upload thủ công lên BUY SIGNAL khi đã sẵn sàng")
+    print("   📌 BƯỚC TIẾP THEO:")
+    print("   → python signal_reviewer.py → option 14: Push BUY signals (public)")
+    print("   → python signal_reviewer.py → option 17: Gửi Telegram VIP")
     print("=" * 70 + "\n")
 
 
