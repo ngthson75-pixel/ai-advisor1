@@ -614,27 +614,7 @@ export default function VIPDashboard({ user, onSwitchBasic }) {
               {lastUpdate && <> · <span style={{ color: C.green }}>●</span> {lastUpdate.toLocaleTimeString('vi-VN')}</>}
             </p>
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-            {onSwitchBasic && (
-              <button
-                onClick={onSwitchBasic}
-                style={{
-                  display:'flex',alignItems:'center',gap:'6px',
-                  background:'transparent',
-                  border:'1px solid #334155',
-                  borderRadius:'8px',padding:'6px 12px',
-                  fontSize:'12px',fontWeight:'600',
-                  color:'#94a3b8',cursor:'pointer',
-                  transition:'all 0.2s',
-                }}
-                onMouseEnter={e => { e.target.style.borderColor='#64748b'; e.target.style.color='#e2e8f0' }}
-                onMouseLeave={e => { e.target.style.borderColor='#334155'; e.target.style.color='#94a3b8' }}
-              >
-                ← Basic Dashboard
-              </button>
-            )}
-            <TelegramBadge />
-          </div>
+          <TelegramBadge />
         </div>
       </div>
 

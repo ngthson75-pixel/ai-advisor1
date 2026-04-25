@@ -176,17 +176,30 @@ function App() {
             )}
 
             {user.isVip && (
-              <button
-                className={`tab ${activeTab === 'vip' ? 'active' : ''}`}
-                onClick={() => setActiveTab('vip')}
-                style={activeTab === 'vip' ? {
-                  background: 'linear-gradient(135deg, #7c3aed22, #a855f722)',
-                  borderBottom: '2px solid #a855f7',
-                  color: '#c084fc',
-                } : { color: '#a855f7' }}
-              >
-                💎 VIP Dashboard
-              </button>
+              <>
+                <button
+                  className={`tab ${activeTab === 'vip' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('vip')}
+                  style={activeTab === 'vip' ? {
+                    background: 'linear-gradient(135deg, #7c3aed22, #a855f722)',
+                    borderBottom: '2px solid #a855f7',
+                    color: '#c084fc',
+                  } : { color: '#a855f7' }}
+                >
+                  💎 VIP Dashboard
+                </button>
+                <button
+                  className={`tab ${activeTab === 'basic' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('basic')}
+                  style={{
+                    color: activeTab === 'basic' ? '#94a3b8' : '#64748b',
+                    fontSize: '13px',
+                    borderBottom: activeTab === 'basic' ? '2px solid #64748b' : 'none',
+                  }}
+                >
+                  📊 Basic Dashboard
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -207,7 +220,13 @@ function App() {
 )}
           
           {activeTab === 'portfolio' && <AIPortfolioManager userId={user.email} />}
-          {activeTab === 'vip' && user.isVip && <VIPDashboard user={user} onSwitchBasic={() => setActiveTab('signals')} />}
+          {activeTab === 'vip' && user.isVip && <VIPDashboard user={user} onSwitchBasic={() => setActiveTab('basic')} />}
+          {activeTab === 'basic' && user.isVip && (
+            <>
+              <SignalHistory />
+              <SignalsModule signals={signals} loading={loading} onRefresh={fetchSignals} />
+            </>
+          )}
         </div>
       </main>
 
