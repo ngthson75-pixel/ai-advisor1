@@ -264,37 +264,25 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
     try:
         # Thử bảng trading_signals trước, fallback sang signals
         try:
-            rows = db_session.execute(text(f"""
-                SELECT * FROM trading_signals
-                WHERE (
-                      (ticker IN ('ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG','MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB','TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE') AND confidence >= :min_conf)
-                      OR
-                      (confidence >= 75)
-                  )
-                  {date_clause}
-                ORDER BY COALESCE(created_at, NOW() - INTERVAL '999 days') DESC
-                LIMIT 200
-            """), {
-                                'min_conf':  VIP_MIN_CONFIDENCE,
-                **date_params,
-            }).fetchall()
+            rows = db_session.execute(text(
+                "SELECT * FROM trading_signals "
+                "WHERE ("
+                "  (ticker IN ('ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG','MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB','TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE') AND confidence >= :min_conf)"
+                " OR (confidence >= 75)"
+                ") ORDER BY COALESCE(created_at, NOW() - INTERVAL '999 days') DESC LIMIT 200"
+            ), {'min_conf': VIP_MIN_CONFIDENCE}).fetchall()
         except Exception:
-            # Fallback: bảng signals (production schema — chỉ có cột strength, không có confidence)
-            # KHÔNG dùng date filter vì created_at có thể NULL và date là string → cast lỗi
-            rows = db_session.execute(text("""
-                SELECT * FROM signals
-                WHERE (
-                      (ticker IN ('ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG','MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB','TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE') AND strength >= :min_conf)
-                      OR
-                      (strength >= 75)
-                  )
-                ORDER BY
-                    CASE WHEN created_at IS NOT NULL THEN created_at ELSE NULL END DESC NULLS LAST,
-                    date DESC NULLS LAST
-                LIMIT 200
-            """), {
-                                'min_conf':  VIP_MIN_CONFIDENCE,
-            }).fetchall()
+            # Fallback: bảng signals (production schema)
+            # VN30 hardcoded trực tiếp trong SQL (không dùng ANY/param để tránh lỗi psycopg3)
+            rows = db_session.execute(text(
+                "SELECT * FROM signals "
+                "WHERE ("
+                "  (ticker IN ('ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG','MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB','TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE') AND strength >= :min_conf)"
+                " OR (strength >= 75)"
+                ") "
+                "ORDER BY CASE WHEN created_at IS NOT NULL THEN created_at ELSE NULL END DESC NULLS LAST, "
+                "date DESC NULLS LAST LIMIT 200"
+            ), {'min_conf': VIP_MIN_CONFIDENCE}).fetchall()
 
         signals = [_signal_to_dict(row) for row in rows]
 
