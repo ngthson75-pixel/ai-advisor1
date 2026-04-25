@@ -281,20 +281,21 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
             }).fetchall()
         except Exception:
             # Fallback: bảng signals (production schema — chỉ có cột strength, không có confidence)
-            rows = db_session.execute(text(f"""
+            # KHÔNG dùng date filter vì created_at có thể NULL và date là string → cast lỗi
+            rows = db_session.execute(text("""
                 SELECT * FROM signals
                 WHERE (
                       (ticker = ANY(:vn30_list) AND strength >= :min_conf)
                       OR
                       (strength >= 75)
                   )
-                  {date_clause}
-                ORDER BY COALESCE(created_at, NOW() - INTERVAL '999 days') DESC
+                ORDER BY
+                    CASE WHEN created_at IS NOT NULL THEN created_at ELSE NULL END DESC NULLS LAST,
+                    date DESC NULLS LAST
                 LIMIT 200
             """), {
                 'vn30_list': list(VN30_TICKERS),
                 'min_conf':  VIP_MIN_CONFIDENCE,
-                **date_params,
             }).fetchall()
 
         signals = [_signal_to_dict(row) for row in rows]
