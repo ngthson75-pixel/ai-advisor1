@@ -161,12 +161,13 @@ function SignalCard({ signal }) {
 function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysChange }) {
   const [filter, setFilter] = useState('vn30')
 
-  // Chỉ hiển thị signals đang mở (open/partial) — ẩn đã đóng
+  // VIP Dashboard chỉ focus VN30 — tất cả filter đều dựa trên VN30
   const isOpen  = s => !s.status || s.status === 'open' || s.status === 'partial'
-  const vn30Buy = signals.filter(s => VN30_TICKERS.has((s.ticker || s.code || '').toUpperCase()) && (s.action || 'BUY') === 'BUY' && isOpen(s))
-  const allBuy  = signals.filter(s => (s.action || 'BUY') === 'BUY' && isOpen(s))
-  const allSell = signals.filter(s => s.action === 'SELL' && isOpen(s))
-  const filtered = filter === 'vn30' ? vn30Buy : filter === 'buy' ? allBuy : filter === 'sell' ? allSell : signals
+  const isVN30  = s => VN30_TICKERS.has((s.ticker || s.code || '').toUpperCase())
+  const vn30Buy = signals.filter(s => isVN30(s) && (s.action || 'BUY') === 'BUY' && isOpen(s))
+  const allBuy  = vn30Buy  // Tất cả MUA = VN30 MUA
+  const allSell = signals.filter(s => isVN30(s) && s.action === 'SELL' && isOpen(s))
+  const filtered = filter === 'vn30' ? vn30Buy : filter === 'buy' ? allBuy : filter === 'sell' ? allSell : [...vn30Buy, ...allSell]
 
   // BUG5 FIX: Hiển thị label date filter rõ ràng
   const dayLabel = days === 999 ? 'Tất cả' : `${days} ngày gần nhất`
@@ -177,7 +178,7 @@ function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysCh
       {/* Stats cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
         {[
-          { label: 'Tổng', val: signals.length, color: C.purpleLight, icon: '📊' },
+          { label: 'VN30 Tổng', val: vn30Buy.length + allSell.length, color: C.purpleLight, icon: '💎' },
           { label: 'VN30 Mua', val: vn30Buy.length, color: '#a78bfa', icon: '💎' },
           { label: 'Tín hiệu MUA', val: allBuy.length, color: C.green, icon: '▲' },
           { label: 'Tín hiệu BÁN', val: allSell.length, color: C.red, icon: '▼' },
@@ -198,7 +199,7 @@ function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysCh
             { key: 'vn30', label: `💎 VN30 (${vn30Buy.length})` },
             { key: 'buy',  label: `▲ Tất cả MUA (${allBuy.length})` },
             { key: 'sell', label: `▼ BÁN (${allSell.length})` },
-            { key: 'all',  label: `📋 Tất cả (${signals.length})` },
+            { key: 'all',  label: `📋 VN30 tất cả (${vn30Buy.length + allSell.length})` },
           ].map(({ key, label }) => (
             <button key={key} onClick={() => setFilter(key)} style={{
               padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '600', border: 'none',
