@@ -2053,6 +2053,80 @@ def fix_orphaned_signals():
         session.close()
 
 
+
+
+# ========================================================================
+# TELEGRAM WEBHOOK — nhận /start từ users, lưu chat_id
+# ========================================================================
+
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
+
+@app.route('/api/telegram/webhook', methods=['POST', 'GET'])
+def telegram_webhook():
+    if request.method == 'GET':
+        return jsonify({'status': 'Telegram webhook active'}), 200
+
+    try:
+        data = request.get_json(silent=True) or {}
+        message = data.get('message', {})
+        if not message:
+            return jsonify({'ok': True}), 200
+
+        chat_id    = str(message.get('chat', {}).get('id', ''))
+        text       = message.get('text', '').strip()
+        first_name = message.get('from', {}).get('first_name', 'bạn')
+
+        if not chat_id:
+            return jsonify({'ok': True}), 200
+
+        def send_reply(msg):
+            if not TELEGRAM_BOT_TOKEN:
+                return
+            try:
+                import requests as req
+                req.post(
+                    f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage',
+                    json={'chat_id': chat_id, 'text': msg, 'parse_mode': 'HTML'},
+                    timeout=10
+                )
+            except Exception as e:
+                logger.error(f'[Telegram] send_reply error: {e}')
+
+        if text.startswith('/start'):
+            session = Session()
+            try:
+                existing = session.query(VIPUser).filter_by(telegram_chat_id=chat_id).first()
+                if existing:
+                    send_reply(
+                        f"👋 Xin chào <b>{existing.full_name or first_name}</b>!\n\n"
+                        f"✅ Tài khoản VIP đã kết nối Telegram.\n"
+                        f"Bạn sẽ nhận tín hiệu tự động từ AI Advisor.\n\n"
+                        f"🌐 ai-advisor.vn"
+                    )
+                else:
+                    send_reply(
+                        f"👋 Xin chào <b>{first_name}</b>! Chào mừng đến với <b>AI Advisor</b> 📊\n\n"
+                        f"📌 <b>Chat ID của bạn là:</b>\n"
+                        f"<code>{chat_id}</code>\n\n"
+                        f"Vui lòng gửi Chat ID này cho admin để kích hoạt nhận tín hiệu VIP.\n\n"
+                        f"🌐 ai-advisor.vn"
+                    )
+            except Exception as e:
+                logger.error(f'[Telegram] webhook DB error: {e}')
+                send_reply(
+                    f"📌 Chat ID của bạn là: <code>{chat_id}</code>\n"
+                    f"Gửi số này cho admin để kích hoạt nhận tín hiệu VIP."
+                )
+            finally:
+                session.close()
+
+        return jsonify({'ok': True}), 200
+
+    except Exception as e:
+        logger.error(f'[Telegram] webhook error: {e}')
+        return jsonify({'ok': True}), 200
+
+
 if __name__ == '__main__':
     # Initialize database
     try:
