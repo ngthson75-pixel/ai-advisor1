@@ -2089,41 +2089,41 @@ def telegram_webhook():
                     json={'chat_id': chat_id, 'text': msg, 'parse_mode': 'HTML'},
                     timeout=10
                 )
-            except Exception as e:
-                logger.error(f'[Telegram] send_reply error: {e}')
+            except Exception as e2:
+                print(f'[Telegram] send_reply error: {e2}')
 
         if text.startswith('/start'):
-            session = Session()
+            # Tìm user trong DB — dùng import động để tránh circular import
+            found_user = None
             try:
-                existing = session.query(VIPUser).filter_by(telegram_chat_id=chat_id).first()
-                if existing:
-                    send_reply(
-                        f"👋 Xin chào <b>{existing.full_name or first_name}</b>!\n\n"
-                        f"✅ Tài khoản VIP đã kết nối Telegram.\n"
-                        f"Bạn sẽ nhận tín hiệu tự động từ AI Advisor.\n\n"
-                        f"🌐 ai-advisor.vn"
-                    )
-                else:
-                    send_reply(
-                        f"👋 Xin chào <b>{first_name}</b>! Chào mừng đến với <b>AI Advisor</b> 📊\n\n"
-                        f"📌 <b>Chat ID của bạn là:</b>\n"
-                        f"<code>{chat_id}</code>\n\n"
-                        f"Vui lòng gửi Chat ID này cho admin để kích hoạt nhận tín hiệu VIP.\n\n"
-                        f"🌐 ai-advisor.vn"
-                    )
-            except Exception as e:
-                logger.error(f'[Telegram] webhook DB error: {e}')
+                if _has_vip:
+                    from vip_auth import VIPUser as _VIPUser
+                    _session = Session()
+                    found_user = _session.query(_VIPUser).filter_by(telegram_chat_id=chat_id).first()
+                    _session.close()
+            except Exception as e3:
+                print(f'[Telegram] DB lookup error: {e3}')
+
+            if found_user:
                 send_reply(
-                    f"📌 Chat ID của bạn là: <code>{chat_id}</code>\n"
-                    f"Gửi số này cho admin để kích hoạt nhận tín hiệu VIP."
+                    f"\U0001F44B Xin chao <b>{found_user.full_name or first_name}</b>!\n\n"
+                    f"\u2705 Tai khoan VIP da ket noi Telegram.\n"
+                    f"Ban se nhan tin hieu tu dong tu AI Advisor.\n\n"
+                    f"\U0001F310 ai-advisor.vn"
                 )
-            finally:
-                session.close()
+            else:
+                send_reply(
+                    f"\U0001F44B Xin chao <b>{first_name}</b>! Chao mung den voi <b>AI Advisor</b>\n\n"
+                    f"\U0001F4CC <b>Chat ID cua ban la:</b>\n"
+                    f"<code>{chat_id}</code>\n\n"
+                    f"Vui long gui Chat ID nay cho admin de kich hoat nhan tin hieu VIP.\n\n"
+                    f"\U0001F310 ai-advisor.vn"
+                )
 
         return jsonify({'ok': True}), 200
 
     except Exception as e:
-        logger.error(f'[Telegram] webhook error: {e}')
+        print(f'[Telegram] webhook error: {e}')
         return jsonify({'ok': True}), 200
 
 
