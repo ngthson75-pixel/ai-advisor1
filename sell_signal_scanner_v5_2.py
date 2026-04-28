@@ -669,6 +669,43 @@ def check_1h_climax_exit(df_1h):
     return None
 
 
+
+def get_price_from_db(ticker, conn=None):
+    """
+    Fallback: lấy giá gần nhất từ eod_prices table trong DB.
+    Dùng khi vnstock API lỗi để vẫn check SL/TP được.
+    Returns: float price (VND) hoặc None
+    """
+    close_conn = False
+    try:
+        if conn is None:
+            conn = get_db_connection()
+            close_conn = True
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT close_price, trade_date
+            FROM eod_prices
+            WHERE ticker = %s
+            ORDER BY trade_date DESC
+            LIMIT 1
+        """, (ticker,))
+        row = cursor.fetchone()
+        if row:
+            price = float(row[0])
+            trade_date = row[1]
+            print(f"   📦 DB fallback price: {price:,.0f} (date: {trade_date})")
+            return price
+        return None
+    except Exception as e:
+        print(f"   ⚠️ DB price fallback failed: {e}")
+        return None
+    finally:
+        if close_conn and conn:
+            try:
+                conn.close()
+            except:
+                pass
+
 # ============================================================================
 # MAIN SCANNER
 # ============================================================================
@@ -738,10 +775,15 @@ def scan_for_sell_signals():
             df_daily = get_daily_data(ticker, days_back=100)
             
             if df_daily is None or len(df_daily) == 0:
-                print("âš ï¸ No data")
-                continue
-            
-            current_price = df_daily['close'].iloc[-1] * 1000
+                # VCI/KBS failed - try DB fallback for SL/TP check
+                db_price = get_price_from_db(ticker)
+                if db_price is None:
+                    print('⚠️ No data (vnstock + DB fallback failed)')
+                    continue
+                current_price = db_price
+                df_daily = None  # No technical data available
+            else:
+                current_price = df_daily['close'].iloc[-1] * 1000
             pnl_pct = ((current_price - entry_price) / entry_price) * 100
             
             # ========================================
@@ -770,7 +812,7 @@ def scan_for_sell_signals():
             # PRIORITY 2: DAILY CRITICAL EXIT
             # MACD + RSI>80 + Support break â†’ 100%
             # ========================================
-            daily_exit = check_daily_critical_exit(df_daily)
+            daily_exit = check_daily_critical_exit(df_daily) if df_daily is not None else None
             
             if daily_exit:
                 print(f"ðŸš¨ DAILY CRITICAL! RSI={daily_exit['rsi']:.0f}")
