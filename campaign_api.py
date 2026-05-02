@@ -66,9 +66,9 @@ ADMIN_EMAIL   = os.getenv('ADMIN_EMAIL', 'ngthson75@gmail.com')
 FRONTEND_URL  = os.getenv('FRONTEND_URL', 'https://ai-advisor.vn')
 ADMIN_SECRET  = os.getenv('ADMIN_SECRET', 'ai-advisor-admin-2026')
 
-CAMPAIGN_LIMIT = 15
-CAMPAIGN_END   = datetime(2026, 5, 15, 23, 59, 59)
-TRIAL_EXPIRES  = datetime(2026, 4, 30, 23, 59, 59)
+CAMPAIGN_LIMIT = 100
+CAMPAIGN_END   = datetime(2026, 5, 31, 23, 59, 59)
+TRIAL_DAYS     = 15   # Số ngày dùng thử Basic Trial
 SLOT_OFFSET    = int(os.getenv('CAMPAIGN_SLOT_OFFSET', '0'))
 
 # Gmail API config (thay thế SMTP)
@@ -233,7 +233,7 @@ def _email_waiting(reg, position: int):
       <div style="background:#fff;padding:28px;border:1px solid #e0dbd0;border-top:none">
         <p style="font-size:14px;color:#333;line-height:1.7">
           Xin chào <strong>{reg.full_name}</strong>,<br><br>
-          Chương trình Beta 30 người đã <strong>đủ suất</strong>. Bạn đang ở vị trí
+          Chương trình Basic Trial đã <strong>đủ 100 suất</strong>. Bạn đang ở vị trí
           <strong style="color:#c9a84c">#{position}</strong> trong danh sách chờ.
           Chúng tôi sẽ thông báo ngay khi có suất mới mở ra.
         </p>
@@ -283,7 +283,7 @@ def init_campaign_routes(app, engine, Session):
         if '@' not in email:
             return jsonify({'success': False, 'error': 'Email không hợp lệ'}), 400
         if datetime.now() > CAMPAIGN_END:
-            return jsonify({'success': False, 'error': 'Chương trình Beta đã kết thúc ngày 10/04/2026'}), 410
+            return jsonify({'success': False, 'error': 'Chương trình đăng ký đã kết thúc. Vui lòng liên hệ 0938127666.'}), 410
 
         db = Session()
         try:
@@ -322,15 +322,15 @@ def init_campaign_routes(app, engine, Session):
                     if existing_vip:
                         # Đã có rồi → chỉ cập nhật expires + active
                         existing_vip.is_active = True
-                        existing_vip.subscription_expires_at = TRIAL_EXPIRES
-                        existing_vip.notes = f'Beta campaign · Free đến 10/4/2026 · {source}'
+                        existing_vip.tier = 'basic_trial'
+                        existing_vip.notes = f'Basic Trial 15 ngày · Cập nhật {datetime.now().strftime("%d/%m/%Y")} · {source}'
                         logger.info(f'[Campaign] VIPUser đã tồn tại, cập nhật: {email}')
                     else:
                         db.add(VIPUser(
                             email=email, password_hash=password_hash,
                             full_name=full_name, phone=phone,
-                            tier='free', is_active=True,
-                                notes=f'Beta campaign · Free đến 10/4/2026 · {source}',
+                            tier='basic_trial', is_active=True,
+                                notes=f'Basic Trial 15 ngày · Đăng ký {datetime.now().strftime("%d/%m/%Y")} · {source}',
                         ))
                     db.commit()
                 except Exception as e:
@@ -351,7 +351,7 @@ def init_campaign_routes(app, engine, Session):
                     _send_telegram(
                         f"🆕 <b>User mới #{sn}/{CAMPAIGN_LIMIT}</b>\n"
                         f"👤 {r.full_name}  📧 {r.email}  📱 {r.phone}\n"
-                        f"✅ Free đến 10/4"
+                        f"✅ Basic Trial 15 ngày"
                     )
                 threading.Thread(target=_notify_activated, args=(_reg_copy, _pwd_copy, _slot_copy), daemon=True).start()
                 return jsonify({
@@ -440,8 +440,8 @@ def init_campaign_routes(app, engine, Session):
                         email=reg.email,
                         password_hash=hashlib.sha256(temp_pwd.encode()).hexdigest(),
                         full_name=reg.full_name, phone=reg.phone,
-                        tier='free', is_active=True,
-                        notes='Beta campaign (waiting list) · Free đến 10/4/2026',
+                        tier='basic_trial', is_active=True,
+                        notes=f'Basic Trial 15 ngày · Mở từ waiting list · {datetime.now().strftime("%d/%m/%Y")}',
                     ))
                 except Exception as e:
                     logger.error(f'[Campaign] open-slots VIPUser: {e}')
@@ -515,8 +515,8 @@ def init_campaign_routes(app, engine, Session):
                         email=next_w.email,
                         password_hash=hashlib.sha256(temp_pwd.encode()).hexdigest(),
                         full_name=next_w.full_name, phone=next_w.phone,
-                        tier='free', is_active=True,
-                        notes='Beta campaign (auto-fill) · Free đến 10/4/2026',
+                        tier='basic_trial', is_active=True,
+                        notes=f'Basic Trial 15 ngày · Auto-fill · {__import__("datetime").datetime.now().strftime("%d/%m/%Y")}',
                     ))
                 except Exception as e:
                     logger.error(f'[Campaign] auto-fill VIPUser: {e}')

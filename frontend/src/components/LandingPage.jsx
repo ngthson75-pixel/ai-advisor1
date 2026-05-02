@@ -284,12 +284,14 @@ export default function LandingPage({ onLogin }) {
       }
 
       const userData = {
-        email: data.user.email,
-        name: data.user.full_name || data.user.email.split('@')[0],
-        tier: data.user.tier,
-        isVip: data.user.tier === 'vip',          // App.jsx dùng isVip để route VIPDashboard
-        token: data.token,
-        loginTime: new Date().toISOString()
+        email:         data.user.email,
+        name:          data.user.full_name || data.user.email.split('@')[0],
+        tier:          data.user.tier || 'free',
+        isVip:         data.user.tier === 'vip',
+        token:         data.token,
+        loginTime:     new Date().toISOString(),
+        // trial_end_date từ server → App.jsx dùng để auto-downgrade
+        trialEndDate:  data.user.trial_end_date || null,
       }
 
       localStorage.setItem('user', JSON.stringify(userData))
@@ -829,8 +831,28 @@ export default function LandingPage({ onLogin }) {
                 </svg>
                 <span style={{fontWeight:700,fontSize:"18px",background:"linear-gradient(135deg,#3b82f6,#8b5cf6)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>AI Advisor</span>
               </div>
-              <h2>{isLogin ? 'Đăng nhập' : 'Đăng ký'}</h2>
-              <p style={{color:"#64748b",fontSize:"13px",marginTop:"4px"}}>Đầu tư thông minh với AI</p>
+              <h2>{isLogin ? 'Đăng nhập' : 'Dùng thử Basic miễn phí'}</h2>
+              <p style={{color:"#64748b",fontSize:"13px",marginTop:"4px"}}>
+                {isLogin ? 'Đầu tư thông minh với AI' : '15 ngày trải nghiệm đầy đủ — không cần thẻ'}
+              </p>
+              {!isLogin && (
+                <div style={{
+                  margin:'10px 0 0',
+                  padding:'8px 14px',
+                  background:'linear-gradient(90deg,#0a1628,#0d1f3a)',
+                  border:'1px solid #00d4aa44',
+                  borderRadius:'8px',
+                  fontSize:'12px',
+                  color:'#94a3b8',
+                  lineHeight:'1.7',
+                }}>
+                  ✅ Tín hiệu mua/bán real-time &nbsp;•&nbsp; ✅ AI Coach<br/>
+                  ✅ Bản tin hàng ngày &nbsp;•&nbsp; ✅ Analytics đầy đủ<br/>
+                  <span style={{color:'#f59e0b',fontWeight:600}}>
+                    ⏰ Sau 15 ngày tự động chuyển về Free (tín hiệu delay 3 ngày)
+                  </span>
+                </div>
+              )}
 
             </div>
 
@@ -871,7 +893,7 @@ export default function LandingPage({ onLogin }) {
               </div>
 
               <button type="submit" className="btn-submit">
-                {isLogin ? 'Đăng nhập' : 'Tạo tài khoản'}
+                {isLogin ? 'Đăng nhập' : '🚀 Bắt đầu dùng thử 15 ngày miễn phí'}
               </button>
 
               <div className="auth-switch">
@@ -1409,7 +1431,7 @@ function CampaignPopup({ onClose }) {
     finally { setLoading(false) }
   }
 
-  const pct = Math.min(100, (slots.taken / 30) * 100)
+  const pct = Math.min(100, (slots.taken / 100) * 100)
 
   const S = {
     backdrop: { position:'fixed', inset:0, background:'rgba(5,6,8,0.9)', display:'flex', alignItems:'center', justifyContent:'center', padding:16, zIndex:9999, fontFamily:"'Be Vietnam Pro', Arial, sans-serif" },
@@ -1511,7 +1533,7 @@ function CampaignPopup({ onClose }) {
           <div style={S.slotsWrap}>
             <div style={S.slotsHdr}>
               <span style={{fontSize:11,color:'#555a63'}}>Đã đăng ký</span>
-              <span style={{fontSize:11,fontWeight:700,color:'#ef4444'}}>{slots.taken}/30 suất</span>
+              <span style={{fontSize:11,fontWeight:700,color:'#ef4444'}}>{slots.taken}/100 suất</span>
             </div>
             <div style={S.track}><div style={{...S.fill, width:`${pct}%`}}/></div>
           </div>
@@ -1535,13 +1557,13 @@ function CampaignPopup({ onClose }) {
               <span style={S.priceOrig}>199.000đ/tháng</span>
               <span style={{color:'#c9a84c',fontSize:11}}>→</span>
               <span style={S.priceNew}>MIỄN PHÍ</span>
-              <div style={S.priceSub}>Miễn phí đến<br/><strong>hết 10/4/2026</strong></div>
+              <div style={S.priceSub}>Dùng thử 15 ngày<br/><strong>không cần thẻ</strong></div>
             </div>
           </div>
 
           {/* Form */}
           <div style={S.formSec}>
-            <div style={S.secLabel}>Đăng ký ngay</div>
+            <div style={S.secLabel}>Đăng ký dùng thử 15 ngày</div>
             {error && <div style={S.errBox}>⚠ {error}</div>}
             <div style={S.fRow}>
               <label style={S.fLabel}>Họ và tên <span style={{color:'#c9a84c'}}>*</span></label>
@@ -1587,7 +1609,7 @@ function CampaignPopup({ onClose }) {
             <button style={{...S.btn, opacity:loading?0.7:1}} onClick={handleSubmit} disabled={loading}>
               {loading ? 'Đang gửi...' : '✦ ĐĂNG KÝ THAM GIA NGAY'}
             </button>
-            <div style={S.btnSub}>Còn <strong style={{color:'#ef4444'}}>{slots.remaining}</strong> suất · Miễn phí · Không cần thẻ ngân hàng</div>
+            <div style={S.btnSub}>Còn <strong style={{color:'#ef4444'}}>{slots.remaining}</strong> suất · 15 ngày dùng thử miễn phí · Không cần thẻ</div>
           </div>
           <div style={S.footer}>
             <div style={{width:5,height:5,borderRadius:'50%',background:'#1a7a4a',flexShrink:0}}/>
@@ -1601,7 +1623,7 @@ function CampaignPopup({ onClose }) {
             <div style={S.succTitle}>Tài khoản đã sẵn sàng!</div>
             <div style={S.succSub}>Kiểm tra email ngay — mật khẩu tạm đã được gửi đến hòm thư của bạn.</div>
             <div style={S.steps}>
-              {['Mở email từ AI Advisor, lấy mật khẩu tạm (kiểm tra cả spam)','Đăng nhập tại ai-advisor.vn/login → đổi mật khẩu','Tài khoản miễn phí đến hết 10/04/2026 🎉'].map((s,i)=>(
+              {['Mở email từ AI Advisor, lấy mật khẩu tạm (kiểm tra cả spam)','Đăng nhập tại ai-advisor.vn/login → đổi mật khẩu','Bạn có 15 ngày dùng thử Basic miễn phí 🎉 (sau đó tự chuyển về Free)'].map((s,i)=>(
                 <div key={i} style={{...S.stepItem, borderBottom:i<2?'1px solid rgba(255,255,255,0.04)':'none'}}>
                   <div style={S.stepNum}>{i+1}</div><span>{s}</span>
                 </div>

@@ -299,6 +299,11 @@ def init_vip_system(app, engine, Session):
             session.commit()
 
             token = _create_jwt(user.id, user.email)
+            # Tính trial_end_date từ created_at (không cần cột DB mới)
+            _trial_end = None
+            if user.tier == 'basic_trial' and user.created_at:
+                from datetime import timedelta as _td
+                _trial_end = (user.created_at + _td(days=15)).isoformat()
             return jsonify({
                 'success': True,
                 'token': token,
@@ -307,6 +312,7 @@ def init_vip_system(app, engine, Session):
                     'id':              user.id,
                     'email':           user.email,
                     'full_name':       user.full_name,
+                    'trial_end_date':  _trial_end,
                     'tier':            user.tier,
                     'is_push_enabled': user.is_push_enabled,
                 }
