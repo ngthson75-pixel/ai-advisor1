@@ -1499,12 +1499,12 @@ function CampaignPopup({ onClose }) {
 
         {phase === 'form' && (<>
           <div style={S.header}>
-            <div style={S.eyebrow}>✦ Chiến dịch beta · 25/3 – 10/4/2026</div>
-            <h2 style={S.title}>Tham gia <em style={{color:'#c9a84c'}}>30 nhà đầu tư</em><br/>đầu tiên — Miễn phí hoàn toàn</h2>
-            <p style={S.sub}>AI Advisor mở cửa cho đúng <strong style={{color:'#f7f5f0'}}>30 tài khoản mới</strong>. Không mất tiền — chỉ cần cam kết trải nghiệm và phản hồi thực tế.</p>
+            <div style={S.eyebrow}>✦ Chiến dịch beta · Không cần thẻ</div>
+            <h2 style={S.title}>Đăng ký dùng thử <em style={{color:'#c9a84c'}}>Basic 15 ngày</em><br/>miễn phí — không cần thẻ</h2>
+            <p style={S.sub}>Trải nghiệm đầy đủ tính năng Basic trong <strong style={{color:'#f7f5f0'}}>15 ngày đầu tiên</strong>. Sau đó tự động chuyển về Free — không mất phí, không cam kết.</p>
           </div>
 
-          {/* Urgency */}
+          {/* Urgency - Updated */}
           <div style={S.urgBar}>
             <div style={S.urgItem}>
               <div style={S.urgValRed}>{slots.remaining}</div>
@@ -1524,8 +1524,8 @@ function CampaignPopup({ onClose }) {
             </div>
             <div style={S.urgSep}/>
             <div style={S.urgItem}>
-              <div style={S.urgVal}>đến 10/4</div>
-              <div style={S.urgLabel}>Miễn phí</div>
+              <div style={S.urgVal}>15 ngày</div>
+              <div style={S.urgLabel}>Dùng thử</div>
             </div>
           </div>
 
@@ -1556,7 +1556,7 @@ function CampaignPopup({ onClose }) {
             <div style={S.priceRow}>
               <span style={S.priceOrig}>199.000đ/tháng</span>
               <span style={{color:'#c9a84c',fontSize:11}}>→</span>
-              <span style={S.priceNew}>MIỄN PHÍ</span>
+              <span style={S.priceNew}>MIỄN PHÍ 15 NGÀY</span>
               <div style={S.priceSub}>Dùng thử 15 ngày<br/><strong>không cần thẻ</strong></div>
             </div>
           </div>
@@ -1607,7 +1607,7 @@ function CampaignPopup({ onClose }) {
               <span style={S.checkText}>Tôi đồng ý với <span style={{color:'#c9a84c'}}>Điều khoản sử dụng</span> và <span style={{color:'#c9a84c'}}>Chính sách bảo mật</span>. Tôi hiểu AI Advisor là công cụ hỗ trợ, không phải tư vấn đầu tư.</span>
             </label>
             <button style={{...S.btn, opacity:loading?0.7:1}} onClick={handleSubmit} disabled={loading}>
-              {loading ? 'Đang gửi...' : '✦ ĐĂNG KÝ THAM GIA NGAY'}
+              {loading ? 'Đang gửi...' : '✦ BẮT ĐẦU DÙNG THỬ MIỄN PHÍ'}
             </button>
             <div style={S.btnSub}>Còn <strong style={{color:'#ef4444'}}>{slots.remaining}</strong> suất · 15 ngày dùng thử miễn phí · Không cần thẻ</div>
           </div>
