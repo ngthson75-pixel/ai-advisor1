@@ -1378,7 +1378,7 @@ export default function LandingPage({ onLogin }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// CAMPAIGN POPUP — 30 Beta Users · 25/03–10/4/2026
+// CAMPAIGN POPUP — 30 Beta Users · 25/03–15 ngày
 // ─────────────────────────────────────────────────────────────
 function CampaignPopup({ onClose }) {
   const API_URL = window.location.hostname.includes('staging')
