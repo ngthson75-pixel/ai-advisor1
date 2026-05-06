@@ -6,6 +6,7 @@ import AIPortfolioManager from './components/AIPortfolioManager'
 import SignalHistory from './components/SignalHistory'
 import VIPDashboard from './components/VIPDashboard'
 import VIPAdminPanel from './components/VIPAdminPanel'
+import Blog from './components/Blog'
 
 // API Configuration
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
@@ -44,6 +45,7 @@ function trialDaysLeft(user) {
 
 function App() {
   const isAdmin = window.location.pathname === '/admin'
+  const isBlog  = window.location.pathname.startsWith('/blog')
 
   const [user, setUser]             = useState(null)
   const [resolvedTier, setResolvedTier] = useState('free')
@@ -127,6 +129,9 @@ function App() {
     setResolvedTier('free')
     setActiveTab('signals')
   }
+
+  // ── Blog (public, không cần login) ───────────────────────────────────
+  if (isBlog)  return <Blog />
 
   // ── Admin panel ────────────────────────────────────────────────────────
   if (isAdmin) return <VIPAdminPanel />
