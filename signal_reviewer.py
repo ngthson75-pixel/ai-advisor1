@@ -20,31 +20,6 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'signals.db')
 SELL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sell_signals_latest.json')
 MARKET_RISK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'market_risk_latest.json')
 
-# ── Backend URLs ──────────────────────────────────────────────────────────
-BACKEND_PROD    = 'https://ai-advisor1-backend.onrender.com/api'
-BACKEND_STAGING = 'https://ai-advisor1-staging.onrender.com/api'
-
-# ── Admin secret — đọc từ .env nếu có, fallback về giá trị mặc định ──────
-def _load_admin_secret():
-    env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
-    if os.path.exists(env_file):
-        with open(env_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith('ADMIN_SECRET='):
-                    return line.split('=', 1)[1].strip().strip('"').strip("'")
-    return os.getenv('ADMIN_SECRET', 'ai-advisor-admin-2026')
-
-ADMIN_SECRET = _load_admin_secret()
-
-# ── VN30 tickers (30 mã bluechip) ────────────────────────────────
-VN30_TICKERS = {
-    'ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG',
-    'MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB',
-    'TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE',
-}
-VIP_MIN_SCORE = 65  # Score tối thiểu để hiển thị trên VIP dashboard
-
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -661,331 +636,53 @@ def edit_market_risk():
             print(f"  📝 {data.get('description', '')}")
 
 
+
 # ========================================================================
-# VIP TELEGRAM NOTIFICATION
+# PUSH HELPER — dùng chung cho option 13, 14
 # ========================================================================
 
-def push_vip_telegram():
-    """
-    Gửi Telegram tổng hợp tín hiệu đến toàn bộ VIP users.
-    Gọi sau khi đã push BUY signals (option 14) hoặc Market Risk (option 13).
-    """
-    print(f"\n{'='*60}")
-    print("💎 GỬI TELEGRAM VIP")
-    print(f"{'='*60}")
+PROD_API_BASE    = 'https://ai-advisor1-backend.onrender.com'
+STAGING_API_BASE = 'https://ai-advisor1-staging.onrender.com'
 
-    # ── Chọn môi trường ───────────────────────────────────────
-    print("\n  Môi trường:")
-    print("  1. Production")
-    print("  2. Staging (test)")
-    env = input("  Chọn (1/2): ").strip()
-    if env not in ('1', '2'):
-        print("  ❌ Hủy")
+
+def push_with_env_choice(script_name: str, label: str):
+    """
+    Hỏi production hay staging rồi gọi script tương ứng.
+    Truyền --staging flag nếu user chọn staging.
+    """
+    import subprocess
+    import sys
+
+    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), script_name)
+
+    if not os.path.exists(script_path):
+        print(f"\n❌ Không tìm thấy {script_name}")
         return
-    api_url  = BACKEND_PROD if env == '1' else BACKEND_STAGING
-    env_name = 'Production' if env == '1' else 'Staging'
 
-    # ── Chọn loại thông báo ───────────────────────────────────
-    print(f"\n  Loại thông báo ({env_name}):")
-    print("  a. 📈 Tín hiệu MUA hôm nay (từ signals.db)")
-    print("  b. 🛡️  Cập nhật Market Risk (từ market_risk_latest.json)")
-    print("  c. ✏️  Tin nhắn tùy chỉnh")
-    kind = input("  Chọn (a/b/c): ").strip().lower()
+    print(f"\n🚀 Push {label}")
+    print(f"   1. Production  ({PROD_API_BASE})")
+    print(f"   2. Staging     ({STAGING_API_BASE})")
+    env = input("   Chọn (1/2, Enter = Production): ").strip()
 
-    title = ''
-    body  = ''
-
-    # ── Loại A: BUY signals hôm nay ──────────────────────────
-    if kind == 'a':
-        today = datetime.now().strftime('%Y-%m-%d')
-        conn  = get_db_connection()
-        rows  = conn.execute(
-            "SELECT ticker, entry_price, stop_loss, take_profit, strength "
-            "FROM signals WHERE action='BUY' AND date=? ORDER BY strength DESC",
-            (today,)
-        ).fetchall()
-        conn.close()
-
-        if not rows:
-            print(f"  ⚠️  Không có BUY signal nào hôm nay ({today})")
-            alt = input("  Lấy signals ngày khác? Nhập ngày (YYYY-MM-DD) hoặc Enter để hủy: ").strip()
-            if not alt:
-                return
-            conn  = get_db_connection()
-            rows  = conn.execute(
-                "SELECT ticker, entry_price, stop_loss, take_profit, strength "
-                "FROM signals WHERE action='BUY' AND date=? ORDER BY strength DESC",
-                (alt,)
-            ).fetchall()
-            conn.close()
-            today = alt
-            if not rows:
-                print(f"  ❌ Không có signal nào ngày {alt}")
-                return
-
-        date_fmt = datetime.strptime(today, '%Y-%m-%d').strftime('%d/%m/%Y')
-        title = f"[AI ADVISOR] Tín hiệu MUA {date_fmt}"
-
-        lines = [f"📈 <b>Tín hiệu MUA — {date_fmt}</b>\n"]
-        for r in rows:
-            entry = int(r['entry_price']) if r['entry_price'] else 0
-            sl    = int(r['stop_loss'])   if r['stop_loss']   else 0
-            tp    = int(r['take_profit']) if r['take_profit'] else 0
-            score = r['strength'] or 0
-            rr    = round((tp - entry) / (entry - sl), 1) if entry > sl > 0 and tp > entry else 0
-            lines.append(
-                f"🔹 <b>{r['ticker']}</b>  Score: {score:.0f}%\n"
-                f"   Vào: {entry:,}  |  SL: {sl:,}  |  TP: {tp:,}\n"
-                f"   R/R: {rr}x"
-            )
-
-        lines.append("\n⚠️ <i>Đây là tín hiệu hỗ trợ quyết định, không phải khuyến nghị đầu tư.</i>")
-        body = "\n".join(lines)
-
-        print(f"\n  📋 Preview ({len(rows)} tín hiệu):")
-        for r in rows:
-            print(f"     🔹 {r['ticker']} — Entry: {int(r['entry_price'] or 0):,} | Score: {r['strength'] or 0:.0f}%")
-
-    # ── Loại B: Market Risk ───────────────────────────────────
-    elif kind == 'b':
-        if not os.path.exists(MARKET_RISK_FILE):
-            print("  ❌ Chưa có market_risk_latest.json — chạy market_risk_analysis.py trước")
-            return
-
-        with open(MARKET_RISK_FILE, 'r', encoding='utf-8') as f:
-            mr = json.load(f)
-
-        mode_emoji = mr.get('mode_emoji', '🟡')
-        mode_label = mr.get('mode_label', 'THẬN TRỌNG')
-        risk_score = mr.get('risk_score', 0)
-        allocation = mr.get('allocation', 50)
-        description = mr.get('description', '')
-        date_str = mr.get('date', datetime.now().strftime('%Y-%m-%d'))
-        try:
-            date_fmt = datetime.strptime(date_str, '%Y-%m-%d').strftime('%d/%m/%Y')
-        except Exception:
-            date_fmt = date_str
-
-        title = f"[AI ADVISOR] Cập nhật thị trường {date_fmt}"
-        body  = (
-            f"🛡️ <b>Cập nhật Market Risk — {date_fmt}</b>\n\n"
-            f"{mode_emoji} Chế độ thị trường: <b>{mode_label}</b>\n"
-            f"📊 Điểm rủi ro: <b>{risk_score}/100</b>\n"
-            f"💼 Khuyến nghị tỷ trọng CP: <b>{allocation}%</b> (tiền mặt: {100-allocation}%)\n"
-            f"📝 {description}\n\n"
-            f"⚠️ <i>Đây là công cụ hỗ trợ quyết định, không phải khuyến nghị đầu tư.</i>"
-        )
-
-        print(f"\n  📋 Preview:")
-        print(f"  {mode_emoji} {mode_label} | Score: {risk_score}/100 | CP: {allocation}%")
-        print(f"  {description}")
-
-    # ── Loại C: Tùy chỉnh ────────────────────────────────────
-    elif kind == 'c':
-        title = input("  Tiêu đề (VD: Thông báo thị trường hôm nay): ").strip()
-        if not title:
-            print("  ❌ Hủy — tiêu đề không được trống")
-            return
-        print("  Nội dung (nhập xong gõ Enter 2 lần):")
-        lines_input = []
-        while True:
-            line = input()
-            if line == '' and lines_input and lines_input[-1] == '':
-                break
-            lines_input.append(line)
-        body = "\n".join(lines_input).strip()
-        if not body:
-            print("  ❌ Hủy — nội dung không được trống")
-            return
+    if env == '2':
+        env_name = 'STAGING'
+        cmd = [sys.executable, script_path, '--staging']
     else:
-        print("  ❌ Lựa chọn không hợp lệ")
-        return
+        env_name = 'PRODUCTION'
+        cmd = [sys.executable, script_path]
 
-    # ── Xác nhận và gửi ──────────────────────────────────────
-    print(f"\n  {'─'*50}")
-    print(f"  Tiêu đề : {title}")
-    print(f"  Nội dung: {body[:120]}{'...' if len(body) > 120 else ''}")
-    print(f"  Gửi đến : Tất cả VIP users trên {env_name}")
-    print(f"  {'─'*50}")
-
-    confirm = input("\n  Gửi Telegram VIP? (y/n): ").strip().lower()
+    confirm = input(f"   Push {label} lên {env_name}? (y/n): ").strip().lower()
     if confirm != 'y':
-        print("  ⏹️ Hủy")
+        print("   ⏹️ Đã hủy.")
         return
 
-    # ── Gọi API broadcast ─────────────────────────────────────
-    try:
-        resp = requests.post(
-            f"{api_url}/admin/telegram/broadcast",
-            headers={'X-Admin-Key': ADMIN_SECRET},
-            data={'title': title, 'body': body},
-            timeout=30,
-        )
-        if resp.status_code == 200:
-            result = resp.json()
-            sent    = result.get('sent', 0)
-            failed  = result.get('failed', 0)
-            skipped = result.get('skipped', 0)
-            print(f"\n  ✅ Gửi thành công!")
-            print(f"     Đã gửi : {sent} users")
-            if failed:
-                print(f"     Thất bại: {failed} users")
-            if skipped:
-                print(f"     Bỏ qua  : {skipped} users (chưa có chat_id)")
-        else:
-            print(f"\n  ❌ Lỗi HTTP {resp.status_code}: {resp.text[:200]}")
-    except requests.exceptions.ConnectionError:
-        print(f"\n  ❌ Không kết nối được {env_name} backend — kiểm tra Render đang chạy không")
-    except requests.exceptions.Timeout:
-        print(f"\n  ❌ Timeout — backend mất quá 30 giây")
-    except Exception as e:
-        print(f"\n  ❌ Lỗi: {e}")
+    print(f"   Đang push lên {env_name}...")
+    result = subprocess.run(cmd, cwd=os.path.dirname(os.path.abspath(__file__)))
+    if result.returncode == 0:
+        print(f"   ✅ Push {label} lên {env_name} xong!")
+    else:
+        print(f"   ⚠️ Script kết thúc với returncode={result.returncode}")
 
-
-
-# ========================================================================
-# VIP SIGNAL FUNCTIONS
-# ========================================================================
-
-def view_vip_signals():
-    """
-    Option 18: Preview tín hiệu VIP — hiển thị tín hiệu BUY từ local DB
-    đủ tiêu chuẩn VIP (VN30 + score >= VIP_MIN_SCORE)
-    """
-    conn = get_db_connection()
-    rows = conn.execute(
-        "SELECT * FROM signals WHERE action='BUY' ORDER BY strength DESC, date DESC"
-    ).fetchall()
-    conn.close()
-
-    vn30_rows  = [r for r in rows if r['ticker'] in VN30_TICKERS and (r['strength'] or 0) >= VIP_MIN_SCORE]
-    other_rows = [r for r in rows if r['ticker'] not in VN30_TICKERS and (r['strength'] or 0) >= VIP_MIN_SCORE]
-
-    print(f"\n{'='*65}")
-    print("💎 VIP SIGNALS PREVIEW (từ local signals.db)")
-    print(f"   Tiêu chuẩn: VN30 hoặc Score >= {VIP_MIN_SCORE}%")
-    print(f"{'='*65}")
-
-    print(f"\n{'─'*65}")
-    print(f"  💎 VN30 BLUECHIP ({len(vn30_rows)} signals):")
-    print(f"  {'Mã':<8} {'Score':>6} {'Entry':>10} {'SL':>10} {'TP':>10}  {'Ngày':<12}")
-    print(f"{'─'*65}")
-    for r in vn30_rows:
-        print(f"  {r['ticker']:<8} {(r['strength'] or 0):>5.0f}% {(r['entry_price'] or 0):>10,.0f} "
-              f"{(r['stop_loss'] or 0):>10,.0f} {(r['take_profit'] or 0):>10,.0f}  {r['date'] or '—':<12}")
-
-    if other_rows:
-        print(f"\n{'─'*65}")
-        print(f"  📊 Non-VN30 score cao ({len(other_rows)} signals):")
-        print(f"  {'Mã':<8} {'Score':>6} {'Entry':>10} {'SL':>10} {'TP':>10}  {'Ngày':<12}")
-        print(f"{'─'*65}")
-        for r in other_rows[:10]:
-            print(f"  {r['ticker']:<8} {(r['strength'] or 0):>5.0f}% {(r['entry_price'] or 0):>10,.0f} "
-                  f"{(r['stop_loss'] or 0):>10,.0f} {(r['take_profit'] or 0):>10,.0f}  {r['date'] or '—':<12}")
-
-    print(f"\n  Tổng VIP-eligible: {len(vn30_rows)+len(other_rows)} signals "
-          f"({len(vn30_rows)} VN30 + {len(other_rows)} non-VN30)")
-
-    return vn30_rows, other_rows
-
-
-def push_vip_signals_to_dashboard():
-    """
-    Option 19: Push VIP signals lên Production VIP Dashboard.
-    Đọc từ local signals.db → lọc VN30 + score >= VIP_MIN_SCORE
-    → POST lên /api/signals production (cùng endpoint với option 14)
-    → VIP scanner sẽ tự lọc khi user vào VIP Dashboard
-    """
-    print(f"\n{'='*60}")
-    print("💎 PUSH VIP SIGNALS LÊN PRODUCTION")
-    print(f"{'='*60}")
-
-    # Preview trước
-    vn30_rows, other_rows = view_vip_signals()
-    all_vip = vn30_rows + other_rows
-
-    if not all_vip:
-        print("\n  ⚠️  Không có signal nào đủ tiêu chuẩn VIP trong local DB")
-        print("  Hãy chạy scanner trước hoặc thêm signal thủ công (option 10)")
-        return
-
-    # Chọn loại push
-    print(f"\n  Push loại nào?")
-    print(f"  a. Chỉ VN30 ({len(vn30_rows)} signals) — Khuyến nghị")
-    print(f"  b. Tất cả VIP-eligible ({len(all_vip)} signals)")
-    kind = input("  Chọn (a/b): ").strip().lower()
-    if kind not in ('a', 'b'):
-        print("  ❌ Hủy")
-        return
-    signals_to_push = vn30_rows if kind == 'a' else all_vip
-
-    # Chọn môi trường
-    print(f"\n  Môi trường:")
-    print(f"  1. Production (ai-advisor.vn)")
-    print(f"  2. Staging (test)")
-    env = input("  Chọn (1/2): ").strip()
-    if env not in ('1', '2'):
-        print("  ❌ Hủy")
-        return
-    api_url  = BACKEND_PROD if env == '1' else BACKEND_STAGING
-    env_name = 'Production' if env == '1' else 'Staging'
-
-    print(f"\n  Sẽ push {len(signals_to_push)} signals lên {env_name}:")
-    for r in signals_to_push:
-        rr = round((r['take_profit'] - r['entry_price']) / (r['entry_price'] - r['stop_loss']), 1) \
-             if r['entry_price'] and r['stop_loss'] and r['entry_price'] > r['stop_loss'] > 0 and r['take_profit'] > r['entry_price'] else 0
-        vn30_tag = ' 💎' if r['ticker'] in VN30_TICKERS else ''
-        print(f"    {r['ticker']}{vn30_tag} | Score: {r['strength']:.0f}% | "
-              f"Entry: {r['entry_price']:,.0f} | R/R: {rr}x | {r['date']}")
-
-    confirm = input(f"\n  Xác nhận push {len(signals_to_push)} signals lên {env_name}? (y/n): ").strip().lower()
-    if confirm != 'y':
-        print("  ⏹️  Hủy")
-        return
-
-    # Push
-    print(f"\n  Đang push...")
-    success = 0
-    failed  = 0
-    skipped = 0
-
-    for r in signals_to_push:
-        payload = {
-            'ticker':      r['ticker'],
-            'strategy':    r['strategy'] or 'PULLBACK',
-            'entry_price': float(r['entry_price'] or 0),
-            'stop_loss':   float(r['stop_loss']   or 0),
-            'take_profit': float(r['take_profit'] or 0),
-            'risk_reward': float(round(
-                (r['take_profit'] - r['entry_price']) / (r['entry_price'] - r['stop_loss']), 2
-            )) if r['entry_price'] and r['stop_loss'] and r['entry_price'] > r['stop_loss'] > 0 else 0,
-            'strength':    float(r['strength'] or 0),
-            'stock_type':  r['stock_type'] or 'Mid Cap',
-            'is_priority': 1 if r['ticker'] in VN30_TICKERS else 0,
-            'rsi':         float(r['rsi']) if r['rsi'] else None,
-            'date':        r['date'] or datetime.now().strftime('%Y-%m-%d'),
-            'action':      'BUY',
-        }
-        try:
-            resp = requests.post(f"{api_url}/signals", json=payload, timeout=15)
-            if resp.status_code == 200 and resp.json().get('success'):
-                success += 1
-                print(f"    ✅ {r['ticker']}")
-            elif resp.status_code == 409:
-                skipped += 1
-                print(f"    ⏭️  {r['ticker']} (đã có)")
-            else:
-                failed += 1
-                print(f"    ❌ {r['ticker']}: HTTP {resp.status_code}")
-        except Exception as e:
-            failed += 1
-            print(f"    ❌ {r['ticker']}: {e}")
-
-    print(f"\n  {'─'*40}")
-    print(f"  ✅ Thành công : {success}")
-    print(f"  ⏭️  Bỏ qua    : {skipped} (đã có)")
-    print(f"  ❌ Thất bại  : {failed}")
-    print(f"\n  → Vào VIP Dashboard → click 🔄 để xem tín hiệu mới")
 
 # ========================================================================
 # MAIN MENU
@@ -1017,21 +714,15 @@ def main():
         print("  11. 📉 Sửa SELL signals (xóa/sửa reason)")
         print("  12. 🛡️ Sửa Market Risk (mode/score/tỷ trọng)")
         print()
-        print("  PUSH LÊN WEBSITE:")
+        print("  PUSH LÊN SERVER (chọn Production / Staging):")
         print("  13. 🚀 Push Market Risk")
         print("  14. 🚀 Push BUY signals")
         print("  15. 🚀 Push SELL signals")
-        print("  16. ➕ Thêm SELL signal thủ công")
-        print()
-        print("  VIP:")
-        print("  17. 💎 Gửi Telegram VIP (BUY signals / Market Risk / Tùy chỉnh)")
-        print("  18. 🔍 Xem VIP signals (preview)")
-        print("  19. 💎 Push VIP signals lên VIP Dashboard")
         print()
         print("  0. Thoát")
         print()
-
-        choice = input("Chọn (0-19): ").strip()
+        
+        choice = input("Chọn (0-15): ").strip()
         
         if choice == '0':
             print("\n👋 Bye!")
@@ -1089,21 +780,11 @@ def main():
         elif choice == '12':
             edit_market_risk()
         elif choice == '13':
-            print("\n🚀 Push Market Risk...")
-            os.system(f'python "{os.path.join(os.path.dirname(os.path.abspath(__file__)), "push_market_risk.py")}"')
+            push_with_env_choice('push_market_risk.py', 'Market Risk')
         elif choice == '14':
-            print("\n🚀 Push BUY signals...")
-            os.system(f'python "{os.path.join(os.path.dirname(os.path.abspath(__file__)), "push_local_signals.py")}"')
+            push_with_env_choice('push_local_signals.py', 'BUY signals')
         elif choice == '15':
             push_sell_signals_to_production()
-        elif choice == '16':
-            add_sell_signal_manual()
-        elif choice == '17':
-            push_vip_telegram()
-        elif choice == '18':
-            view_vip_signals()
-        elif choice == '19':
-            push_vip_signals_to_dashboard()
         else:
             print("❌ Lựa chọn không hợp lệ")
 
