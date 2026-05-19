@@ -3,6 +3,13 @@ import { TrendingUp, AlertCircle, RefreshCw } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api';
 
+// VN30 tickers — dành riêng cho VIP Dashboard, ẩn khỏi Basic
+const VN30_TICKERS = new Set([
+  'ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG',
+  'MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB',
+  'TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE',
+]);
+
 export default function SignalsModule() {
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +59,7 @@ export default function SignalsModule() {
 
   // Filter signals by tab
   const buySignals = signals
-    .filter(s => s.action === 'BUY' || !s.action)
+    .filter(s => (s.action === 'BUY' || !s.action) && !VN30_TICKERS.has((s.ticker || s.code || '').toUpperCase()))
     .sort((a, b) => {
       // Open/partial signals first, closed last
       const statusOrder = { open: 0, partial: 1, closed: 2 };
