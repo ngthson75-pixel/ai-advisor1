@@ -78,18 +78,17 @@ WATCHLIST_172 = [
 
     # â”€â”€ TIER 3: Mid Cap HOSE cháº¥t lÆ°á»£ng (48 mÃ£) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # avg volume 300kâ€“1M cp/ngÃ y, cÆ¡ báº£n tá»‘t
-    'TNG', 'KSB', 'MSH', 'SBT', 'VCG', 'CTR', 'SZC', 'PHR', 'GEG', 'PTB',
-    'HAX', 'FMC', 'CSV', 'TCM', 'CMG', 'PAN', 'SGN', 'NTL', 'GIL', 'VFC',
-    'IDI', 'AAA', 'TLH', 'HBC', 'VPG', 'CRE', 'CSM', 'ASM', 'HHS', 'PDC',
-    'PAC', 'TAL', 'KOS', 'SIP', 'ORS', 'CMX', 'NBB', 'SMC', 'DCL', 'QCG',
-    'SJS', 'NAF', 'HAG', 'NHA', 'EVF', 'VHG', 'HAP', 'ASG',
+    'TNG', 'KSB', 'SBT', 'VCG', 'CTR', 'SZC', 'PHR', 'GEG', 'PTB', 'HAG', 
+    'HAX', 'CSV', 'TCM', 'CMG', 'PAN', 'NTL', 'GIL', 'EVF', 'NHA', 'NAF', 
+    'IDI', 'AAA', 'TLH', 'HBC', 'VPG', 'CRE', 'CSM', 'ASM', 'HHS', 'QCG',
+    'PAC', 'TAL', 'KOS', 'SIP', 'ORS', 'SMC', 'DCL', 
+    
 
     # â”€â”€ TIER 4: HNX thanh khoáº£n cao (39 mÃ£) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # avg volume > 200k cp/ngÃ y trÃªn HNX
     'SHS', 'MBS', 'VFS', 'CEO', 'NVB', 'VCS', 'HUT', 'NDN', 'PLC', 'EVS',
-    'PSI', 'VC3', 'BVS', 'BAB', 'TIG', 'APS', 'IPA', 'DXP', 'TVS', 'LIG',
-    'VHE', 'VC7', 'DTT', 'KSV', 'HLD', 'OCH', 'PVI', 'MIG', 'PGB', 'DHT',
-    'API', 'NRC', 'MBG', 'SJE', 'INN', 'NAG', 'SD9', 'AMV', 'IDJ',
+    'PSI', 'VC3', 'BVS', 'BAB', 'TIG', 'APS', 'IPA', 'DXP', 'API', 'IDJ',
+    'VC7', 'MIG', 'PGB', 'NRC', 'NAG', 
 ]
 
 # DÃ¹ng WATCHLIST_172 cho scanner
