@@ -1,0 +1,81 @@
+{
+  "current_mode": "SIDEWAYS",
+  "mode_confirmed_date": null,
+  "days_in_mode": 8,
+  "pending_mode": null,
+  "pending_days": 0,
+  "daily_scores": [
+    {
+      "date": "2026-04-16",
+      "raw_score": 28,
+      "components": {
+        "vn30_trend": 44,
+        "liquidity": 50,
+        "advance_decline": 85,
+        "above_ma20": 15,
+        "base_score": 48,
+        "risk_adj": -20
+      }
+    },
+    {
+      "date": "2026-04-17",
+      "raw_score": 39,
+      "components": {
+        "vn30_trend": 42,
+        "liquidity": 50,
+        "advance_decline": 50,
+        "above_ma20": 15,
+        "base_score": 39,
+        "risk_adj": 0
+      }
+    },
+    {
+      "date": "2026-04-20",
+      "raw_score": 39,
+      "components": {
+        "vn30_trend": 42,
+        "liquidity": 50,
+        "advance_decline": 50,
+        "above_ma20": 15,
+        "base_score": 39,
+        "risk_adj": 0
+      }
+    },
+    {
+      "date": "2026-04-21",
+      "raw_score": 53,
+      "components": {
+        "vn30_trend": 31,
+        "liquidity": 50,
+        "advance_decline": 85,
+        "above_ma20": 50,
+        "base_score": 53,
+        "risk_adj": 0
+      }
+    },
+    {
+      "date": "2026-04-22",
+      "raw_score": 56,
+      "components": {
+        "vn30_trend": 24,
+        "liquidity": 50,
+        "advance_decline": 85,
+        "above_ma20": 70,
+        "base_score": 56,
+        "risk_adj": 0
+      }
+    },
+    {
+      "date": "2026-04-23",
+      "raw_score": 56,
+      "components": {
+        "vn30_trend": 24,
+        "liquidity": 50,
+        "advance_decline": 85,
+        "above_ma20": 70,
+        "base_score": 56,
+        "risk_adj": 0
+      }
+    }
+  ]
+}

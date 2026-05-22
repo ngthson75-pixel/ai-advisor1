@@ -1,0 +1,36 @@
+
+============================================================
+campaign_api.py
+============================================================
+  ❌ [1B register tier] Không khớp
+  ❌ [1C existing vip] Không khớp
+  ❌ [1D telegram] Không khớp
+  ✅ [1E open-slots notes]
+  ✅ [1F email template]
+  ❌ [1G open-slots tier] Không khớp
+
+============================================================
+vip_auth.py
+============================================================
+  ✅ [2A trial_end_date]
+
+============================================================
+LandingPage.jsx
+============================================================
+  ✅ [3E pct calc]
+  ❌ [3D form label] Không khớp
+  ✅ [3B price (check)]
+  ❌ [3B price display] Không khớp
+  ❌ [3F btnSub text] Không khớp
+
+============================================================
+Kết quả: 5/12 OK  |  7 thất bại
+
+⚠️  Patches thất bại:
+   • 1B register tier
+   • 1C existing vip
+   • 1D telegram
+   • 1G open-slots tier
+   • 3D form label
+   • 3B price display
+   • 3F btnSub text

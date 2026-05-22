@@ -1,0 +1,67 @@
+name: Hourly Sell Signal Scanner v5.3
+
+on:
+  schedule:
+    # Chạy MỖI GIỜ từ 9:30-15:30 VN time (Mon-Fri)
+    # VN time = UTC+7
+    # 9:30 VN = 2:30 UTC
+    # 10:30 VN = 3:30 UTC
+    # 11:30 VN = 4:30 UTC
+    # 12:30 VN = 5:30 UTC (lunch - optional skip)
+    # 13:30 VN = 6:30 UTC
+    # 14:30 VN = 7:30 UTC
+    # 15:30 VN = 8:30 UTC
+    - cron: '30 2,3,4,5,6,7,8 * * 1-5'  # Every hour at :30, Mon-Fri
+  
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  scan-sell-signals:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install vnstock3 psycopg2-binary python-dotenv pandas numpy
+      
+      - name: Run Sell Scanner v5.3
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          CI: 'true'
+          GITHUB_ACTIONS: 'true'
+          PYTHONUNBUFFERED: '1'
+        run: |
+          echo "========================================"
+          echo "🔍 SELL SIGNAL SCANNER v5.3"
+          echo "========================================"
+          echo "UTC Time: $(date '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "VN Time:  $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S VN')"
+          echo ""
+          echo "EXIT CRITERIA:"
+          echo "  1. Daily MACD + RSI>80 + Support → 100%"
+          echo "  2. 4H MACD + Volume div → 50%"
+          echo "  3. 1H Volume Climax → 100%"
+          echo ""
+          
+          python sell_signal_scanner_v5_2.py
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo ""
+          echo "========================================"
+          echo "✅ Scan complete - check logs above"
+          echo "========================================"

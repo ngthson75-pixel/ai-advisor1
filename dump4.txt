@@ -1,0 +1,33 @@
+NOT FOUND: 'CHIẾN DỊCH BETA'
+
+FOUND [Tham gia]:
+"</div>\r\n            <h2 style={S.title}>Tham gia <em style={{color:'#c9a84c'}}>30 nhà đầu tư</em><br/>đầu tiên — Miễn phí hoàn toàn</h2>\r\n            <p style={S.sub}>AI Advisor mở cửa cho đúng <strong style={{color:'#f7f5f0'}}>30 tài khoản"
+
+FOUND [30 nhà đầu tư]:
+">Tham gia <em style={{color:'#c9a84c'}}>30 nhà đầu tư</em><br/>đầu tiên — Miễn phí hoàn toàn</h2>\r\n            <p style={S.sub}>AI Advisor mở cửa cho đúng <strong style={{color:'#f7f5f0'}}>30 tài khoản mới</strong>. Không mất tiền — chỉ cần"
+
+FOUND [Miễn phí hoàn toàn]:
+"4c'}}>30 nhà đầu tư</em><br/>đầu tiên — Miễn phí hoàn toàn</h2>\r\n            <p style={S.sub}>AI Advisor mở cửa cho đúng <strong style={{color:'#f7f5f0'}}>30 tài khoản mới</strong>. Không mất tiền — chỉ cần cam kết trải nghiệm và phản hồi t"
+
+FOUND [AI Advisor mở cửa]:
+"toàn</h2>\r\n            <p style={S.sub}>AI Advisor mở cửa cho đúng <strong style={{color:'#f7f5f0'}}>30 tài khoản mới</strong>. Không mất tiền — chỉ cần cam kết trải nghiệm và phản hồi thực tế.</p>\r\n          </div>\r\n\r\n          {/* Urgency"
+
+FOUND [30 tài khoản mới]:
+" đúng <strong style={{color:'#f7f5f0'}}>30 tài khoản mới</strong>. Không mất tiền — chỉ cần cam kết trải nghiệm và phản hồi thực tế.</p>\r\n          </div>\r\n\r\n          {/* Urgency */}\r\n          <div style={S.urgBar}>\r\n            <div styl"
+
+FOUND [đến 10/4]:
+'}>\r\n              <div style={S.urgVal}>đến 10/4</div>\r\n              <div style={S.urgLabel}>Miễn phí</div>\r\n            </div>\r\n          </div>\r\n\r\n          {/* Slots bar */}\r\n          <div style={S.slotsWrap}>\r\n            <div style={'
+
+NOT FOUND: 'SUẤT CÒN LẠI'
+
+NOT FOUND: 'THỜI GIAN CÒN LẠI'
+
+FOUND [urgLabel]:
+", color:'#c9a84c', lineHeight:1 },\r\n    urgLabel: { fontSize:9, color:'#555a63', textTransform:'uppercase', letterSpacing:'0.5px', marginTop:2 },\r\n    urgSep: { width:1, height:30, background:'rgba(201,168,76,0.18)', flexShrink:0 },\r\n    cd"
+
+NOT FOUND: 'hdrTitle'
+
+NOT FOUND: 'hdrSub'
+
+NOT FOUND: 'headerBadge'
+

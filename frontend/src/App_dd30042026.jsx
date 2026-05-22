@@ -4,11 +4,15 @@ import LandingPage from './components/LandingPage'
 import SignalsModule from './components/SignalsModule'
 import AIPortfolioManager from './components/AIPortfolioManager'
 import SignalHistory from './components/SignalHistory'
+import VIPDashboard from './components/VIPDashboard'
+import VIPAdminPanel from './components/VIPAdminPanel'
 
 // API Configuration
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 
 function App() {
+  const isAdmin = window.location.pathname === '/admin'
+
   const [user, setUser] = useState(null)
   const [activeTab, setActiveTab] = useState('signals')
   const [signals, setSignals] = useState([])
@@ -58,6 +62,8 @@ function App() {
 
   const handleLogin = (userData) => {
     setUser(userData)
+    // VIP users land on VIP dashboard directly
+    if (userData.isVip) setActiveTab('vip')
   }
 
   const handleLogout = () => {
@@ -67,6 +73,11 @@ function App() {
   }
 
   // Show landing page if not logged in
+  // Admin route - show admin panel directly
+  if (isAdmin) {
+    return <VIPAdminPanel />
+  }
+
   if (!user) {
     return <LandingPage onLogin={handleLogin} />
   }
@@ -107,11 +118,24 @@ function App() {
               )}
               
               <div className="user-menu">
-                <div className="user-avatar">
+                <div className="user-avatar" style={user.isVip ? {
+                  background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
+                  boxShadow: '0 0 12px rgba(168,85,247,0.5)'
+                } : {}}>
                   {user.name?.charAt(0).toUpperCase() || 'U'}
                 </div>
                 <div className="user-info">
-                  <div className="user-name">{user.name}</div>
+                  <div className="user-name">
+                    {user.name}
+                    {user.isVip && (
+                      <span style={{
+                        marginLeft: '6px', fontSize: '10px', fontWeight: '700',
+                        background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
+                        color: '#fff', padding: '1px 6px', borderRadius: '4px',
+                        verticalAlign: 'middle',
+                      }}>💎 VIP</span>
+                    )}
+                  </div>
                   <button onClick={handleLogout} className="logout-btn">
                     Đăng xuất
                   </button>
@@ -126,26 +150,57 @@ function App() {
       <nav className="nav-tabs">
         <div className="container">
           <div className="tabs">
-            <button
-              className={`tab ${activeTab === 'signals' ? 'active' : ''}`}
-              onClick={() => setActiveTab('signals')}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-              </svg>
-              Tín hiệu mua bán
-              <span className="badge">{signals.length}</span>
-            </button>
+            {!user.isVip && (
+              <>
+                <button
+                  className={`tab ${activeTab === 'signals' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('signals')}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                  </svg>
+                  Tín hiệu mua bán
+                  <span className="badge">{signals.length}</span>
+                </button>
 
-            <button
-              className={`tab ${activeTab === 'portfolio' ? 'active' : ''}`}
-              onClick={() => setActiveTab('portfolio')}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-              </svg>
-              Quản trị đầu tư bằng AI
-            </button>
+                <button
+                  className={`tab ${activeTab === 'portfolio' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('portfolio')}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                  </svg>
+                  Quản trị đầu tư bằng AI
+                </button>
+              </>
+            )}
+
+            {user.isVip && (
+              <>
+                <button
+                  className={`tab ${activeTab === 'vip' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('vip')}
+                  style={activeTab === 'vip' ? {
+                    background: 'linear-gradient(135deg, #7c3aed22, #a855f722)',
+                    borderBottom: '2px solid #a855f7',
+                    color: '#c084fc',
+                  } : { color: '#a855f7' }}
+                >
+                  💎 VIP Dashboard
+                </button>
+                <button
+                  className={`tab ${activeTab === 'basic' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('basic')}
+                  style={{
+                    color: activeTab === 'basic' ? '#94a3b8' : '#64748b',
+                    fontSize: '13px',
+                    borderBottom: activeTab === 'basic' ? '2px solid #64748b' : 'none',
+                  }}
+                >
+                  📊 Basic Dashboard
+                </button>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -164,7 +219,14 @@ function App() {
   </>
 )}
           
-          {activeTab === 'portfolio' && <AIPortfolioManager user={user} />}
+          {activeTab === 'portfolio' && <AIPortfolioManager userId={user.email} />}
+          {activeTab === 'vip' && user.isVip && <VIPDashboard user={user} onSwitchBasic={() => setActiveTab('basic')} />}
+          {activeTab === 'basic' && user.isVip && (
+            <>
+              <SignalHistory />
+              <SignalsModule signals={signals} loading={loading} onRefresh={fetchSignals} />
+            </>
+          )}
         </div>
       </main>
 

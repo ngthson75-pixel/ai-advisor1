@@ -1,0 +1,44 @@
+============================================================ campaign_api.py
+--- 1B/1C: register new user ---
+FOUND [campaign_register]:
+"campaign_register():\r\n        data = request.get_json() or {}\r\n        full_name  = (data.get('fullName') or '').strip()\r\n        email      = (data.get('email')    or '').strip().lower()\r\n        pho"
+
+--- tier near VIPUser ---
+FOUND [VIPUser(]:
+'VIPUser(\r\n                            email=email, password_hash=password_hash,\r\n                            full_name=full_name, phone=phone,\r\n                            tier=\'basic_trial\', is_active=True,\r\n                                notes=f\'Basic Trial 15 ngày · Đăng ký {datetime.now().strftime("%d/%m/%Y")} · {source}\',\r\n                        ))\r\n                    db.commit()\r\n        '
+
+--- all tier= occurrences ---
+   330: '                            email=email, password_hash=password_hash,\r'
+   331: '                            full_name=full_name, phone=phone,\r'
+   332: "                            tier='basic_trial', is_active=True,\r"
+   333: '                                notes=f\'Basic Trial 15 ngày · Đăng ký {datetime.now().strftime("%d/%m/%Y")} · {source}\',\r'
+   334: '                        ))\r'
+   335: '                    db.commit()\r'
+
+   441: '                        password_hash=hashlib.sha256(temp_pwd.encode()).hexdigest(),\r'
+   442: '                        full_name=reg.full_name, phone=reg.phone,\r'
+   443: "                        tier='free', is_active=True,\r"
+   444: '                        notes=f\'Basic Trial 15 ngày · Mở từ waiting list · {datetime.now().strftime("%d/%m/%Y")}\',\r'
+   445: '                    ))\r'
+   446: '                except Exception as e:\r'
+
+   516: '                        password_hash=hashlib.sha256(temp_pwd.encode()).hexdigest(),\r'
+   517: '                        full_name=next_w.full_name, phone=next_w.phone,\r'
+   518: "                        tier='free', is_active=True,\r"
+   519: "                        notes='Beta campaign (auto-fill) · Free đến 10/4/2026',\r"
+   520: '                    ))\r'
+   521: '                except Exception as e:\r'
+
+--- 1D: telegram msg near Free ---
+FOUND [Free đến 10/4]:
+"Free đến 10/4/2026',\r\n                    ))\r\n                except Exception as e:\r\n                    logger.error(f'[Campaign] auto-fill VIPUser: {e}')\r\n                db.commit()\r\n             "
+
+============================================================ LandingPage.jsx
+--- 3D: secLabel Đăng ký ---
+FOUND [secLabel}>Đ]:
+'secLabel}>Đăng ký dùng thử 15 ngày</div>\r\n            {error && <div style={S.errBox}>⚠ {error}</div'
+
+--- 3F: btnSub actual text ---
+FOUND [btnSub}>]:
+"btnSub}>Còn <strong style={{color:'#ef4444'}}>{slots.remaining}</strong> suất · 15 ngày dùng thử miễn phí · Không cần thẻ</div>\r\n          </div>\r\n          <div style={S.footer}>\r\n            <div st"
+

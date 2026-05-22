@@ -1,34 +1,34 @@
 {
-  "market_mode": "BULL",
+  "market_mode": "SIDEWAYS",
   "mode_label": "THẬN TRỌNG",
   "mode_emoji": "🟡",
   "description": "Thị trường sideway — Chỉ mua khi tín hiệu rõ ràng",
-  "risk_score": 34,
-  "allocation": 60,
+  "risk_score": 51,
+  "allocation": 50,
   "factors": [
     {
       "label": "VN-Index Trend",
       "value": "Uptrend",
       "positive": true,
-      "score": 11
+      "score": 8
     },
     {
       "label": "Thanh khoản",
-      "value": "Tăng 5% vs TB20",
+      "value": "Tăng 7% vs TB20",
       "positive": false,
       "score": 50
     },
     {
       "label": "Số CP tăng/giảm",
-      "value": "60 tăng / 96 giảm",
+      "value": "58 tăng / 95 giảm",
       "positive": false,
       "score": 70
     },
     {
       "label": "CP trên MA20",
-      "value": "66% (111/168)",
-      "positive": true,
-      "score": 15
+      "value": "27% (47/172)",
+      "positive": false,
+      "score": 85
     },
     {
       "label": "Tham khảo: NN",
@@ -38,26 +38,25 @@
     }
   ],
   "raw_scores": {
-    "vnindex_trend": 11,
+    "vnindex_trend": 8,
     "liquidity": 50,
     "advance_decline": 70,
-    "above_ma20": 15
+    "above_ma20": 85
   },
   "vnindex_detail": {
     "trend": "Uptrend",
-    "vnindex": 1880.33,
-    "ema20": 1832.18,
-    "ema50": 1799.56,
-    "ema_diff_pct": 1.81
+    "vnindex": 1896.89,
+    "ema20": 1880.45,
+    "ema50": 1837.22,
+    "ema_diff_pct": 2.35
   },
   "breadth_detail": {
-    "advance": 60,
-    "decline": 96,
-    "total_analyzed": 168,
-    "above_ma20": 111,
-    "above_ma20_pct": 66.1
+    "advance": 58,
+    "decline": 95,
+    "total_analyzed": 172,
+    "above_ma20": 47,
+    "above_ma20_pct": 27.3
   },
-  "analyzed_at": "2026-02-27T15:15:39.445400",
-  "api_calls_used": 1,
-  "mode": "sideways"
+  "analyzed_at": "2026-05-21T16:37:56.420061",
+  "api_calls_used": 1
 }

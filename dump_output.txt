@@ -1,0 +1,48 @@
+============================================================
+campaign_api.py
+============================================================
+  FOUND [CAMPAIGN_LIMIT]:
+", 'ai-advisor-admin-2026')\r\n\r\nCAMPAIGN_LIMIT = 100\r\nCAMPAIGN_END   = datetime(2026, 5, 31, 23, 59, 59)\r\nTRIAL_DAYS     = 15   # Số ngày dùng thử Basic Trial\r\nSLOT_OFFSET    = int(os.getenv('CAMPAIGN_SLOT_OFFSET', '0'))\r\n\r\n# Gmail API config (thay thế SMTP)\r\nGMAIL_SENDER       = os.getenv('SMTP_USER', 'aiadvisorhotline@gmail.com')\r\nGMAIL_CLIENT_ID     = os.getenv('GMAIL_CLIENT_ID', '')\r\nGMAIL_CLIENT_SECRET = os.getenv('GMAIL_CL"
+
+  FOUND [tier='free']:
+'\r\n  2. Tài khoản tạo tự động (tier=\'free\', hết hạn 10/4/2026)\r\n  3. User nhận email có mật khẩu tạm → đăng nhập ngay\r\n  4. Sơn nhận Telegram "User mới #{n}/30"\r\n\r\nFlow (đủ 30 người):\r\n  1. User điền form → status=\'waiting\'\r\n  2. User nhận email "Đang chờ suất"\r\n  3. Sơn nhận Telegram "Waiting list #{n}"\r\n  4. Khi Sơn mở thêm → POST /api/campaign/admin/open-slots\r\n     → Tự động activate + gửi email từng người trong waiting lis'
+
+  FOUND [Beta campaign]:
+'                       notes=\'Beta campaign (waiting list) · Free đến 10/4/2026\',\r\n                    ))\r\n                except Exception as e:\r\n                    logger.error(f\'[Campaign] open-slots VIPUser: {e}\')\r\n                _email_activated(reg, temp_pwd)\r\n                done.append(reg.email)\r\n            db.commit()\r\n            if done:\r\n                _send_telegram(\r\n                    f"✅ <b>Mở {len(done)}'
+
+  FOUND [Free]:
+'eta campaign (waiting list) · Free đến 10/4/2026\',\r\n                    ))\r\n                except Exception as e:\r\n                    logger.error(f\'[Campaign] open-slots VIPUser: {e}\')\r\n                _email_activated(reg, temp_pwd)\r\n                done.append(reg.email)\r\n            db.commit()\r\n            if done:\r\n                _send_telegram(\r\n                    f"✅ <b>Mở {len(done)} suất từ waiting list</b>\\n"\r\n '
+
+  FOUND [Chương trình Beta]:
+'</strong>,<br><br>\r\n          Chương trình Beta 30 người đã <strong>đủ suất</strong>. Bạn đang ở vị trí\r\n          <strong style="color:#c9a84c">#{position}</strong> trong danh sách chờ.\r\n          Chúng tôi sẽ thông báo ngay khi có suất mới mở ra.\r\n        </p>\r\n        <p style="font-size:12px;color:#aaa">Cảm ơn bạn đã quan tâm đến AI Advisor!</p>\r\n      </div>\r\n      <p style="font-size:11px;color:#aaa;margin-top:16px;text-'
+
+============================================================
+vip_auth.py
+============================================================
+  FOUND [_create_jwt(user.id]:
+"mmit()\r\n\r\n            token = _create_jwt(user.id, user.email)\r\n            return jsonify({\r\n                'success': True,\r\n                'token': token,\r\n                'is_first_login': is_first_login,\r\n                'user': {\r\n                    'id':              user.id,\r\n                    'email':           user.email,\r\n                    'full_name':       user.full_name,\r\n                    'tier':       "
+
+  FOUND [is_push_enabled]:
+'      # free / vip / pro\r\n    is_push_enabled = Column(Boolean, default=False)           # Admin bật/tắt\r\n    is_active       = Column(Boolean, default=True)\r\n    notes           = Column(Text)                              # Admin private notes\r\n    telegram_chat_id = Column(String(50))                      # Telegram chat_id để gửi notification\r\n    created_at      = Column(DateTime, default=datetime.now)\r\n    last_login_at  '
+
+============================================================
+LandingPage.jsx
+============================================================
+  FOUND [data.user.tier]:
+")[0],\r\n        tier:          data.user.tier || 'free',\r\n        isVip:         data.user.tier === 'vip',\r\n        token:         data.token,\r\n        loginTime:     new Date().toISOString(),\r\n        // trial_end_date từ server → App.jsx dùng để auto-downgrade\r\n        trialEndDate:  data.user.trial_end_date || null,\r\n      }\r\n\r\n      localStorage.setItem('user', JSON.stringify(userData))\r\n      localStorage.setItem('authToke"
+
+  FOUND [priceOrig]:
+"2, padding:'9px 12px' },\r\n    priceOrig: { fontSize:12, color:'#555', textDecoration:'line-through', textDecorationColor:'#d63c3c' },\r\n    priceNew: { fontSize:18, fontWeight:900, color:'#c9a84c' },\r\n    priceSub: { fontSize:10, color:'#555a63', marginLeft:'auto', textAlign:'right', lineHeight:1.3 },\r\n    formSec: { padding:'0 28px 22px' },\r\n    fRow: { marginBottom:9 },\r\n    fLabel: { display:'block', fontSize:11, fontWeight:"
+
+  FOUND [secLabel}]:
+"}>\r\n            <div style={S.secLabel}>Bạn nhận được gì</div>\r\n            <div style={S.offerGrid}>\r\n              {[\r\n                {icon:'📈',name:'Tín hiệu Mua/Bán',desc:'VN30 blue-chip hàng ngày',hi:true},\r\n                {icon:'🛡️',name:'AI Risk Shield',desc:'Cảnh báo danh mục'},\r\n                {icon:'🧘',name:'AI Coach',desc:'Ngăn FOMO & panic'},\r\n              ].map((c,i)=>(\r\n                <div key={i} style={c.h"
+
+  FOUND [slots.taken]:
+'\n  const pct = Math.min(100, (slots.taken / 30) * 100)\r\n\r\n  const S = {\r\n    backdrop: { position:\'fixed\', inset:0, background:\'rgba(5,6,8,0.9)\', display:\'flex\', alignItems:\'center\', justifyContent:\'center\', padding:16, zIndex:9999, fontFamily:"\'Be Vietnam Pro\', Arial, sans-serif" },\r\n    popup: { position:\'relative\', background:\'#11141a\', border:\'1px solid rgba(201,168,76,0.25)\', borderRadius:4, width:\'100%\', maxWidth:500, ma'
+
+  FOUND [btnSub]:
+"letterSpacing:'0.5px' },\r\n    btnSub: { textAlign:'center', fontSize:10, color:'#555a63', marginTop:7 },\r\n    footer: { padding:'10px 28px 16px', borderTop:'1px solid rgba(255,255,255,0.05)', display:'flex', alignItems:'center', gap:7 },\r\n    footerNote: { fontSize:10, color:'#3d4249', lineHeight:1.5 },\r\n    center: { padding:'40px 28px', textAlign:'center' },\r\n    successIcon: { width:50, height:50, background:'rgba(26,122,74"
+
+  FOUND [Mở email]:
+"={S.steps}>\r\n              {['Mở email từ AI Advisor, lấy mật khẩu tạm (kiểm tra cả spam)','Đăng nhập tại ai-advisor.vn/login → đổi mật khẩu','Bạn có 15 ngày dùng thử Basic miễn phí 🎉 (sau đó tự chuyển về Free)'].map((s,i)=>(\r\n                <div key={i} style={{...S.stepItem, borderBottom:i<2?'1px solid rgba(255,255,255,0.04)':'none'}}>\r\n                  <div style={S.stepNum}>{i+1}</div><span>{s}</span>\r\n                </"
+
