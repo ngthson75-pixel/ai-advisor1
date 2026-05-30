@@ -120,6 +120,7 @@ function SignalCard({ signal }) {
           <span style={{ fontSize: '20px', fontWeight: '800', color: '#fff' }}>{ticker}</span>
           <span style={badge(isBuy ? C.green : C.red)}>{isBuy ? '▲ MUA' : '▼ BÁN'}</span>
           {isVN30 && <span style={badge(C.purpleLight)}>VN30</span>}
+          {signal.strategy_type && <span style={badge('#64748b')}>{signal.strategy_type}</span>}
           {signal.confidence > 0 && (
             <span style={badge(signal.confidence >= 75 ? C.green : C.yellow)}>
               {Math.round(signal.confidence)}%
@@ -137,7 +138,7 @@ function SignalCard({ signal }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px' }}>
         {[
           { label: '📍 Entry', val: fmt(signal.entry_price), color: C.text },
-          { label: '🛑 Stop Loss', val: fmt(signal.stop_loss ? Math.round(signal.stop_loss / 100) * 100 : 0), color: C.red },
+          { label: '🛑 Stop Loss', val: fmt(signal.stop_loss), color: C.red },
           { label: '🎯 Target', val: fmt(signal.take_profit), color: C.green },
         ].map(({ label, val, color }) => (
           <div key={label} style={{ background: '#ffffff06', borderRadius: '8px', padding: '8px 10px', border: '1px solid #ffffff08' }}>
@@ -161,13 +162,26 @@ function SignalCard({ signal }) {
 function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysChange }) {
   const [filter, setFilter] = useState('vn30')
 
-  // VIP Dashboard chỉ focus VN30 — tất cả filter đều dựa trên VN30
+  // isOpen: chỉ hiện signal đang mở hoặc bán 1 phần
   const isOpen  = s => !s.status || s.status === 'open' || s.status === 'partial'
-  const isVN30  = s => VN30_TICKERS.has((s.ticker || s.code || '').toUpperCase())
-  const vn30Buy = signals.filter(s => isVN30(s) && (s.action || 'BUY') === 'BUY' && isOpen(s))
-  const allBuy  = vn30Buy  // Tất cả MUA = VN30 MUA
-  const allSell = signals.filter(s => isVN30(s) && s.action === 'SELL' && isOpen(s))
-  const filtered = filter === 'vn30' ? vn30Buy : filter === 'buy' ? allBuy : filter === 'sell' ? allSell : [...vn30Buy, ...allSell]
+  const isVN30s = s => VN30_TICKERS.has((s.ticker || s.code || '').toUpperCase())
+
+  // Tab VN30: chỉ VN30 đang mở
+  const vn30Buy = signals.filter(s => isVN30s(s) && (s.action || 'BUY') === 'BUY' && isOpen(s))
+
+  // Tab Tất cả MUA: VN30 + non-VN30 score ≥ 80%, đang mở
+  const allBuy  = signals.filter(s =>
+    (s.action || 'BUY') === 'BUY' && isOpen(s) &&
+    (isVN30s(s) || (s.strength || s.confidence || 0) >= 80)
+  )
+
+  // Tab BÁN: VN30 đang mở
+  const allSell = signals.filter(s => s.action === 'SELL' && isOpen(s))
+
+  const filtered = filter === 'vn30' ? vn30Buy
+                 : filter === 'buy'  ? allBuy
+                 : filter === 'sell' ? allSell
+                 : [...allBuy, ...allSell].sort((a,b) => (b.date||'').localeCompare(a.date||''))
 
   // BUG5 FIX: Hiển thị label date filter rõ ràng
   const dayLabel = days === 999 ? 'Tất cả' : `${days} ngày gần nhất`
@@ -178,7 +192,7 @@ function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysCh
       {/* Stats cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
         {[
-          { label: 'VN30 Tổng', val: vn30Buy.length + allSell.length, color: C.purpleLight, icon: '💎' },
+          { label: 'Tổng', val: signals.length, color: C.purpleLight, icon: '📊' },
           { label: 'VN30 Mua', val: vn30Buy.length, color: '#a78bfa', icon: '💎' },
           { label: 'Tín hiệu MUA', val: allBuy.length, color: C.green, icon: '▲' },
           { label: 'Tín hiệu BÁN', val: allSell.length, color: C.red, icon: '▼' },
@@ -199,7 +213,7 @@ function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysCh
             { key: 'vn30', label: `💎 VN30 (${vn30Buy.length})` },
             { key: 'buy',  label: `▲ Tất cả MUA (${allBuy.length})` },
             { key: 'sell', label: `▼ BÁN (${allSell.length})` },
-            { key: 'all',  label: `📋 VN30 tất cả (${vn30Buy.length + allSell.length})` },
+            { key: 'all',  label: `📋 Tất cả (${signals.length})` },
           ].map(({ key, label }) => (
             <button key={key} onClick={() => setFilter(key)} style={{
               padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '600', border: 'none',
