@@ -267,7 +267,7 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
             rows = db_session.execute(text(f"""
                 SELECT * FROM trading_signals
                 WHERE (
-                      (ticker IN ('ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG','MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB','TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE') AND confidence >= :min_conf)
+                      (ticker = ANY(:vn30_list) AND confidence >= :min_conf)
                       OR
                       (confidence >= 75)
                   )
@@ -280,23 +280,17 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
                 **date_params,
             }).fetchall()
         except Exception:
-            # CRITICAL: Rollback transaction bị abort trước khi chạy fallback
-            # PostgreSQL abort toàn bộ transaction khi 1 query fail → phải rollback trước
-            try:
-                db_session.rollback()
-            except Exception:
-                pass
             # Fallback: bảng signals (production schema — chỉ có cột strength, không có confidence)
             # KHÔNG dùng date filter vì created_at có thể NULL và date là string → cast lỗi
             rows = db_session.execute(text("""
                 SELECT * FROM signals
                 WHERE (
-                      (ticker IN ('ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG','MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB','TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE') AND strength >= :min_conf)
+                      (ticker = ANY(:vn30_list) AND strength >= :min_conf)
                       OR
                       (strength >= 75)
                   )
                 ORDER BY
-                    CASE WHEN status = 'open' THEN 0 WHEN status = 'partial' THEN 1 ELSE 2 END ASC,
+                    CASE WHEN created_at IS NOT NULL THEN created_at ELSE NULL END DESC NULLS LAST,
                     date DESC NULLS LAST
                 LIMIT 200
             """), {
@@ -305,6 +299,14 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
             }).fetchall()
 
         signals = [_signal_to_dict(row) for row in rows]
+
+        # ── Dedup: giữ signal có vip_score cao nhất cho mỗi ticker+date+action ──
+        seen = {}
+        for s in signals:
+            key = (s.get('ticker', ''), s.get('date', ''), s.get('action', 'BUY'))
+            if key not in seen or s['vip_score'] > seen[key]['vip_score']:
+                seen[key] = s
+        signals = list(seen.values())
 
         # Sort: VN30 trước, sau đó theo vip_score
         signals.sort(key=lambda s: (
@@ -454,13 +456,13 @@ def init_vip_signal_routes(app, engine, Session):
                     SELECT * FROM trading_signals
                     WHERE created_at >= NOW() - (:days * INTERVAL '1 day')
                       AND (
-                          ticker IN ('ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG','MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB','TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE')
+                          ticker = ANY(:vn30_list)
                           OR confidence >= :min_conf
                           OR strength >= :min_conf
                       )
                     ORDER BY created_at DESC
                     LIMIT :lim
-                """), {'days': days, 'min_conf': VIP_MIN_CONFIDENCE, 'lim': limit}).fetchall()
+                """), {'days': days, 'vn30_list': list(VN30_TICKERS), 'min_conf': VIP_MIN_CONFIDENCE, 'lim': limit}).fetchall()
             except Exception:
                 rows = session.execute(text("""
                     SELECT * FROM signals
@@ -551,8 +553,8 @@ def init_vip_signal_routes(app, engine, Session):
                 today_count = session.execute(text("""
                     SELECT COUNT(*) FROM trading_signals
                     WHERE created_at >= CURRENT_DATE
-                      AND (ticker IN ('ACB','BCM','BID','BVH','CTG','FPT','GAS','GVR','HDB','HPG','MBB','MSN','MWG','PLX','POW','SAB','SHB','SSB','SSI','STB','TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE') OR confidence >= :min_conf)
-                """), {'min_conf': VIP_MIN_CONFIDENCE}).scalar()
+                      AND (ticker = ANY(:vn30_list) OR confidence >= :min_conf)
+                """), {'vn30_list': list(VN30_TICKERS), 'min_conf': VIP_MIN_CONFIDENCE}).scalar()
             except Exception:
                 today_count = 0
 
