@@ -59,6 +59,15 @@ except ImportError:
     _has_sell_api = False
     print('âš ï¸  backend_sell_api not found - using built-in sell routes')
 
+# === IIS Engine (graceful import) ===
+try:
+    from iis_engine import init_iis_routes
+    _has_iis = True
+    print("\u2705 IIS Engine module loaded")
+except ImportError as e:
+    _has_iis = False
+    print(f'\u26a0\ufe0f  IIS Engine not found: {e}')
+
 # ========================================================================
 # FLASK APP INITIALIZATION
 # ========================================================================
@@ -147,6 +156,14 @@ if _has_campaign:
         init_campaign_routes(app, engine, Session)
     except Exception as _camp_err:
         print(f"⚠️  Campaign init error: {_camp_err}")
+
+# === Init IIS Routes ===
+if _has_iis:
+    try:
+        init_iis_routes(app, Session)
+        print("\u2705 IIS routes registered: /api/iis/*")
+    except Exception as _iis_err:
+        print(f"\u26a0\ufe0f  IIS init error: {_iis_err}")
 
 
 # ========================================================================
