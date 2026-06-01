@@ -78,13 +78,13 @@ function App() {
     }
   }, [])
 
-  // ── Fetch signals: truyền ?delay=3 cho Free users ─────────────────────
+  // ── Fetch signals: truyền ?delay=7 cho Free users ─────────────────────
   const fetchSignals = async (tier) => {
     const currentTier = tier || resolvedTier
     try {
       setLoading(true)
       const isFullAccess = ['basic_trial', 'basic', 'vip'].includes(currentTier)
-      const url = isFullAccess ? `${API_URL}/signals` : `${API_URL}/signals?delay=3`
+      const url = isFullAccess ? `${API_URL}/signals` : `${API_URL}/signals?delay=7`
       const response = await fetch(url)
       const data = await response.json()
       if (data.success) {
@@ -172,7 +172,7 @@ function App() {
       fontSize: '13px',
     }}>
       <div>
-        <span style={{color:'#fbbf24', fontWeight:600}}>⏰ Tín hiệu đang hiển thị delay 3 ngày</span>
+        <span style={{color:'#fbbf24', fontWeight:600}}>⏰ Tín hiệu đang hiển thị delay 7 ngày</span>
         <span style={{color:'#94a3b8', marginLeft:'8px'}}>— Nâng lên Basic để xem real-time</span>
       </div>
       <a href="https://ai-advisor.vn" target="_blank" rel="noreferrer" style={{
