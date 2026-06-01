@@ -1,20 +1,31 @@
 /**
- * AI ADVISOR - VIP DASHBOARD v2.1
+ * AI ADVISOR - VIP DASHBOARD v2.2
  * ================================
  * FIXES (2026-03-22):
  *   BUG1 - Gọi đúng /api/vip/signals thay vì /api/signals (public)
  *   BUG4 - VN30 list khớp chính xác 30 tickers trong vip_signal_scanner.py
  *   BUG5 - Thêm date filter (7 / 30 / all ngày) + hiển thị rõ số ngày
  *   MISC - Error state, loading state, và auth token header
+ * FIXES (2026-06-01):
+ *   BUG6 - Production (ai-advisor.vn) fallback về localhost vì VITE_API_URL không set
+ *          → Fix: detect hostname production → hardcode production backend URL
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 
 // ─── Environment Detection ───────────────────────────────────
-const _IS_STAGING = typeof window !== 'undefined' && window.location.hostname.includes('staging')
+const _hostname     = typeof window !== 'undefined' ? window.location.hostname : ''
+const _IS_STAGING   = _hostname.includes('staging')
+const _IS_LOCALHOST = _hostname === 'localhost' || _hostname === '127.0.0.1'
+// Production = ai-advisor.vn hoặc www.ai-advisor.vn (bất kỳ hostname nào không phải staging/localhost)
+const _IS_PRODUCTION = !_IS_STAGING && !_IS_LOCALHOST
+
 const API_BASE = _IS_STAGING
   ? 'https://ai-advisor1-staging.onrender.com/api'
-  : (import.meta.env.VITE_API_URL || 'http://localhost:10000/api')
+  : _IS_PRODUCTION
+    ? 'https://ai-advisor1-backend.onrender.com/api'
+    : (import.meta.env.VITE_API_URL || 'http://localhost:10000/api')
+
 const VIP_API = API_BASE.replace(/\/api\/?$/, '')
 
 // ─── BUG4 FIX: VN30 list khớp chính xác vip_signal_scanner.py ─
