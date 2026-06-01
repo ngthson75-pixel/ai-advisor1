@@ -283,6 +283,11 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
             logger.info(f'[VIP Signals] trading_signals OK, rows={len(rows)}')
         except Exception as e1:
             logger.warning(f'[VIP Signals] trading_signals failed ({e1}), fallback signals table')
+            # CRITICAL: rollback transaction bị aborted trước khi chạy fallback query
+            try:
+                db_session.rollback()
+            except Exception:
+                pass
             # Fallback: bảng signals (production schema — cột strength thay vì confidence)
             # Lấy tất cả BUY VN30 không filter strength để tránh mất data
             rows = db_session.execute(text(f"""
