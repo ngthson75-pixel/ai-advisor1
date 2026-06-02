@@ -112,7 +112,7 @@ function App() {
   }, [user])
 
   // ── Handlers ───────────────────────────────────────────────────────────
-  const handleLogin = (userData) => {
+  const handleLogin = async (userData) => {
     const tier = resolveUserTier(userData)
     // Migrate khách cũ nếu chưa có tier
     if (!userData.tier && !userData.isVip) {
@@ -121,7 +121,16 @@ function App() {
     }
     setUser(userData)
     setResolvedTier(tier)
-    if (userData.isVip) setActiveTab('vip')
+    if (userData.isVip) { setActiveTab('vip'); return }
+
+    // Auto-show IIS test nếu user chưa làm lần nào
+    try {
+      const r = await fetch(`${API_URL}/iis/result/${encodeURIComponent(userData.email)}`)
+      const d = await r.json()
+      if (!d.has_result) setActiveTab('iis')
+    } catch {
+      // Silent fail — không block login
+    }
   }
 
   const handleLogout = () => {

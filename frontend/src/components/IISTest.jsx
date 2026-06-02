@@ -206,7 +206,7 @@ const S = {
     marginTop: '3px', transition: 'all .12s',
     background: sel ? '#3b82f6' : 'transparent',
   }),
-  optText: { fontSize: '13px', color: '#cbd5e1', lineHeight: 1.5 },
+  optText: { fontSize: '15px', color: '#cbd5e1', lineHeight: 1.6 },
   btn: (primary, disabled) => ({
     padding: '9px 20px', borderRadius: '8px', cursor: disabled ? 'not-allowed' : 'pointer',
     fontSize: '13px', fontWeight: 500, border: 'none', transition: 'all .12s',
@@ -268,23 +268,33 @@ export default function IISTest({ userId }) {
     if (cur < 14) { setCur(c => c + 1); return }
     // Last question → submit
     setPhase('submitting')
-    try {
-      const res = await fetch(`${API_URL}/iis/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId || 'guest', answers: ans }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        setResult(data.iis)
-        setPhase('result')
-      } else {
+    // Retry tối đa 2 lần — xử lý Render free tier cold start (~50 giây)
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const res = await fetch(`${API_URL}/iis/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId || 'guest', answers: ans }),
+        })
+        const data = await res.json()
+        if (data.success) {
+          setResult(data.iis)
+          setPhase('result')
+          return
+        }
         setError('Có lỗi xảy ra, vui lòng thử lại.')
         setPhase('test')
+        return
+      } catch {
+        if (attempt === 1) {
+          // Lần 1 fail → thông báo đang kết nối lại, đợi 8 giây
+          setError('Server đang khởi động, tự động thử lại sau 8 giây...')
+          await new Promise(r => setTimeout(r, 8000))
+        } else {
+          setError('Không kết nối được server. Vui lòng bấm "Xem kết quả" lại.')
+          setPhase('test')
+        }
       }
-    } catch {
-      setError('Không kết nối được server. Vui lòng thử lại.')
-      setPhase('test')
     }
   }
 
@@ -384,7 +394,7 @@ export default function IISTest({ userId }) {
       <div style={{ textAlign: 'center', padding: '12px 0 20px' }}>
         <div style={{ fontSize: '11px', fontWeight: 500, color: '#3b82f6', letterSpacing: '.08em', marginBottom: '8px' }}>AI-ADVISOR</div>
         <div style={{ fontSize: '22px', fontWeight: 500, color: '#f1f5f9', marginBottom: '6px' }}>Investor Intelligence Score</div>
-        <div style={{ fontSize: '13px', color: '#64748b', lineHeight: 1.6, marginBottom: '20px' }}>
+        <div style={{ fontSize: '14px', color: '#64748b', lineHeight: 1.7, marginBottom: '20px' }}>
           15 câu hỏi · 5 phút · Kết quả cá nhân hóa<br/>
           Xác định phong cách đầu tư phù hợp nhất với bạn
         </div>
@@ -396,7 +406,7 @@ export default function IISTest({ userId }) {
           <div key={k} style={{ ...S.card, marginBottom: 0 }}>
             <div style={{ padding: '12px', textAlign: 'center' }}>
               <div style={{ fontSize: '11px', fontWeight: 500, color: d.color, marginBottom: '4px' }}>{d.label}</div>
-              <div style={{ fontSize: '11px', color: '#475569' }}>{d.desc}</div>
+              <div style={{ fontSize: '12px', color: '#475569' }}>{d.desc}</div>
               <div style={{ fontSize: '10px', color: '#334155', marginTop: '3px' }}>
                 {k === 'kl' ? 'Q1–Q5' : k === 'pp' ? 'Q6–Q10' : 'Q11–Q15'}
               </div>
@@ -463,8 +473,8 @@ export default function IISTest({ userId }) {
       {/* Question card */}
       <div style={S.card}>
         <div style={S.cardHead}>
-          <div style={{ fontSize: '11px', color: '#475569', marginBottom: '4px', fontWeight: 500 }}>Câu {cur + 1} / 15</div>
-          <div style={{ fontSize: '14px', fontWeight: 500, color: '#e2e8f0', lineHeight: 1.5 }}>{q.text}</div>
+          <div style={{ fontSize: '12px', color: '#475569', marginBottom: '5px', fontWeight: 500 }}>Câu {cur + 1} / 15</div>
+          <div style={{ fontSize: '16px', fontWeight: 500, color: '#e2e8f0', lineHeight: 1.6 }}>{q.text}</div>
         </div>
         <div style={S.cardBody}>
           {q.options.map((o, i) => (
@@ -487,7 +497,7 @@ export default function IISTest({ userId }) {
         <button style={S.btn(false, cur === 0)} onClick={() => cur > 0 && setCur(c => c - 1)} disabled={cur === 0}>
           ← Quay lại
         </button>
-        <span style={{ fontSize: '11px', color: '#475569' }}>
+        <span style={{ fontSize: '12px', color: '#475569' }}>
           {ans[cur] === null ? 'Chọn đáp án để tiếp tục' : ''}
         </span>
         <button
@@ -495,7 +505,7 @@ export default function IISTest({ userId }) {
           onClick={goNext}
           disabled={ans[cur] === null || phase === 'submitting'}
         >
-          {phase === 'submitting' ? 'Đang tính...' : cur === 14 ? 'Xem kết quả →' : 'Tiếp theo →'}
+          {phase === 'submitting' ? 'Đang kết nối...' : cur === 14 ? 'Xem kết quả →' : 'Tiếp theo →'}
         </button>
       </div>
     </div>
@@ -545,7 +555,7 @@ export default function IISTest({ userId }) {
             <div style={{ fontSize: '14px', fontWeight: 500, color: mInfo.color, marginBottom: '3px' }}>
               Phương pháp phù hợp: {mInfo.name}
             </div>
-            <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '12px' }}>
+            <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '12px' }}>
               {mInfo.horizon} · Hold {mInfo.hold}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
