@@ -232,6 +232,73 @@ const S = {
   }),
 }
 
+
+// ── Client-side scoring (mirrors iis_engine.py) ──────────────────────
+function computeScoreLocally(answers) {
+  let kl = 0, kt = 0
+  const mv = { s: 0, m: 0, l: 0 }
+  QUESTIONS.forEach((q, i) => {
+    const opt = q.options[answers[i]]
+    if (!opt) return
+    if (q.dim === 'kl') kl += opt.score || 0
+    if (q.dim === 'kt') kt += opt.score || 0
+    if (q.dim === 'pp' && opt.method) mv[opt.method]++
+  })
+  const kl_score = Math.round(kl / 20 * 100)
+  const kt_score = Math.round(kt / 20 * 100)
+  const total    = Math.round(kl_score * 0.5 + kt_score * 0.5)
+  const level    = LEVELS.find(l => total >= l.min && total <= l.max) || LEVELS[5]
+
+  const sorted = Object.entries(mv).sort((a, b) => b[1] - a[1])
+  const [top, sec] = sorted
+  let method
+  if (top[1] - sec[1] >= 2) {
+    method = { s: 'luot_song', m: 'bat_song', l: 'tich_san' }[top[0]]
+  } else {
+    const combo = [top[0], sec[0]].sort().join('')
+    method = combo === 'ms' ? 'hybrid_sm' : combo === 'lm' ? 'hybrid_ml' : 'hybrid_sm'
+  }
+  const mInfo = METHOD_MAP[method] || METHOD_MAP.bat_song
+  const improve_tips = []
+  if (kl_score < 50) improve_tips.push('Ưu tiên xây kỷ luật: luôn đặt stop loss trước khi mua và hoàn thành pre-trade checklist.')
+  else if (kl_score < 70) improve_tips.push('Kỷ luật đang tốt — tiếp tục duy trì, đặc biệt khi thị trường biến động mạnh.')
+  if (kt_score < 50) improve_tips.push('Nâng kiến thức: học cách tính Risk-Reward, đọc Market Regime và FA cơ bản.')
+  else if (kt_score < 70) improve_tips.push('Kiến thức khá tốt — áp dụng EV thinking vào từng quyết định giao dịch.')
+
+  return {
+    kl_score, kt_score, total,
+    level:          level.name,
+    level_color:    level.color,
+    ai_role:        ['Bảo vệ','Dạy','Huấn luyện','Tối ưu','Đồng hành','Alumni'][LEVELS.indexOf(level)],
+    method,
+    method_name:    mInfo.name,
+    method_horizon: mInfo.horizon,
+    method_hold:    mInfo.hold,
+    method_win_rate:mInfo.wr,
+    method_rr:      mInfo.rr,
+    method_strategies: [],
+    buckets:        mInfo.buckets || null,
+    improve_tips,
+  }
+}
+
+// Lưu kết quả lên backend trong nền — không block UI
+async function saveToBackgroundSilent(userId, answers) {
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    try {
+      const res = await fetch(`${API_URL}/iis/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, answers }),
+      })
+      const data = await res.json()
+      if (data.success) return  // Lưu thành công
+    } catch { /* ignore */ }
+    // Đợi trước khi retry (exponential: 5s, 10s, 20s, 40s, 60s)
+    await new Promise(r => setTimeout(r, Math.min(5000 * Math.pow(2, attempt - 1), 60000)))
+  }
+}
+
 // ── Component ──────────────────────────────────────────────────────────
 export default function IISTest({ userId }) {
   const [phase, setPhase]       = useState('loading')   // loading|check|intro|test|submitting|result
@@ -268,34 +335,14 @@ export default function IISTest({ userId }) {
     if (cur < 14) { setCur(c => c + 1); return }
     // Last question → submit
     setPhase('submitting')
-    // Retry tối đa 2 lần — xử lý Render free tier cold start (~50 giây)
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const res = await fetch(`${API_URL}/iis/submit`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userId || 'guest', answers: ans }),
-        })
-        const data = await res.json()
-        if (data.success) {
-          setResult(data.iis)
-          setPhase('result')
-          return
-        }
-        setError('Có lỗi xảy ra, vui lòng thử lại.')
-        setPhase('test')
-        return
-      } catch {
-        if (attempt === 1) {
-          // Lần 1 fail → thông báo đang kết nối lại, đợi 8 giây
-          setError('Server đang khởi động, tự động thử lại sau 8 giây...')
-          await new Promise(r => setTimeout(r, 8000))
-        } else {
-          setError('Không kết nối được server. Vui lòng bấm "Xem kết quả" lại.')
-          setPhase('test')
-        }
-      }
-    }
+
+    // Tính điểm ngay trên frontend — không chờ server
+    const clientResult = computeScoreLocally(ans)
+    setResult(clientResult)
+    setPhase('result')
+
+    // Lưu lên backend chạy ngầm (không block user)
+    saveToBackgroundSilent(userId || 'guest', ans)
   }
 
   const restart = () => {
@@ -503,9 +550,9 @@ export default function IISTest({ userId }) {
         <button
           style={S.btn(true, ans[cur] === null || phase === 'submitting')}
           onClick={goNext}
-          disabled={ans[cur] === null || phase === 'submitting'}
+          disabled={ans[cur] === null}
         >
-          {phase === 'submitting' ? 'Đang kết nối...' : cur === 14 ? 'Xem kết quả →' : 'Tiếp theo →'}
+          {cur === 14 ? 'Xem kết quả →' : 'Tiếp theo →'}
         </button>
       </div>
     </div>
