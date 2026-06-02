@@ -131,7 +131,7 @@ function SignalCard({ signal }) {
           <span style={{ fontSize: '20px', fontWeight: '800', color: '#fff' }}>{ticker}</span>
           <span style={badge(isBuy ? C.green : C.red)}>{isBuy ? '▲ MUA' : '▼ BÁN'}</span>
           {isVN30 && <span style={badge(C.purpleLight)}>VN30</span>}
-          {signal.strategy_type && <span style={badge('#64748b')}>{signal.strategy_type}</span>}
+          {/* strategy_type badge hidden */}
           {signal.confidence > 0 && (
             <span style={badge(signal.confidence >= 75 ? C.green : C.yellow)}>
               {Math.round(signal.confidence)}%
