@@ -287,17 +287,12 @@ export default function LandingPage({ onLogin }) {
         email: data.user.email,
         name: data.user.full_name || data.user.email.split('@')[0],
         tier: data.user.tier,
-        isVip: data.user.tier === 'vip',          // App.jsx dùng isVip để route VIPDashboard
         token: data.token,
         loginTime: new Date().toISOString()
       }
 
       localStorage.setItem('user', JSON.stringify(userData))
       localStorage.setItem('authToken', data.token)
-      // Lưu thêm vip_token để VIPDashboard.getVipToken() tìm thấy
-      if (data.user.tier === 'vip') {
-        localStorage.setItem('vip_token', data.token)
-      }
 
       if (data.is_first_login) {
         // Lần đầu đăng nhập → bắt đổi mật khẩu
@@ -831,7 +826,6 @@ export default function LandingPage({ onLogin }) {
               </div>
               <h2>{isLogin ? 'Đăng nhập' : 'Đăng ký'}</h2>
               <p style={{color:"#64748b",fontSize:"13px",marginTop:"4px"}}>Đầu tư thông minh với AI</p>
-
             </div>
 
             <form className="auth-form" onSubmit={handleSubmit}>
@@ -1134,7 +1128,7 @@ export default function LandingPage({ onLogin }) {
               <div className="footer-column">
                 <h4>Công ty</h4>
                 <a href="#" onClick={(e) => { e.preventDefault(); setShowAbout(true); }}>Về chúng tôi</a>
-                <a href="#" onClick={(e)=>{e.preventDefault();window.location.assign("/blog")}}>Blog</a>
+                <a href="#">Blog</a>
                 <a href="#">Liên hệ</a>
               </div>
 
@@ -1477,43 +1471,26 @@ function CampaignPopup({ onClose }) {
 
         {phase === 'form' && (<>
           <div style={S.header}>
-            <div style={S.eyebrow}>✦ Chiến dịch beta · 25/3 – 10/4/2026</div>
-            <h2 style={S.title}>Tham gia <em style={{color:'#c9a84c'}}>30 nhà đầu tư</em><br/>đầu tiên — Miễn phí hoàn toàn</h2>
-            <p style={S.sub}>AI Advisor mở cửa cho đúng <strong style={{color:'#f7f5f0'}}>30 tài khoản mới</strong>. Không mất tiền — chỉ cần cam kết trải nghiệm và phản hồi thực tế.</p>
+            <h2 style={S.title}>Đăng ký ngay — <em style={{color:'#c9a84c'}}>BASIC miễn phí</em><br/>15 ngày, không cần thẻ</h2>
+            <p style={S.sub}>Trải nghiệm đầy đủ tính năng gói <strong style={{color:'#f7f5f0'}}>BASIC trong 15 ngày</strong>. Không mất tiền, không cần thẻ ngân hàng, hủy bất kỳ lúc nào.</p>
           </div>
 
-          {/* Urgency */}
+          {/* Benefits bar */}
           <div style={S.urgBar}>
             <div style={S.urgItem}>
-              <div style={S.urgValRed}>{slots.remaining}</div>
-              <div style={S.urgLabel}>Suất còn lại</div>
+              <div style={{fontSize:20,fontWeight:900,color:'#c9a84c',lineHeight:1}}>15</div>
+              <div style={S.urgLabel}>Ngày miễn phí</div>
             </div>
             <div style={S.urgSep}/>
             <div style={S.urgItem}>
-              <div style={S.cdRow}>
-                {['d','h','m','s'].map((k,i) => (
-                  <span key={k} style={{display:'flex',alignItems:'center',gap:2}}>
-                    <span style={S.cdNum}>{countdown[k]}</span>
-                    {i < 3 && <span style={S.cdSep}>:</span>}
-                  </span>
-                ))}
-              </div>
-              <div style={S.urgLabel}>Thời gian còn lại</div>
+              <div style={{fontSize:15,fontWeight:900,color:'#f7f5f0',lineHeight:1}}>199k</div>
+              <div style={S.urgLabel}>Giá gốc/tháng</div>
             </div>
             <div style={S.urgSep}/>
             <div style={S.urgItem}>
-              <div style={S.urgVal}>đến 10/4</div>
-              <div style={S.urgLabel}>Miễn phí</div>
+              <div style={{fontSize:13,fontWeight:900,color:'#c9a84c',lineHeight:1}}>Real-time</div>
+              <div style={S.urgLabel}>Tín hiệu</div>
             </div>
-          </div>
-
-          {/* Slots bar */}
-          <div style={S.slotsWrap}>
-            <div style={S.slotsHdr}>
-              <span style={{fontSize:11,color:'#555a63'}}>Đã đăng ký</span>
-              <span style={{fontSize:11,fontWeight:700,color:'#ef4444'}}>{slots.taken}/30 suất</span>
-            </div>
-            <div style={S.track}><div style={{...S.fill, width:`${pct}%`}}/></div>
           </div>
 
           {/* Offer */}
@@ -1535,7 +1512,7 @@ function CampaignPopup({ onClose }) {
               <span style={S.priceOrig}>199.000đ/tháng</span>
               <span style={{color:'#c9a84c',fontSize:11}}>→</span>
               <span style={S.priceNew}>MIỄN PHÍ</span>
-              <div style={S.priceSub}>Miễn phí đến<br/><strong>hết 10/4/2026</strong></div>
+              <div style={S.priceSub}>15 ngày đầu<br/><strong>hoàn toàn miễn phí</strong></div>
             </div>
           </div>
 
@@ -1587,7 +1564,7 @@ function CampaignPopup({ onClose }) {
             <button style={{...S.btn, opacity:loading?0.7:1}} onClick={handleSubmit} disabled={loading}>
               {loading ? 'Đang gửi...' : '✦ ĐĂNG KÝ THAM GIA NGAY'}
             </button>
-            <div style={S.btnSub}>Còn <strong style={{color:'#ef4444'}}>{slots.remaining}</strong> suất · Miễn phí · Không cần thẻ ngân hàng</div>
+            <div style={S.btnSub}>Miễn phí 15 ngày · Không cần thẻ · Hủy bất kỳ lúc nào</div>
           </div>
           <div style={S.footer}>
             <div style={{width:5,height:5,borderRadius:'50%',background:'#1a7a4a',flexShrink:0}}/>
