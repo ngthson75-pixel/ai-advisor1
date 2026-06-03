@@ -46,7 +46,7 @@ import hashlib
 import hmac
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from functools import wraps
@@ -66,9 +66,9 @@ ADMIN_EMAIL   = os.getenv('ADMIN_EMAIL', 'ngthson75@gmail.com')
 FRONTEND_URL  = os.getenv('FRONTEND_URL', 'https://ai-advisor.vn')
 ADMIN_SECRET  = os.getenv('ADMIN_SECRET', 'ai-advisor-admin-2026')
 
-CAMPAIGN_LIMIT = 100
-CAMPAIGN_END   = datetime(2026, 5, 31, 23, 59, 59)
-TRIAL_DAYS     = 15   # Số ngày dùng thử Basic Trial
+CAMPAIGN_LIMIT = 9999   # Không giới hạn suất
+CAMPAIGN_END   = datetime(2027, 12, 31, 23, 59, 59)  # Luôn mở
+TRIAL_DAYS     = 15     # Free BASIC 15 ngày từ ngày đăng ký
 SLOT_OFFSET    = int(os.getenv('CAMPAIGN_SLOT_OFFSET', '0'))
 
 # Gmail API config (thay thế SMTP)
@@ -196,7 +196,7 @@ def _email_activated(reg, temp_password: str):
       <div style="background:#fff;padding:28px;border:1px solid #e0dbd0;border-top:none">
         <p style="font-size:14px;color:#333;line-height:1.7">
           Bạn là một trong <strong>30 nhà đầu tư đầu tiên</strong> trải nghiệm AI Advisor.
-          Tài khoản của bạn đã được kích hoạt — <strong>miễn phí đến hết 10/04/2026</strong>.
+          Tài khoản của bạn đã được kích hoạt — <strong>miễn phí 15 ngày kể từ hôm nay</strong>.
         </p>
         <div style="background:#f7f5f0;border:1px solid #e0dbd0;border-radius:4px;padding:16px;margin:20px 0">
           <p style="margin:0 0 10px;font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:1px">Thông tin đăng nhập</p>
@@ -233,7 +233,7 @@ def _email_waiting(reg, position: int):
       <div style="background:#fff;padding:28px;border:1px solid #e0dbd0;border-top:none">
         <p style="font-size:14px;color:#333;line-height:1.7">
           Xin chào <strong>{reg.full_name}</strong>,<br><br>
-          Chương trình Basic Trial đã <strong>đủ 100 suất</strong>. Bạn đang ở vị trí
+          Chương trình Beta 30 người đã <strong>đủ suất</strong>. Bạn đang ở vị trí
           <strong style="color:#c9a84c">#{position}</strong> trong danh sách chờ.
           Chúng tôi sẽ thông báo ngay khi có suất mới mở ra.
         </p>
@@ -283,7 +283,7 @@ def init_campaign_routes(app, engine, Session):
         if '@' not in email:
             return jsonify({'success': False, 'error': 'Email không hợp lệ'}), 400
         if datetime.now() > CAMPAIGN_END:
-            return jsonify({'success': False, 'error': 'Chương trình đăng ký đã kết thúc. Vui lòng liên hệ 0938127666.'}), 410
+            return jsonify({'success': False, 'error': 'Chương trình Beta đã kết thúc ngày 10/04/2026'}), 410
 
         db = Session()
         try:
@@ -322,15 +322,15 @@ def init_campaign_routes(app, engine, Session):
                     if existing_vip:
                         # Đã có rồi → chỉ cập nhật expires + active
                         existing_vip.is_active = True
-                        existing_vip.tier = 'basic_trial'
-                        existing_vip.notes = f'Basic Trial 15 ngày · Cập nhật {datetime.now().strftime("%d/%m/%Y")} · {source}'
+                        existing_vip.subscription_expires_at = datetime.now() + timedelta(days=TRIAL_DAYS)
+                        existing_vip.notes = f'Free BASIC 15 ngày từ {datetime.now().strftime("%d/%m/%Y")}'
                         logger.info(f'[Campaign] VIPUser đã tồn tại, cập nhật: {email}')
                     else:
                         db.add(VIPUser(
                             email=email, password_hash=password_hash,
                             full_name=full_name, phone=phone,
-                            tier='basic_trial', is_active=True,
-                                notes=f'Basic Trial 15 ngày · Đăng ký {datetime.now().strftime("%d/%m/%Y")} · {source}',
+                            tier='free', is_active=True,
+                                notes=f'Free BASIC 15 ngày từ {datetime.now().strftime("%d/%m/%Y")}',
                         ))
                     db.commit()
                 except Exception as e:
@@ -349,9 +349,9 @@ def init_campaign_routes(app, engine, Session):
                 def _notify_activated(r, pwd, sn):
                     _email_activated(r, pwd)
                     _send_telegram(
-                        f"🆕 <b>User mới #{sn}/{CAMPAIGN_LIMIT}</b>\n"
+                        f"🆕 <b>User mới đăng ký</b>\n"
                         f"👤 {r.full_name}  📧 {r.email}  📱 {r.phone}\n"
-                        f"✅ Basic Trial 15 ngày"
+                        f"✅ Free BASIC 15 ngày"
                     )
                 threading.Thread(target=_notify_activated, args=(_reg_copy, _pwd_copy, _slot_copy), daemon=True).start()
                 return jsonify({
@@ -440,8 +440,8 @@ def init_campaign_routes(app, engine, Session):
                         email=reg.email,
                         password_hash=hashlib.sha256(temp_pwd.encode()).hexdigest(),
                         full_name=reg.full_name, phone=reg.phone,
-                        tier='basic_trial', is_active=True,
-                        notes=f'Basic Trial 15 ngày · Mở từ waiting list · {datetime.now().strftime("%d/%m/%Y")}',
+                        tier='free', is_active=True,
+                        notes='Beta campaign (waiting list) · Free BASIC 15 ngày',
                     ))
                 except Exception as e:
                     logger.error(f'[Campaign] open-slots VIPUser: {e}')
@@ -515,8 +515,8 @@ def init_campaign_routes(app, engine, Session):
                         email=next_w.email,
                         password_hash=hashlib.sha256(temp_pwd.encode()).hexdigest(),
                         full_name=next_w.full_name, phone=next_w.phone,
-                        tier='basic_trial', is_active=True,
-                        notes=f'Basic Trial 15 ngày · Auto-fill · {__import__("datetime").datetime.now().strftime("%d/%m/%Y")}',
+                        tier='free', is_active=True,
+                        notes='Beta campaign (auto-fill) · Free BASIC 15 ngày',
                     ))
                 except Exception as e:
                     logger.error(f'[Campaign] auto-fill VIPUser: {e}')
@@ -536,58 +536,6 @@ def init_campaign_routes(app, engine, Session):
                     'message': f'Đã hủy {email}. Waiting list trống — suất sẽ mở cho đăng ký mới.',
                 })
 
-        except Exception as e:
-            db.rollback()
-            return jsonify({'success': False, 'error': str(e)}), 500
-        finally:
-            db.close()
-
-
-    # ── Admin: reset password user bất kỳ ──────────────────
-    @app.route('/api/campaign/admin/reset-password', methods=['POST'])
-    @_require_admin
-    def campaign_reset_password():
-        """
-        Reset password cho user bất kỳ.
-        Body: { "email": "user@email.com", "new_password": "NewPass123" }
-        Nếu không truyền new_password → tự generate 10 ký tự random.
-        """
-        data     = request.get_json() or {}
-        email    = (data.get('email') or '').strip().lower()
-        new_pwd  = data.get('new_password') or _gen_temp_password()
-
-        if not email:
-            return jsonify({'success': False, 'error': 'Thiếu email'}), 400
-
-        db = Session()
-        try:
-            from vip_auth import VIPUser
-            user = db.query(VIPUser).filter_by(email=email).first()
-            if not user:
-                return jsonify({'success': False, 'error': f'Không tìm thấy user: {email}'}), 404
-
-            user.password_hash = hashlib.sha256(new_pwd.encode()).hexdigest()
-            user.last_login_at = None  # force đổi mật khẩu lần sau login
-            db.commit()
-
-            # Gửi email thông báo
-            def _notify():
-                _email_activated(type('R', (), {
-                    'email': email, 'full_name': user.full_name or email,
-                })(), new_pwd)
-            threading.Thread(target=_notify, daemon=True).start()
-
-            _send_telegram(
-                f"🔑 <b>Reset password:</b> {email}\n"
-                f"Mật khẩu mới: <code>{new_pwd}</code>"
-            )
-
-            return jsonify({
-                'success': True,
-                'email': email,
-                'new_password': new_pwd,
-                'message': f'Đã reset password cho {email}. Email thông báo đã gửi.',
-            })
         except Exception as e:
             db.rollback()
             return jsonify({'success': False, 'error': str(e)}), 500
