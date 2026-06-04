@@ -7,6 +7,8 @@ import SignalHistory from './components/SignalHistory'
 import VIPDashboard from './components/VIPDashboard'
 import VIPAdminPanel from './components/VIPAdminPanel'
 import Blog from './components/Blog'
+import IISTest from './components/IISTest'
+import IISScoreWidget from './components/IISScoreWidget'
 
 // API Configuration
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
@@ -50,6 +52,7 @@ function App() {
   const [user, setUser]             = useState(null)
   const [resolvedTier, setResolvedTier] = useState('free')
   const [activeTab, setActiveTab]   = useState('signals')
+  const [showIISModal, setShowIISModal] = useState(false)
   const [signals, setSignals]       = useState([])
   const [loading, setLoading]       = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
@@ -111,16 +114,22 @@ function App() {
   }, [user])
 
   // ── Handlers ───────────────────────────────────────────────────────────
-  const handleLogin = (userData) => {
+  const handleLogin = async (userData) => {
     const tier = resolveUserTier(userData)
-    // Migrate khách cũ nếu chưa có tier
     if (!userData.tier && !userData.isVip) {
       userData.tier = 'free'
       localStorage.setItem('user', JSON.stringify(userData))
     }
     setUser(userData)
     setResolvedTier(tier)
-    if (userData.isVip) setActiveTab('vip')
+    if (userData.isVip) { setActiveTab('vip'); return }
+
+    // Auto-show IIS modal nếu user chưa làm test lần nào
+    try {
+      const r = await fetch(`${API_URL}/iis/result/${encodeURIComponent(userData.email)}`)
+      const d = await r.json()
+      if (!d.has_result) setShowIISModal(true)
+    } catch { /* silent — không block login */ }
   }
 
   const handleLogout = () => {
@@ -356,7 +365,13 @@ function App() {
           )}
 
           {activeTab === 'portfolio' && (
-            <AIPortfolioManager userId={user.email} />
+            <>
+              <IISScoreWidget
+                userId={user.email}
+                onRequestUpdate={() => setShowIISModal(true)}
+              />
+              <AIPortfolioManager userId={user.email} />
+            </>
           )}
 
           {activeTab === 'vip' && isVip && (
@@ -371,6 +386,48 @@ function App() {
           )}
         </div>
       </main>
+
+      {/* IIS Onboarding Modal */}
+      {showIISModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: '#0a0f1e',
+          overflowY: 'auto',
+          display: 'flex', flexDirection: 'column',
+        }}>
+          {/* Header bar */}
+          <div style={{
+            padding: '12px 20px',
+            borderBottom: '1px solid #1e293b',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: '#0f172a', flexShrink: 0,
+          }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#C8780F' }}>
+              AI ADVISOR — Investor Intelligence Score
+            </span>
+            <button
+              onClick={() => setShowIISModal(false)}
+              style={{
+                background: 'transparent', border: '1px solid #334155',
+                color: '#64748b', borderRadius: '6px',
+                padding: '4px 10px', fontSize: '12px', cursor: 'pointer',
+              }}
+            >
+              Bỏ qua ✕
+            </button>
+          </div>
+          {/* IIS Test */}
+          <div style={{ flex: 1 }}>
+            <IISTest
+              userId={user?.email}
+              onComplete={(result) => {
+                setShowIISModal(false)
+                setActiveTab('portfolio')
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="footer">
