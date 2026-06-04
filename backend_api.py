@@ -157,6 +157,25 @@ if _has_campaign:
     except Exception as _camp_err:
         print(f"⚠️  Campaign init error: {_camp_err}")
 
+# === Auto-migrate chat_history for IIS behavioral columns ===
+try:
+    with engine.connect() as _conn:
+        for _col, _type in [
+            ("emotional_state", "VARCHAR(20)"),
+            ("topic",           "VARCHAR(30)"),
+            ("iis_level",       "INTEGER"),
+        ]:
+            try:
+                _conn.execute(text(
+                    f"ALTER TABLE chat_history ADD COLUMN IF NOT EXISTS {_col} {_type}"
+                ))
+                _conn.commit()
+            except Exception:
+                pass
+    print("✅ chat_history: IIS behavioral columns ready")
+except Exception as _e:
+    print(f"⚠️  chat_history migration: {_e}")
+
 # === Init IIS Routes ===
 if _has_iis:
     try:
@@ -290,8 +309,212 @@ CRITICAL: Help users control FOMO and PANIC SELLING by:
 """
 
 # ========================================================================
-# DATABASE MODELS
+# IIS-AWARE CHAT ENGINE — v2.0
+# Inject IIS profile into system prompt, detect emotions, log behavior
 # ========================================================================
+
+# In-memory IIS profile cache {user_id: (profile_dict, timestamp)}
+_iis_cache = {}
+_IIS_CACHE_TTL = 300  # 5 minutes
+
+def get_iis_profile_cached(user_id):
+    """Load IIS profile from DB with 5-min cache. Returns dict or None."""
+    import time
+    now = time.time()
+    if user_id in _iis_cache:
+        profile, ts = _iis_cache[user_id]
+        if now - ts < _IIS_CACHE_TTL:
+            return profile
+    session = Session()
+    try:
+        row = session.execute(
+            text("SELECT total, level_name, method, kl_score, kt_score "
+                 "FROM iis_results WHERE user_id = :uid "
+                 "ORDER BY created_at DESC LIMIT 1"),
+            {"uid": str(user_id)}
+        ).fetchone()
+        if row:
+            profile = {
+                "total": row[0], "level": row[1], "method": row[2],
+                "kl": row[3], "kt": row[4]
+            }
+        else:
+            profile = None
+        _iis_cache[user_id] = (profile, now)
+        return profile
+    except Exception as e:
+        print(f"[IIS cache] {e}")
+        return None
+    finally:
+        session.close()
+
+
+def detect_emotional_state(message):
+    """
+    Phân loại cảm xúc từ tin nhắn user.
+    Returns (state: str, confidence: str) 
+    state: 'fomo' | 'panic' | 'avg_down' | 'neutral'
+    """
+    msg = message.lower()
+
+    fomo_kw = [
+        'tăng mạnh', 'bứt phá', 'sợ bỏ lỡ', 'bỏ lỡ', 'mọi người đang mua',
+        'mua ngay', 'vào ngay', 'còn kịp không', 'kịp không', 'hôm nay phải mua',
+        'nhanh lên', 'đang hot', 'đang sóng', 'đang bay', 'lên mạnh',
+        'mua trước', 'lỡ sóng', 'muộn không'
+    ]
+    panic_kw = [
+        'sập', 'giảm mạnh', 'bán hết', 'thoát hết', 'sợ quá', 'lo quá',
+        'cắt lỗ hết', 'panik', 'panic', 'thị trường sập', 'mất hết',
+        'nên bán không', 'bán ngay', 'thoát ngay', 'giảm tiếp', 'sắp sập'
+    ]
+    avg_down_kw = [
+        'mua thêm', 'trung bình giá', 'average down', 'bắt đáy',
+        'bắt thêm', 'giảm thì mua', 'gom thêm', 'tích thêm',
+        'mua thêm vào', 'đang lỗ mua thêm', 'lỗ mua thêm'
+    ]
+
+    fomo_score  = sum(1 for kw in fomo_kw    if kw in msg)
+    panic_score = sum(1 for kw in panic_kw   if kw in msg)
+    avg_score   = sum(1 for kw in avg_down_kw if kw in msg)
+
+    if avg_score >= 1:
+        return ('avg_down', 'high' if avg_score >= 2 else 'medium')
+    if fomo_score >= 2 or (fomo_score >= 1 and panic_score == 0):
+        return ('fomo', 'high' if fomo_score >= 2 else 'medium')
+    if panic_score >= 1:
+        return ('panic', 'high' if panic_score >= 2 else 'medium')
+    return ('neutral', 'low')
+
+
+def detect_trade_intent(message):
+    """
+    Phát hiện ý định giao dịch và ticker được nhắc đến.
+    Returns (topic: str, ticker: str|None)
+    topic: 'buy_intent' | 'sell_intent' | 'analysis' | 'portfolio' | 'general'
+    """
+    import re
+    msg = message.lower()
+
+    buy_kw  = ['mua', 'vào lệnh', 'entry', 'mở vị thế', 'giải ngân']
+    sell_kw = ['bán', 'chốt', 'thoát', 'cắt', 'exit', 'đóng vị thế']
+    port_kw = ['danh mục', 'portfolio', 'tỷ trọng', 'vốn', 'phân bổ']
+
+    buy_score  = sum(1 for kw in buy_kw  if kw in msg)
+    sell_score = sum(1 for kw in sell_kw if kw in msg)
+    port_score = sum(1 for kw in port_kw if kw in msg)
+
+    # Tìm ticker (2-4 chữ hoa)
+    tickers = re.findall(r'\b[A-Z]{2,4}\b', message)
+    ticker  = tickers[0] if tickers else None
+
+    if port_score >= 1:   return ('portfolio', ticker)
+    if buy_score  >= 1:   return ('buy_intent', ticker)
+    if sell_score >= 1:   return ('sell_intent', ticker)
+    if ticker:            return ('analysis', ticker)
+    return ('general', None)
+
+
+def build_iis_coaching_section(profile, emotional_state):
+    """
+    Tạo đoạn IIS context để inject vào system prompt.
+    profile: dict từ get_iis_profile_cached() hoặc None
+    emotional_state: str từ detect_emotional_state()
+    """
+    METHOD_NAMES = {
+        'luot_song': 'Lướt Sóng AI (Ngắn hạn)',
+        'bat_song':  'Bắt Sóng AI (Trung hạn)',
+        'tich_san':  'Tích Sản AI (Dài hạn)',
+        'hybrid_sm': 'Hybrid: Lướt Sóng + Bắt Sóng',
+        'hybrid_ml': 'Hybrid: Bắt Sóng + Tích Sản',
+    }
+    LEVEL_TRIGGERS = {
+        'Khởi Hành':  'Đặt SL cho ≥3 lệnh · Mở Clearance Card ≥3 lần · Hoàn thành checklist ≥3 lần',
+        'Định Hướng': 'Checklist ≥70% lệnh trong 1 tháng · Không average down ngoài kế hoạch 30 ngày',
+        'Phát Triển': 'Checklist 10/10 lệnh · Giữ ≥1 lệnh đến target · IIS Kỷ Luật tăng ≥10 điểm',
+        'Vững Vàng':  'Win rate ≥45% trong 3 tháng · Đọc Monthly Report 3 tháng · Streak ≥20 ngày',
+        'Tinh Thông': 'IIS retest ≥70 sau 90 ngày · Return dương 2 quý · ≥2 bias đã cải thiện',
+        'Chuyên Gia': '(Đã đạt cấp cao nhất)',
+    }
+    COACHING_MODES = {
+        'Khởi Hành':  'BẢO VỆ TỐI ĐA: Luôn hỏi stop loss trước mọi câu. Giải thích đơn giản, không thuật ngữ kỹ thuật. Nhắc rủi ro mỗi câu. Khuyến khích làm checklist.',
+        'Định Hướng': 'DẠY NỀN TẢNG: Giải thích tại sao, không chỉ nói gì. Kèm 1 lesson ngắn mỗi câu trả lời. Nhắc điều kiện lên level tiếp theo.',
+        'Phát Triển': 'HUẤN LUYỆN NHẤT QUÁN: Hỏi về entry/SL/TP trước khi thảo luận cổ phiếu. Nhận diện pattern lặp lại (FOMO lần thứ mấy?). Khen khi user làm đúng hệ thống.',
+        'Vững Vàng':  'TỐI ƯU HỆ THỐNG: Thảo luận ở level cao hơn — EV, Risk-Reward, Market Regime. Ít nhắc cơ bản. Tập trung tinh chỉnh theo phương pháp của user.',
+        'Tinh Thông': 'ĐỒNG HÀNH NGANG HÀNG: Thảo luận như đồng nghiệp. Phân tích sâu. Có thể challenge quan điểm user với data.',
+        'Chuyên Gia': 'THAM KHẢO: Ít coaching, nhiều phân tích sâu. AI là công cụ tham khảo. Gợi ý họ chia sẻ kinh nghiệm với cộng đồng.',
+    }
+
+    if not profile:
+        level_name = 'Khởi Hành'
+        section = """
+=== USER IIS PROFILE ===
+Level: Chưa làm IIS Test (mặc định Khởi Hành)
+COACHING MODE: BẢO VỆ TỐI ĐA
+- Luôn hỏi "Bạn đã đặt stop loss chưa?" trước mọi câu về cổ phiếu
+- Giải thích đơn giản, khuyến khích làm IIS Test để nhận coaching cá nhân hóa
+"""
+    else:
+        level_name  = profile.get('level', 'Khởi Hành')
+        total       = profile.get('total', 0)
+        kl          = profile.get('kl', 0)
+        kt          = profile.get('kt', 0)
+        method      = METHOD_NAMES.get(profile.get('method', ''), 'Chưa xác định')
+        mode        = COACHING_MODES.get(level_name, COACHING_MODES['Khởi Hành'])
+        trigger     = LEVEL_TRIGGERS.get(level_name, '')
+
+        # Xác định điểm yếu
+        weaknesses = []
+        if kl < 60: weaknesses.append(f'IIS Kỷ Luật thấp ({kl}/100) — hay bị FOMO, chưa nhất quán stop loss/checklist')
+        if kt < 60: weaknesses.append(f'IIS Kiến Thức cần cải thiện ({kt}/100) — cần học thêm Risk-Reward và Market Regime')
+
+        section = f"""
+=== USER IIS PROFILE ===
+Level: {level_name} — IIS {total}/100
+IIS Kỷ Luật: {kl}/100  |  IIS Kiến Thức: {kt}/100
+Phương pháp: {method}
+Điểm yếu: {' | '.join(weaknesses) if weaknesses else 'Không có — user đang phát triển tốt'}
+
+COACHING MODE: {mode}
+
+Điều kiện lên level tiếp theo (nhắc nhở khi phù hợp):
+{trigger}
+"""
+
+    # Thêm coaching đặc biệt theo emotional state
+    if emotional_state == 'fomo':
+        section += """
+⚠️ FOMO DETECTED — Áp dụng ngay:
+1. Acknowledge cảm xúc nhẹ nhàng, không phán xét
+2. Hiện trạng thái thị trường thực tế từ Market Dashboard
+3. Hỏi: "Bạn đã có entry/SL/TP rõ ràng chưa?"
+4. Nhắc IIS Kỷ Luật: "Top 5% nhà đầu tư không mua đuổi — họ chờ pullback"
+5. Gợi ý: Đợi 30 phút trước khi quyết định
+KHÔNG được khuyến khích mua ngay dù signal có vẻ tốt.
+"""
+    elif emotional_state == 'panic':
+        section += """
+⚠️ PANIC DETECTED — Áp dụng ngay:
+1. Dừng lại, làm dịu cảm xúc: "Hít thở, nhìn vào dữ liệu thực tế"
+2. Kiểm tra: Stop loss đã hit chưa? Nếu chưa → không cần làm gì
+3. Hiện Market Dashboard: Đây là pullback bình thường hay Bear Market?
+4. Hỏi: "Luận điểm đầu tư của bạn có thay đổi không?"
+5. KHÔNG khuyến khích bán hoảng loạn. Nhắc: "Panic sell phá vỡ kỷ luật hệ thống"
+"""
+    elif emotional_state == 'avg_down':
+        section += """
+⚠️ AVERAGE DOWN DETECTED — Áp dụng ngay:
+1. Kiểm tra: Cổ phiếu này có trong Signal list không?
+2. Hỏi: "Luận điểm đầu tư ban đầu còn đúng không?"
+3. Nhắc nguyên tắc: "Top 5% không average down ngoài kế hoạch — đây là điều kiện lên level tiếp theo"
+4. Nếu user vẫn muốn: yêu cầu viết ra LÝ DO CỤ THỂ trước khi thực hiện
+5. Nhắc: "Nếu mua thêm ngoài kế hoạch, đây là lỗi hành vi sẽ ảnh hưởng IIS Kỷ Luật"
+"""
+
+    return section
+
+# ========================================================================
+# DATABASE MODELS# ========================================================================
 
 class Signal(Base):
     __tablename__ = 'signals'
@@ -354,6 +577,10 @@ class ChatHistory(Base):
     response = Column(Text, nullable=False)
     portfolio_context = Column(Text)
     created_at = Column(DateTime, default=datetime.now)
+    # IIS Behavioral Tracking — v2.0
+    emotional_state = Column(String(20))   # fomo | panic | avg_down | neutral
+    topic           = Column(String(30))   # buy_intent | sell_intent | analysis | portfolio | general
+    iis_level       = Column(Integer)      # snapshot IIS level tại thời điểm chat
 
 class TickerBlacklist(Base):
     __tablename__ = 'ticker_blacklist'
@@ -545,10 +772,34 @@ def get_portfolio_context(user_id):
         session.close()
 
 
-def chat_with_gpt(message, portfolio_context, signal_tickers):
-    """Chat with OpenAI using strict system prompt"""
+def chat_with_gpt(message, portfolio_context, signal_tickers,
+                  iis_section="", history=None):
+    """
+    Chat with GPT-4o-mini v2.0: IIS-aware system prompt + multi-turn history.
+    """
     if not openai_client:
-        return "Xin lÃ¡Â»â€”i, AI chÃ†Â°a Ã„â€˜Ã†Â°Ã¡Â»Â£c cÃ¡ÂºÂ¥u hÃƒÂ¬nh."
+        return "Xin lỗi, AI chưa được cấu hình."
+    try:
+        system_message = AI_SYSTEM_PROMPT
+        if iis_section:
+            system_message += "\n" + iis_section
+        system_message += "\n\n" + portfolio_context
+        messages = [{"role": "system", "content": system_message}]
+        if history:
+            for h in history[-5:]:
+                messages.append({"role": "user",      "content": h.get("message", "")})
+                messages.append({"role": "assistant",  "content": h.get("response", "")})
+        messages.append({"role": "user", "content": message})
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=900,
+            temperature=0.65
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"OpenAI error: {e}")
+        return "Xin lỗi, AI không phản hồi được lúc này. Vui lòng thử lại."
     
     try:
         system_message = AI_SYSTEM_PROMPT + f"\n\n{portfolio_context}"
@@ -1418,37 +1669,56 @@ def update_cash():
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    """Chat with AI using strict system prompt"""
+    """IIS-aware chat endpoint v2.0"""
     data = request.json
     user_id = data.get('user_id', 1)
     message = data.get('message', '').strip()
-    
     if not message:
         return jsonify({'success': False, 'error': 'Message required'}), 400
-    
     session = Session()
     try:
+        iis_profile     = get_iis_profile_cached(str(user_id))
+        emotional_state, _ = detect_emotional_state(message)
+        topic, ticker_mentioned = detect_trade_intent(message)
+        iis_section     = build_iis_coaching_section(iis_profile, emotional_state)
+        history_rows    = session.query(ChatHistory)\
+            .filter_by(user_id=str(user_id))\
+            .order_by(ChatHistory.created_at.desc())\
+            .limit(5).all()
+        history = [{"message": h.message, "response": h.response}
+                   for h in reversed(history_rows)]
         portfolio_context, signal_tickers = get_portfolio_context(user_id)
-        ai_response = chat_with_gpt(message, portfolio_context, signal_tickers)
-        
-        chat_entry = ChatHistory(
-            user_id=user_id,
+        ai_response = chat_with_gpt(
+            message, portfolio_context, signal_tickers,
+            iis_section=iis_section, history=history
+        )
+        iis_level_now = iis_profile.get('total') if iis_profile else None
+        session.add(ChatHistory(
+            user_id=str(user_id),
             message=message,
             response=ai_response,
-            portfolio_context=portfolio_context
-        )
-        session.add(chat_entry)
+            portfolio_context=portfolio_context,
+            emotional_state=emotional_state,
+            topic=topic,
+            iis_level=iis_level_now
+        ))
         session.commit()
-        
-        return jsonify({'success': True, 'response': ai_response})
-        
+        return jsonify({
+            'success': True,
+            'response': ai_response,
+            'meta': {
+                'emotional_state': emotional_state,
+                'topic': topic,
+                'ticker': ticker_mentioned,
+                'iis_level': iis_level_now,
+                'iis_level_name': iis_profile.get('level') if iis_profile else None,
+            }
+        })
     except Exception as e:
         session.rollback()
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'response': 'Xin lÃ¡Â»â€”i, cÃƒÂ³ lÃ¡Â»â€”i xÃ¡ÂºÂ£y ra.'
-        }), 500
+        print(f"[/api/chat] Error: {e}")
+        return jsonify({'success': False, 'error': str(e),
+                        'response': 'Xin lỗi, có lỗi xảy ra. Vui lòng thử lại.'}), 500
     finally:
         session.close()
 
