@@ -300,7 +300,7 @@ async function saveToBackgroundSilent(userId, answers) {
 }
 
 // ── Component ──────────────────────────────────────────────────────────
-export default function IISTest({ userId }) {
+export default function IISTest({ userId, onComplete }) {
   const [phase, setPhase]       = useState('loading')   // loading|check|intro|test|submitting|result
   const [cur,   setCur]         = useState(0)
   const [ans,   setAns]         = useState(new Array(15).fill(null))
@@ -656,7 +656,28 @@ export default function IISTest({ userId }) {
           </div>
         </div>
 
-        <button style={{ ...S.btn(false, false), width: '100%', marginBottom: '8px' }} onClick={restart}>
+        {/* Primary CTA — chỉ hiện khi có onComplete (modal mode) */}
+        {onComplete && (
+          <button
+            style={{
+              ...S.btn(true, false),
+              width: '100%',
+              marginBottom: '8px',
+              padding: '12px',
+              fontSize: '14px',
+              background: '#22c55e',
+              borderColor: '#22c55e',
+            }}
+            onClick={() => onComplete(result)}
+          >
+            Bắt đầu đầu tư với AI-Advisor →
+          </button>
+        )}
+
+        <button
+          style={{ ...S.btn(false, false), width: '100%', marginBottom: '8px', opacity: 0.6 }}
+          onClick={restart}
+        >
           Làm lại từ đầu
         </button>
       </div>

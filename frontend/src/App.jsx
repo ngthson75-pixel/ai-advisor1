@@ -8,6 +8,7 @@ import VIPDashboard from './components/VIPDashboard'
 import VIPAdminPanel from './components/VIPAdminPanel'
 import Blog from './components/Blog'
 import IISTest from './components/IISTest'
+import IISScoreWidget from './components/IISScoreWidget'
 
 // API Configuration
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
@@ -51,6 +52,7 @@ function App() {
   const [user, setUser]             = useState(null)
   const [resolvedTier, setResolvedTier] = useState('free')
   const [activeTab, setActiveTab]   = useState('signals')
+  const [showIISModal, setShowIISModal] = useState(false)
   const [signals, setSignals]       = useState([])
   const [loading, setLoading]       = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
@@ -114,7 +116,6 @@ function App() {
   // ── Handlers ───────────────────────────────────────────────────────────
   const handleLogin = async (userData) => {
     const tier = resolveUserTier(userData)
-    // Migrate khách cũ nếu chưa có tier
     if (!userData.tier && !userData.isVip) {
       userData.tier = 'free'
       localStorage.setItem('user', JSON.stringify(userData))
@@ -123,14 +124,12 @@ function App() {
     setResolvedTier(tier)
     if (userData.isVip) { setActiveTab('vip'); return }
 
-    // Auto-show IIS test nếu user chưa làm lần nào
+    // Auto-show IIS modal nếu user chưa làm test lần nào
     try {
       const r = await fetch(`${API_URL}/iis/result/${encodeURIComponent(userData.email)}`)
       const d = await r.json()
-      if (!d.has_result) setActiveTab('iis')
-    } catch {
-      // Silent fail — không block login
-    }
+      if (!d.has_result) setShowIISModal(true)
+    } catch { /* silent — không block login */ }
   }
 
   const handleLogout = () => {
@@ -314,19 +313,6 @@ function App() {
                   </svg>
                   Quản trị đầu tư bằng AI
                 </button>
-
-                <button
-                  className={`tab ${activeTab === 'iis' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('iis')}
-                  style={activeTab === 'iis' ? {
-                    borderBottom: '2px solid #3b82f6', color: '#60a5fa',
-                  } : { color: '#64748b' }}
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                  </svg>
-                  IIS Score
-                </button>
               </>
             )}
 
@@ -379,11 +365,13 @@ function App() {
           )}
 
           {activeTab === 'portfolio' && (
-            <AIPortfolioManager userId={user.email} />
-          )}
-
-          {activeTab === 'iis' && (
-            <IISTest userId={user.email} />
+            <>
+              <IISScoreWidget
+                userId={user.email}
+                onRequestUpdate={() => setShowIISModal(true)}
+              />
+              <AIPortfolioManager userId={user.email} />
+            </>
           )}
 
           {activeTab === 'vip' && isVip && (
@@ -398,6 +386,48 @@ function App() {
           )}
         </div>
       </main>
+
+      {/* IIS Onboarding Modal */}
+      {showIISModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: '#0a0f1e',
+          overflowY: 'auto',
+          display: 'flex', flexDirection: 'column',
+        }}>
+          {/* Header bar */}
+          <div style={{
+            padding: '12px 20px',
+            borderBottom: '1px solid #1e293b',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: '#0f172a', flexShrink: 0,
+          }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#C8780F' }}>
+              AI ADVISOR — Investor Intelligence Score
+            </span>
+            <button
+              onClick={() => setShowIISModal(false)}
+              style={{
+                background: 'transparent', border: '1px solid #334155',
+                color: '#64748b', borderRadius: '6px',
+                padding: '4px 10px', fontSize: '12px', cursor: 'pointer',
+              }}
+            >
+              Bỏ qua ✕
+            </button>
+          </div>
+          {/* IIS Test */}
+          <div style={{ flex: 1 }}>
+            <IISTest
+              userId={user?.email}
+              onComplete={(result) => {
+                setShowIISModal(false)
+                setActiveTab('portfolio')
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="footer">
