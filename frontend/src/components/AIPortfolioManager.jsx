@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { trackPortfolioAction } from '../analytics'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 
@@ -108,7 +107,6 @@ export default function AIPortfolioManager({ userId = '1' }) {
       const d = await r.json()
       if (d.success) {
         setAddForm({ ticker: '', quantity: '', price: '' })
-        trackPortfolioAction('add_stock')
         loadPortfolio()
       } else {
         setAddError(d.error || 'Lỗi thêm cổ phiếu')
@@ -149,7 +147,6 @@ export default function AIPortfolioManager({ userId = '1' }) {
     setInput('')
     setMessages(prev => [...prev, { role: 'user', text: msg }])
     setChatLoading(true)
-    trackPortfolioAction('chat')
     try {
       const r = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
@@ -159,7 +156,8 @@ export default function AIPortfolioManager({ userId = '1' }) {
       const d = await r.json()
       setMessages(prev => [...prev, {
         role: 'ai',
-        text: d.response || d.error || 'AI không phản hồi được.'
+        text: d.response || d.error || 'AI không phản hồi được.',
+        meta: d.meta || null,
       }])
     } catch {
       setMessages(prev => [...prev, { role: 'ai', text: 'Lỗi kết nối. Vui lòng thử lại.' }])
@@ -279,21 +277,48 @@ export default function AIPortfolioManager({ userId = '1' }) {
                   fontSize: '13px', flexShrink: 0, marginRight: '8px', marginTop: '2px',
                 }}>🤖</div>
               )}
-              <div style={{
-                maxWidth: '78%',
-                padding: '10px 14px',
-                borderRadius: m.role === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
-                background: m.role === 'user'
-                  ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
-                  : 'rgba(255,255,255,0.06)',
-                color: '#e2e8f0',
-                fontSize: '14px',
-                lineHeight: '1.6',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                border: m.role === 'ai' ? '1px solid rgba(255,255,255,0.08)' : 'none',
-              }}>
-                {m.text}
+              <div style={{ maxWidth: '78%' }}>
+                {/* Emotional state badge — chỉ hiện khi detect FOMO/Panic/AvgDown */}
+                {m.role === 'ai' && m.meta && m.meta.emotional_state && m.meta.emotional_state !== 'neutral' && (
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '5px',
+                    marginBottom: '5px', padding: '3px 9px', borderRadius: '12px',
+                    fontSize: '11px', fontWeight: 500,
+                    background: m.meta.emotional_state === 'fomo'
+                      ? 'rgba(239,68,68,0.15)' : m.meta.emotional_state === 'panic'
+                      ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)',
+                    color: m.meta.emotional_state === 'fomo'
+                      ? '#fca5a5' : m.meta.emotional_state === 'panic'
+                      ? '#fcd34d' : '#93c5fd',
+                    border: `1px solid ${m.meta.emotional_state === 'fomo'
+                      ? '#ef444440' : m.meta.emotional_state === 'panic'
+                      ? '#f59e0b40' : '#3b82f640'}`,
+                  }}>
+                    {m.meta.emotional_state === 'fomo'    && '⚠️ FOMO detected'}
+                    {m.meta.emotional_state === 'panic'   && '⚠️ Panic detected'}
+                    {m.meta.emotional_state === 'avg_down'&& '⚠️ Average down detected'}
+                    {m.meta.iis_level_name && (
+                      <span style={{ opacity: 0.7, marginLeft: '4px' }}>
+                        · {m.meta.iis_level_name}
+                      </span>
+                    )}
+                  </div>
+                )}
+                <div style={{
+                  padding: '10px 14px',
+                  borderRadius: m.role === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
+                  background: m.role === 'user'
+                    ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
+                    : 'rgba(255,255,255,0.06)',
+                  color: '#e2e8f0',
+                  fontSize: '14px',
+                  lineHeight: '1.6',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  border: m.role === 'ai' ? '1px solid rgba(255,255,255,0.08)' : 'none',
+                }}>
+                  {m.text}
+                </div>
               </div>
             </div>
           ))}
