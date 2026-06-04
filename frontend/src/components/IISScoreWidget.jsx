@@ -254,20 +254,18 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
           </div>
         )}
 
-        {/* Level-up triggers */}
-        {lvl.triggers.length > 0 && (
-          <div style={{ marginTop: '12px', borderTop: '1px solid #1e293b', paddingTop: '12px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 500, color: '#64748b', marginBottom: '7px', textTransform: 'uppercase', letterSpacing: '.05em' }}>
-              Điều kiện lên {nextLvl?.name || 'cấp tiếp theo'}
-            </div>
-            {lvl.triggers.map((t, i) => (
-              <div key={i} style={{ display: 'flex', gap: '7px', alignItems: 'flex-start', marginBottom: '5px', fontSize: '12px', color: '#94a3b8', lineHeight: 1.5 }}>
-                <span style={{ flexShrink: 0, marginTop: '4px', width: '5px', height: '5px', borderRadius: '50%', background: lvl.color, display: 'inline-block' }} />
-                {t}
-              </div>
-            ))}
+        {/* Motivating CTA — hối thúc dùng app thường xuyên */}
+        <div style={{
+          marginTop: '12px', borderTop: '1px solid #1e293b', paddingTop: '12px',
+          display: 'flex', gap: '10px', alignItems: 'flex-start',
+        }}>
+          <span style={{ fontSize: '18px', flexShrink: 0, marginTop: '1px' }}>💬</span>
+          <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.7 }}>
+            Hãy thường xuyên trao đổi với{' '}
+            <span style={{ color: lvl.color, fontWeight: 500 }}>AI-Advisor chat</span>
+            {' '}để hệ thống giúp bạn kỷ luật và từng bước nâng hiệu quả đầu tư của bạn.
           </div>
-        )}
+        </div>
 
         {/* Chuyên gia */}
         {lvlIdx === 5 && (
