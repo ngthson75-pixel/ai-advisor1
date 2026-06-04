@@ -48,12 +48,45 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
 
   useEffect(() => {
     if (!userId) { setLoading(false); return }
+
+    // Bước 1: Check localStorage ngay lập tức — hiển thị kết quả không chờ backend
+    try {
+      const cached = localStorage.getItem(`iis_result_${userId}`)
+      if (cached) {
+        const local = JSON.parse(cached)
+        if (local.has_result) {
+          setData(local)
+          if (local.tested_at) {
+            const days = (Date.now() - new Date(local.tested_at)) / 86400000
+            setCanUpdate(days >= 30)
+          }
+          setLoading(false)
+          // Vẫn sync từ API ở background để cập nhật nếu có retest mới hơn
+          fetch(`${API_URL}/iis/result/${encodeURIComponent(userId)}`)
+            .then(r => r.json())
+            .then(d => {
+              if (d.has_result && d.tested_at) {
+                const localTime = new Date(local.tested_at || 0).getTime()
+                const apiTime   = new Date(d.tested_at).getTime()
+                if (apiTime >= localTime) {
+                  setData(d)  // API có kết quả mới hơn localStorage
+                  try { localStorage.setItem(`iis_result_${userId}`, JSON.stringify({...d})) } catch {}
+                }
+              }
+            })
+            .catch(() => {})
+          return
+        }
+      }
+    } catch {}
+
+    // Bước 2: Không có localStorage — fetch từ API
     fetch(`${API_URL}/iis/result/${encodeURIComponent(userId)}`)
       .then(r => r.json())
       .then(d => {
         if (d.has_result) {
           setData(d)
-          // Cho phép retest sau 30 ngày (thay vì 90 ngày — để dễ test với client)
+          try { localStorage.setItem(`iis_result_${userId}`, JSON.stringify(d)) } catch {}
           if (d.tested_at) {
             const days = (Date.now() - new Date(d.tested_at)) / 86400000
             setCanUpdate(days >= 30)
@@ -134,7 +167,11 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
           )}
         </div>
         <button
-          onClick={onRequestUpdate}
+          onClick={() => {
+            // Xoá cache để sau khi retest sẽ lưu kết quả mới
+            try { localStorage.removeItem(`iis_result_${userId}`) } catch {}
+            onRequestUpdate()
+          }}
           disabled={!canUpdate}
           title={canUpdate ? 'Cập nhật IIS Score' : 'Có thể cập nhật sau 30 ngày từ lần test trước'}
           style={{

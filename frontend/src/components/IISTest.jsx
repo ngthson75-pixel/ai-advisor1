@@ -341,8 +341,22 @@ export default function IISTest({ userId, onComplete }) {
     setResult(clientResult)
     setPhase('result')
 
-    // Lưu lên backend chạy ngầm (không block user)
-    saveToBackgroundSilent(userId || 'guest', ans)
+    // Lưu vào localStorage ngay lập tức — widget đọc được ngay
+    const uid = userId || 'guest'
+    const localRecord = {
+      total:      clientResult.total,
+      kl_score:   clientResult.kl_score,
+      kt_score:   clientResult.kt_score,
+      level:      clientResult.level,
+      method:     clientResult.method,
+      has_result: true,
+      tested_at:  new Date().toISOString(),
+      answers:    ans,
+    }
+    try { localStorage.setItem(`iis_result_${uid}`, JSON.stringify(localRecord)) } catch {}
+
+    // Lưu lên backend chạy ngầm (không block user, retry 6 lần)
+    saveToBackgroundSilent(uid, ans)
   }
 
   const restart = () => {
