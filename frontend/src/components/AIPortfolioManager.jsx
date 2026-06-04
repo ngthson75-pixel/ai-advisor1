@@ -154,6 +154,8 @@ export default function AIPortfolioManager({ userId = '1' }) {
         body: JSON.stringify({ user_id: userId, message: msg })
       })
       const d = await r.json()
+      // DEBUG — xóa sau khi confirm OK
+      console.log('[AI-Advisor Chat] response meta:', d.meta)
       setMessages(prev => [...prev, {
         role: 'ai',
         text: d.response || d.error || 'AI không phản hồi được.',
@@ -285,8 +287,8 @@ export default function AIPortfolioManager({ userId = '1' }) {
                     marginBottom: '5px', padding: '3px 9px', borderRadius: '12px',
                     fontSize: '11px', fontWeight: 500,
                     background: m.meta.emotional_state === 'fomo'
-                      ? 'rgba(239,68,68,0.15)' : m.meta.emotional_state === 'panic'
-                      ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)',
+                      ? 'rgba(239,68,68,0.25)' : m.meta.emotional_state === 'panic'
+                      ? 'rgba(245,158,11,0.25)' : 'rgba(59,130,246,0.25)',
                     color: m.meta.emotional_state === 'fomo'
                       ? '#fca5a5' : m.meta.emotional_state === 'panic'
                       ? '#fcd34d' : '#93c5fd',
