@@ -1673,6 +1673,7 @@ def chat():
     data = request.json
     user_id = data.get('user_id', 1)
     message = data.get('message', '').strip()
+    print(f"[CHAT-DEBUG] user={user_id} msg={message[:50]}", flush=True)
     if not message:
         return jsonify({'success': False, 'error': 'Message required'}), 400
     session = Session()
@@ -1703,6 +1704,7 @@ def chat():
             iis_level=iis_level_now
         ))
         session.commit()
+        print(f"[CHAT-DEBUG] emotion={emotional_state} topic={topic} iis={iis_level_now}", flush=True)
         return jsonify({
             'success': True,
             'response': ai_response,
