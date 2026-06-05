@@ -358,20 +358,27 @@ def detect_emotional_state(message):
     msg = message.lower()
 
     fomo_kw = [
-        'tăng mạnh', 'bứt phá', 'sợ bỏ lỡ', 'bỏ lỡ', 'mọi người đang mua',
-        'mua ngay', 'vào ngay', 'còn kịp không', 'kịp không', 'hôm nay phải mua',
-        'nhanh lên', 'đang hot', 'đang sóng', 'đang bay', 'lên mạnh',
-        'mua trước', 'lỡ sóng', 'muộn không'
+        'tăng mạnh', 'tăng quá mạnh', 'tăng quá', 'bứt phá',
+        'sợ bỏ lỡ', 'bỏ lỡ', 'mọi người đang mua', 'mọi người mua',
+        'mua ngay', 'vào ngay', 'còn kịp không', 'kịp không',
+        'hôm nay phải mua', 'nhanh lên', 'đang hot', 'đang sóng',
+        'đang bay', 'lên mạnh', 'mua trước', 'lỡ sóng', 'muộn không',
+        'có nên mua không', 'nên mua không', 'có nên vào không',
+        'tăng liên tục', 'tăng mãi', 'bỏ lỡ cơ hội',
     ]
     panic_kw = [
-        'sập', 'giảm mạnh', 'bán hết', 'thoát hết', 'sợ quá', 'lo quá',
+        'sập', 'giảm mạnh', 'giảm quá mạnh', 'giảm quá',
+        'bán hết', 'thoát hết', 'sợ quá', 'lo quá',
         'cắt lỗ hết', 'panik', 'panic', 'thị trường sập', 'mất hết',
-        'nên bán không', 'bán ngay', 'thoát ngay', 'giảm tiếp', 'sắp sập'
+        'nên bán không', 'bán ngay', 'thoát ngay', 'giảm tiếp', 'sắp sập',
+        'nên bán hết không', 'có nên bán không', 'sắp giảm',
+        'thị trường xấu', 'rủi ro cao',
     ]
     avg_down_kw = [
-        'mua thêm', 'trung bình giá', 'average down', 'bắt đáy',
-        'bắt thêm', 'giảm thì mua', 'gom thêm', 'tích thêm',
-        'mua thêm vào', 'đang lỗ mua thêm', 'lỗ mua thêm'
+        'mua thêm', 'mua thêm vào', 'trung bình giá', 'average down',
+        'bắt đáy', 'bắt thêm', 'giảm thì mua', 'gom thêm', 'tích thêm',
+        'đang lỗ mua thêm', 'lỗ mua thêm', 'đang lỗ muốn mua thêm',
+        'lỗ có nên mua thêm', 'đang lỗ', 'tích lũy thêm',
     ]
 
     fomo_score  = sum(1 for kw in fomo_kw    if kw in msg)
