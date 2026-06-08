@@ -48,12 +48,45 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
 
   useEffect(() => {
     if (!userId) { setLoading(false); return }
+
+    // Bước 1: Check localStorage ngay lập tức — hiển thị kết quả không chờ backend
+    try {
+      const cached = localStorage.getItem(`iis_result_${userId}`)
+      if (cached) {
+        const local = JSON.parse(cached)
+        if (local.has_result) {
+          setData(local)
+          if (local.tested_at) {
+            const days = (Date.now() - new Date(local.tested_at)) / 86400000
+            setCanUpdate(days >= 30)
+          }
+          setLoading(false)
+          // Vẫn sync từ API ở background để cập nhật nếu có retest mới hơn
+          fetch(`${API_URL}/iis/result/${encodeURIComponent(userId)}`)
+            .then(r => r.json())
+            .then(d => {
+              if (d.has_result && d.tested_at) {
+                const localTime = new Date(local.tested_at || 0).getTime()
+                const apiTime   = new Date(d.tested_at).getTime()
+                if (apiTime >= localTime) {
+                  setData(d)  // API có kết quả mới hơn localStorage
+                  try { localStorage.setItem(`iis_result_${userId}`, JSON.stringify({...d})) } catch {}
+                }
+              }
+            })
+            .catch(() => {})
+          return
+        }
+      }
+    } catch {}
+
+    // Bước 2: Không có localStorage — fetch từ API
     fetch(`${API_URL}/iis/result/${encodeURIComponent(userId)}`)
       .then(r => r.json())
       .then(d => {
         if (d.has_result) {
           setData(d)
-          // Cho phép retest sau 30 ngày (thay vì 90 ngày — để dễ test với client)
+          try { localStorage.setItem(`iis_result_${userId}`, JSON.stringify(d)) } catch {}
           if (d.tested_at) {
             const days = (Date.now() - new Date(d.tested_at)) / 86400000
             setCanUpdate(days >= 30)
@@ -134,7 +167,11 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
           )}
         </div>
         <button
-          onClick={onRequestUpdate}
+          onClick={() => {
+            // Xoá cache để sau khi retest sẽ lưu kết quả mới
+            try { localStorage.removeItem(`iis_result_${userId}`) } catch {}
+            onRequestUpdate()
+          }}
           disabled={!canUpdate}
           title={canUpdate ? 'Cập nhật IIS Score' : 'Có thể cập nhật sau 30 ngày từ lần test trước'}
           style={{
@@ -217,20 +254,18 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
           </div>
         )}
 
-        {/* Level-up triggers */}
-        {lvl.triggers.length > 0 && (
-          <div style={{ marginTop: '12px', borderTop: '1px solid #1e293b', paddingTop: '12px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 500, color: '#64748b', marginBottom: '7px', textTransform: 'uppercase', letterSpacing: '.05em' }}>
-              Điều kiện lên {nextLvl?.name || 'cấp tiếp theo'}
-            </div>
-            {lvl.triggers.map((t, i) => (
-              <div key={i} style={{ display: 'flex', gap: '7px', alignItems: 'flex-start', marginBottom: '5px', fontSize: '12px', color: '#94a3b8', lineHeight: 1.5 }}>
-                <span style={{ flexShrink: 0, marginTop: '4px', width: '5px', height: '5px', borderRadius: '50%', background: lvl.color, display: 'inline-block' }} />
-                {t}
-              </div>
-            ))}
+        {/* Motivating CTA — hối thúc dùng app thường xuyên */}
+        <div style={{
+          marginTop: '12px', borderTop: '1px solid #1e293b', paddingTop: '12px',
+          display: 'flex', gap: '10px', alignItems: 'flex-start',
+        }}>
+          <span style={{ fontSize: '18px', flexShrink: 0, marginTop: '1px' }}>💬</span>
+          <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.7 }}>
+            Hãy thường xuyên trao đổi với{' '}
+            <span style={{ color: lvl.color, fontWeight: 500 }}>AI-Advisor chat</span>
+            {' '}để hệ thống giúp bạn kỷ luật và từng bước nâng hiệu quả đầu tư của bạn.
           </div>
-        )}
+        </div>
 
         {/* Chuyên gia */}
         {lvlIdx === 5 && (
