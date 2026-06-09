@@ -160,6 +160,8 @@ if _has_campaign:
 # === Auto-migrate chat_history for IIS behavioral columns ===
 try:
     with engine.connect() as _conn:
+        _cols_added = []
+        _cols_failed = []
         for _col, _type in [
             ("emotional_state", "VARCHAR(20)"),
             ("topic",           "VARCHAR(30)"),
@@ -170,11 +172,15 @@ try:
                     f"ALTER TABLE chat_history ADD COLUMN IF NOT EXISTS {_col} {_type}"
                 ))
                 _conn.commit()
-            except Exception:
-                pass
-    print("✅ chat_history: IIS behavioral columns ready")
+                _cols_added.append(_col)
+            except Exception as _col_err:
+                _cols_failed.append(f"{_col}: {_col_err}")
+        if _cols_failed:
+            print(f"⚠️  chat_history migration FAILED for: {_cols_failed}")
+        else:
+            print(f"✅ chat_history: IIS behavioral columns ready ({', '.join(_cols_added)})")
 except Exception as _e:
-    print(f"⚠️  chat_history migration: {_e}")
+    print(f"⚠️  chat_history migration error: {_e}")
 
 # === Init IIS Routes ===
 if _has_iis:
@@ -1692,12 +1698,15 @@ def chat():
         emotional_state, _ = detect_emotional_state(message)
         topic, ticker_mentioned = detect_trade_intent(message)
         iis_section     = build_iis_coaching_section(iis_profile, emotional_state)
-        history_rows    = session.query(ChatHistory)\
-            .filter_by(user_id=str(user_id))\
-            .order_by(ChatHistory.created_at.desc())\
-            .limit(5).all()
-        history = [{"message": h.message, "response": h.response}
-                   for h in reversed(history_rows)]
+        # Load history — resilient: nếu fail (vd: cột mới chưa có) thì dùng []
+        try:
+            history_rows = session.query(ChatHistory)                .filter_by(user_id=str(user_id))                .order_by(ChatHistory.created_at.desc())                .limit(5).all()
+            history = [{"message": h.message, "response": h.response}
+                       for h in reversed(history_rows)]
+        except Exception as _hist_err:
+            session.rollback()
+            print(f"[/api/chat] history load failed (non-fatal): {_hist_err}")
+            history = []
         portfolio_context, signal_tickers = get_portfolio_context(user_id)
         ai_response = chat_with_gpt(
             message, portfolio_context, signal_tickers,
