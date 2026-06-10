@@ -384,7 +384,7 @@ function App() {
           )}
 
           {activeTab === 'vip' && isVip && (
-            <VIPDashboard user={user} onSwitchBasic={() => setActiveTab('basic')} />
+            <VIPDashboard user={user} onSwitchBasic={() => setActiveTab('basic')} onOpenIIS={() => setShowIISModal(true)} />
           )}
 
           {activeTab === 'basic' && isVip && (

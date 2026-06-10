@@ -592,7 +592,7 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
 }
 
 // ─── MAIN ─────────────────────────────────────────────────────
-export default function VIPDashboard({ user, onSwitchBasic }) {
+export default function VIPDashboard({ user, onSwitchBasic, onOpenIIS }) {
   const [tab, setTab]         = useState('signals')
   const [signals, setSignals] = useState([])
   const [loading, setLoading] = useState(true)
@@ -686,11 +686,7 @@ export default function VIPDashboard({ user, onSwitchBasic }) {
       <div style={{ maxWidth: '760px', margin: '0 auto', padding: '20px 16px 0' }}>
         <IISScoreWidget
           userId={user.email}
-          onRequestUpdate={() => {
-            // VIP users có thể retest IIS
-            const ev = new CustomEvent('openIISModal')
-            window.dispatchEvent(ev)
-          }}
+          onRequestUpdate={onOpenIIS || (() => {})}
         />
       </div>
 
