@@ -1694,7 +1694,13 @@ def chat():
         iis_profile     = get_iis_profile_cached(str(user_id))
         emotional_state, _ = detect_emotional_state(message)
         topic, ticker_mentioned = detect_trade_intent(message)
-        iis_section     = build_iis_coaching_section(iis_profile, emotional_state)
+
+        # IIS coaching chỉ cho Basic+ và VIP
+        user_tier = data.get('user_tier', 'free')
+        COACHING_TIERS = {'basic', 'basic_trial', 'early_adopter', 'vip'}
+        coaching_enabled = user_tier in COACHING_TIERS
+        iis_section = build_iis_coaching_section(iis_profile, emotional_state) if coaching_enabled else ""
+        tier_locked  = not coaching_enabled
         # Load history — resilient: nếu fail (vd: cột mới chưa có) thì dùng []
         try:
             history_rows = session.query(ChatHistory)                .filter_by(user_id=str(user_id))                .order_by(ChatHistory.created_at.desc())                .limit(5).all()
@@ -1725,11 +1731,13 @@ def chat():
             'success': True,
             'response': ai_response,
             'meta': {
-                'emotional_state': emotional_state,
+                'emotional_state': emotional_state if coaching_enabled else ('detected' if emotional_state != 'neutral' else 'neutral'),
                 'topic': topic,
                 'ticker': ticker_mentioned,
                 'iis_level': iis_level_now,
                 'iis_level_name': iis_profile.get('level') if iis_profile else None,
+                'tier_locked': tier_locked,
+                'user_tier': user_tier,
             }
         })
     except Exception as e:

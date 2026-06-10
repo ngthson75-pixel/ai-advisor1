@@ -122,7 +122,16 @@ function App() {
     }
     setUser(userData)
     setResolvedTier(tier)
-    if (userData.isVip) { setActiveTab('vip'); return }
+    if (userData.isVip) {
+      setActiveTab('vip')
+      // VIP cũng check IIS — họ có full coaching
+      try {
+        const r = await fetch(`${API_URL}/iis/result/${encodeURIComponent(userData.email)}`)
+        const d = await r.json()
+        if (!d.has_result) setShowIISModal(true)
+      } catch {}
+      return
+    }
 
     // Auto-show IIS modal nếu user chưa làm test lần nào
     try {
@@ -370,7 +379,7 @@ function App() {
                 userId={user.email}
                 onRequestUpdate={() => setShowIISModal(true)}
               />
-              <AIPortfolioManager userId={user.email} />
+              <AIPortfolioManager userId={user.email} userTier={resolvedTier} />
             </>
           )}
 
