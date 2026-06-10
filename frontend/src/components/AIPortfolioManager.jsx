@@ -5,7 +5,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 const fmt = (n) => n?.toLocaleString('vi-VN') || '0'
 const fmtPct = (n) => (n >= 0 ? '+' : '') + n?.toFixed(1) + '%'
 
-export default function AIPortfolioManager({ userId = '1' }) {
+export default function AIPortfolioManager({ userId, userTier = 'free' }) {
   // ── Portfolio state ──────────────────────────────────────────
   const [portfolio, setPortfolio] = useState([])
   const [cash, setCash]           = useState(0)
@@ -151,7 +151,7 @@ export default function AIPortfolioManager({ userId = '1' }) {
       const r = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, message: msg })
+        body: JSON.stringify({ user_id: userId, message: msg, user_tier: userTier })
       })
       const d = await r.json()
       // DEBUG — xóa sau khi confirm OK
@@ -280,29 +280,47 @@ export default function AIPortfolioManager({ userId = '1' }) {
                 }}>🤖</div>
               )}
               <div style={{ maxWidth: '78%' }}>
-                {/* Emotional state badge — chỉ hiện khi detect FOMO/Panic/AvgDown */}
+                {/* FOMO/Panic/AvgDown badge + Upgrade CTA cho Free users */}
                 {m.role === 'ai' && m.meta && m.meta.emotional_state && m.meta.emotional_state !== 'neutral' && (
-                  <div style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '5px',
-                    marginBottom: '5px', padding: '3px 9px', borderRadius: '12px',
-                    fontSize: '11px', fontWeight: 500,
-                    background: m.meta.emotional_state === 'fomo'
-                      ? 'rgba(239,68,68,0.25)' : m.meta.emotional_state === 'panic'
-                      ? 'rgba(245,158,11,0.25)' : 'rgba(59,130,246,0.25)',
-                    color: m.meta.emotional_state === 'fomo'
-                      ? '#fca5a5' : m.meta.emotional_state === 'panic'
-                      ? '#fcd34d' : '#93c5fd',
-                    border: `1px solid ${m.meta.emotional_state === 'fomo'
-                      ? '#ef444440' : m.meta.emotional_state === 'panic'
-                      ? '#f59e0b40' : '#3b82f640'}`,
-                  }}>
-                    {m.meta.emotional_state === 'fomo'    && '⚠️ FOMO detected'}
-                    {m.meta.emotional_state === 'panic'   && '⚠️ Panic detected'}
-                    {m.meta.emotional_state === 'avg_down'&& '⚠️ Average down detected'}
-                    {m.meta.iis_level_name && (
-                      <span style={{ opacity: 0.7, marginLeft: '4px' }}>
-                        · {m.meta.iis_level_name}
-                      </span>
+                  <div style={{ marginBottom: '8px' }}>
+                    {/* Badge */}
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '5px',
+                      marginBottom: m.meta.tier_locked ? '6px' : '0',
+                      padding: '3px 9px', borderRadius: '12px',
+                      fontSize: '11px', fontWeight: 500,
+                      background: m.meta.emotional_state === 'fomo' || m.meta.emotional_state === 'detected'
+                        ? 'rgba(239,68,68,0.25)' : m.meta.emotional_state === 'panic'
+                        ? 'rgba(245,158,11,0.25)' : 'rgba(59,130,246,0.25)',
+                      color: m.meta.emotional_state === 'fomo' || m.meta.emotional_state === 'detected'
+                        ? '#fca5a5' : m.meta.emotional_state === 'panic'
+                        ? '#fcd34d' : '#93c5fd',
+                      border: `1px solid ${m.meta.emotional_state === 'fomo' || m.meta.emotional_state === 'detected'
+                        ? '#ef444440' : m.meta.emotional_state === 'panic'
+                        ? '#f59e0b40' : '#3b82f640'}`,
+                    }}>
+                      {(m.meta.emotional_state === 'fomo' || m.meta.emotional_state === 'detected') && '⚠️ FOMO detected'}
+                      {m.meta.emotional_state === 'panic'    && '⚠️ Panic detected'}
+                      {m.meta.emotional_state === 'avg_down' && '⚠️ Average down detected'}
+                      {m.meta.iis_level_name && !m.meta.tier_locked && (
+                        <span style={{ opacity: 0.7, marginLeft: '4px' }}>· {m.meta.iis_level_name}</span>
+                      )}
+                    </div>
+
+                    {/* Upgrade CTA — chỉ cho Free users */}
+                    {m.meta.tier_locked && (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        padding: '7px 12px', borderRadius: '8px',
+                        background: 'rgba(99,102,241,0.1)',
+                        border: '1px solid rgba(99,102,241,0.3)',
+                        fontSize: '12px', color: '#a5b4fc',
+                      }}>
+                        <span>🔒</span>
+                        <span>
+                          Nâng cấp lên <strong style={{ color: '#818cf8' }}>Basic</strong> để nhận coaching IIS cá nhân hóa theo level của bạn
+                        </span>
+                      </div>
                     )}
                   </div>
                 )}

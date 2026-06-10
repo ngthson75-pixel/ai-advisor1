@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import IISScoreWidget from './IISScoreWidget'
 
 // ─── Environment Detection ───────────────────────────────────
 const _hostname     = typeof window !== 'undefined' ? window.location.hostname : ''
@@ -501,10 +502,10 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
     try {
       const r = await fetch(`${API_BASE}/chat`, {
         method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ user_id: userId, message: msg }),
+        body: JSON.stringify({ user_id: userId, message: msg, user_tier: 'vip' }),
       })
       const d = await r.json()
-      setMessages(prev => [...prev, { role: 'assistant', content: d.response || d.message || '...' }])
+      setMessages(prev => [...prev, { role: 'assistant', content: d.response || d.message || '...', meta: d.meta || null }])
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Lỗi kết nối. Thử lại sau.' }])
     }
@@ -538,8 +539,29 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
           ) : (
             latestMessages.map((m, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                <div style={{ maxWidth: '82%', padding: '8px 12px', borderRadius: '12px', fontSize: '13px', lineHeight: '1.5', color: '#fff', background: m.role === 'user' ? `linear-gradient(135deg, ${C.purple}, ${C.purpleLight})` : '#1e1b2e', borderBottomRightRadius: m.role === 'user' ? '3px' : '12px', borderBottomLeftRadius: m.role === 'user' ? '12px' : '3px' }}>
-                  {m.content}
+                <div style={{ maxWidth: '82%' }}>
+                  {/* FOMO/Panic badge — VIP có full IIS coaching */}
+                  {m.role === 'assistant' && m.meta && m.meta.emotional_state && m.meta.emotional_state !== 'neutral' && (
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '5px',
+                      marginBottom: '5px', padding: '3px 9px', borderRadius: '10px',
+                      fontSize: '11px', fontWeight: 600,
+                      background: (m.meta.emotional_state === 'fomo' || m.meta.emotional_state === 'detected') ? 'rgba(239,68,68,0.2)' : m.meta.emotional_state === 'panic' ? 'rgba(245,158,11,0.2)' : 'rgba(59,130,246,0.2)',
+                      color: (m.meta.emotional_state === 'fomo' || m.meta.emotional_state === 'detected') ? '#fca5a5' : m.meta.emotional_state === 'panic' ? '#fcd34d' : '#93c5fd',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                    }}>
+                      {(m.meta.emotional_state === 'fomo' || m.meta.emotional_state === 'detected') && '⚠️ FOMO detected'}
+                      {m.meta.emotional_state === 'panic'    && '⚠️ Panic detected'}
+                      {m.meta.emotional_state === 'avg_down' && '⚠️ Average down detected'}
+                      {m.meta.iis_level_name && <span style={{ opacity:.7, marginLeft:'4px' }}>· {m.meta.iis_level_name}</span>}
+                    </div>
+                  )}
+                  <div style={{ padding: '8px 12px', borderRadius: '12px', fontSize: '13px', lineHeight: '1.5', color: '#fff',
+                    background: m.role === 'user' ? `linear-gradient(135deg, ${C.purple}, ${C.purpleLight})` : '#1e1b2e',
+                    borderBottomRightRadius: m.role === 'user' ? '3px' : '12px',
+                    borderBottomLeftRadius:  m.role === 'user' ? '12px' : '3px' }}>
+                    {m.content}
+                  </div>
                 </div>
               </div>
             ))
@@ -660,8 +682,20 @@ export default function VIPDashboard({ user, onSwitchBasic }) {
         </div>
       </div>
 
+      {/* IIS Score Widget — VIP có full IIS */}
+      <div style={{ maxWidth: '760px', margin: '0 auto', padding: '20px 16px 0' }}>
+        <IISScoreWidget
+          userId={user.email}
+          onRequestUpdate={() => {
+            // VIP users có thể retest IIS
+            const ev = new CustomEvent('openIISModal')
+            window.dispatchEvent(ev)
+          }}
+        />
+      </div>
+
       {/* Inline AI Chat — always visible */}
-      <div style={{ paddingTop: '20px' }}>
+      <div style={{ paddingTop: '8px' }}>
         <InlineAIChat userId={user.email} />
       </div>
 
