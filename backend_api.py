@@ -1699,6 +1699,10 @@ def chat():
     session = Session()
     try:
         iis_profile     = get_iis_profile_cached(str(user_id))
+        # Fallback: dùng IIS profile từ frontend nếu backend chưa có (Render sleep issue)
+        if not iis_profile and data.get('iis_profile_fallback'):
+            iis_profile = data['iis_profile_fallback']
+            print(f"[IIS] Using frontend fallback profile for {user_id}: {iis_profile.get('level')}")
         emotional_state, _ = detect_emotional_state(message)
         topic, ticker_mentioned = detect_trade_intent(message)
 

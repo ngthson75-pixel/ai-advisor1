@@ -72,6 +72,14 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
                   setData(d)  // API có kết quả mới hơn localStorage
                   try { localStorage.setItem(`iis_result_${userId}`, JSON.stringify({...d})) } catch {}
                 }
+              } else if (!d.has_result && local.answers) {
+                // Backend không có data nhưng localStorage có → re-submit
+                console.log('[IIS] Re-submitting to backend...')
+                fetch(`${API_URL}/iis/submit`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ user_id: userId, answers: local.answers })
+                }).catch(() => {})
               }
             })
             .catch(() => {})

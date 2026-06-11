@@ -502,7 +502,13 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
     try {
       const r = await fetch(`${API_BASE}/chat`, {
         method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ user_id: userId, message: msg, user_tier: 'vip' }),
+        // IIS fallback từ localStorage
+        let iisLocal = null
+        try {
+          const c = localStorage.getItem(`iis_result_${userId}`)
+          if (c) { const p = JSON.parse(c); if (p.has_result) iisLocal = { total: p.total, level: p.level, method: p.method, kl: p.kl_score, kt: p.kt_score } }
+        } catch {}
+        body: JSON.stringify({ user_id: userId, message: msg, user_tier: 'vip', iis_profile_fallback: iisLocal }),
       })
       const d = await r.json()
       setMessages(prev => [...prev, { role: 'assistant', content: d.response || d.message || '...', meta: d.meta || null }])
