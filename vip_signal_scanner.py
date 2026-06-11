@@ -280,6 +280,10 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
                 **date_params,
             }).fetchall()
         except Exception:
+            # CRITICAL: rollback transaction bị abort trước khi retry
+            # PostgreSQL abort toàn bộ transaction khi 1 query fail
+            try: db_session.rollback()
+            except: pass
             # Fallback: bảng signals (production schema — chỉ có cột strength, không có confidence)
             # KHÔNG dùng date filter vì created_at có thể NULL và date là string → cast lỗi
             rows = db_session.execute(text("""
@@ -299,14 +303,6 @@ def get_vip_signals_from_db(db_session, limit: int = 50, days: int = 30) -> list
             }).fetchall()
 
         signals = [_signal_to_dict(row) for row in rows]
-
-        # ── Dedup: giữ signal có vip_score cao nhất cho mỗi ticker+date+action ──
-        seen = {}
-        for s in signals:
-            key = (s.get('ticker', ''), s.get('date', ''), s.get('action', 'BUY'))
-            if key not in seen or s['vip_score'] > seen[key]['vip_score']:
-                seen[key] = s
-        signals = list(seen.values())
 
         # Sort: VN30 trước, sau đó theo vip_score
         signals.sort(key=lambda s: (
