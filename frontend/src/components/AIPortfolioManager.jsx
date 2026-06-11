@@ -148,18 +148,16 @@ export default function AIPortfolioManager({ userId, userTier = 'free' }) {
     setMessages(prev => [...prev, { role: 'user', text: msg }])
     setChatLoading(true)
     try {
+      // IIS profile fallback từ localStorage
+      let iisLocal = null
+      try {
+        const _c = localStorage.getItem(`iis_result_${userId}`)
+        if (_c) { const _p = JSON.parse(_c); if (_p.has_result) iisLocal = { total: _p.total, level: _p.level, method: _p.method, kl: _p.kl_score, kt: _p.kt_score } }
+      } catch {}
+
       const r = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Gửi IIS profile từ localStorage làm fallback cho backend
-        let iisLocal = null
-        try {
-          const cached = localStorage.getItem(`iis_result_${userId}`)
-          if (cached) {
-            const p = JSON.parse(cached)
-            if (p.has_result) iisLocal = { total: p.total, level: p.level, method: p.method, kl: p.kl_score, kt: p.kt_score }
-          }
-        } catch {}
         body: JSON.stringify({ user_id: userId, message: msg, user_tier: userTier, iis_profile_fallback: iisLocal })
       })
       const d = await r.json()
