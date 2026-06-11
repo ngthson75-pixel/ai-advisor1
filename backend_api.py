@@ -490,6 +490,10 @@ Phương pháp: {method}
 
 COACHING MODE: {mode}
 
+BẮT BUỘC — Mở đầu response bằng 1 dòng đề cập Level IIS của user:
+Ví dụ: "Với IIS {total}/100 (Level {level_name}) của bạn, ..."
+→ Giúp user thấy rõ AI đang coaching cá nhân hóa theo profile của họ.
+
 Điều kiện lên level tiếp theo (nhắc nhở khi phù hợp):
 {trigger}
 """
