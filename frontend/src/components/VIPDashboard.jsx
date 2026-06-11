@@ -500,15 +500,15 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
     setMessages(prev => [...prev, { role: 'user', content: msg }])
     setLoading(true)
     try {
+      // IIS profile fallback từ localStorage
+      let _iisLocal = null
+      try {
+        const _c = localStorage.getItem(`iis_result_${userId}`)
+        if (_c) { const _p = JSON.parse(_c); if (_p.has_result) _iisLocal = { total: _p.total, level: _p.level, method: _p.method, kl: _p.kl_score, kt: _p.kt_score } }
+      } catch {}
       const r = await fetch(`${API_BASE}/chat`, {
         method: 'POST', headers: authHeaders(),
-        // IIS fallback từ localStorage
-        let iisLocal = null
-        try {
-          const c = localStorage.getItem(`iis_result_${userId}`)
-          if (c) { const p = JSON.parse(c); if (p.has_result) iisLocal = { total: p.total, level: p.level, method: p.method, kl: p.kl_score, kt: p.kt_score } }
-        } catch {}
-        body: JSON.stringify({ user_id: userId, message: msg, user_tier: 'vip', iis_profile_fallback: iisLocal }),
+        body: JSON.stringify({ user_id: userId, message: msg, user_tier: 'vip', iis_profile_fallback: _iisLocal }),
       })
       const d = await r.json()
       setMessages(prev => [...prev, { role: 'assistant', content: d.response || d.message || '...', meta: d.meta || null }])
