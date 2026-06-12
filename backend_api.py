@@ -664,7 +664,7 @@ def get_portfolio_context(user_id):
         cash = cash_pos.cash_amount if cash_pos else 0
 
         # ALL active BUY signals (for Signal list)
-        signals = session.query(Signal).filter(Signal.action == 'BUY').all()
+        signals = session.query(Signal).filter(Signal.action == 'BUY', Signal.status == 'open').all()
         signal_tickers = set([s.ticker for s in signals])
 
         # MARKET DASHBOARD: Inject latest market risk into context
