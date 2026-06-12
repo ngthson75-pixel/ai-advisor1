@@ -777,8 +777,17 @@ def get_portfolio_context(user_id):
             except Exception:
                 pass
 
-        context += f"\n\nCO PHIEU TRONG BUYSELL SIGNAL SYSTEM:\n"
-        context += ", ".join(sorted(signal_tickers)) if signal_tickers else "Chua co signal nao"
+        context += f"\n\nCO PHIEU TRONG BUYSELL SIGNAL (BUY - DANG MO):\n"
+        if signals:
+            for _s in sorted(signals, key=lambda x: x.ticker):
+                _entry = f"{_s.entry_price:,.0f}" if _s.entry_price else "N/A"
+                _sl    = f"{_s.stop_loss:,.0f}" if _s.stop_loss else "N/A"
+                _tp    = f"{_s.take_profit:,.0f}" if _s.take_profit else "N/A"
+                _score = f"{int(_s.strength)}%" if _s.strength else "N/A"
+                _date  = str(_s.date)[:10] if _s.date else "N/A"
+                context += f"  {_s.ticker}: Entry {_entry} | SL {_sl} | TP {_tp} | Score {_score} | {_date}\n"
+        else:
+            context += "  Chua co signal nao dang mo\n"
 
         return context, signal_tickers
 
