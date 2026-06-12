@@ -319,6 +319,10 @@ CRITICAL: Help users control FOMO and PANIC SELLING by:
 # Inject IIS profile into system prompt, detect emotions, log behavior
 # ========================================================================
 
+
+# VN30 list for signal filtering
+VN30_TICKERS = ['ACB', 'BCM', 'BID', 'BVH', 'CTG', 'FPT', 'GAS', 'GVR', 'HDB', 'HPG', 'MBB', 'MSN', 'MWG', 'PLX', 'POW', 'SAB', 'SHB', 'SSB', 'SSI', 'STB', 'TCB', 'TPB', 'VCB', 'VHM', 'VIB', 'VIC', 'VJC', 'VNM', 'VPB', 'VRE']
+
 # In-memory IIS profile cache {user_id: (profile_dict, timestamp)}
 _iis_cache = {}
 _IIS_CACHE_TTL = 300  # 5 minutes
@@ -655,7 +659,7 @@ def get_current_price(ticker):
         session.close()
 
 
-def get_portfolio_context(user_id):
+def get_portfolio_context(user_id, user_tier='free'):
     """Get portfolio context with P&L + Market Dashboard data for AI advisor"""
     session = Session()
     try:
@@ -664,7 +668,17 @@ def get_portfolio_context(user_id):
         cash = cash_pos.cash_amount if cash_pos else 0
 
         # ALL active BUY signals (for Signal list)
-        signals = session.query(Signal).filter(Signal.action == 'BUY', Signal.status == 'open', Signal.strength >= 65).all()
+        # VIP users: chỉ show VN30 signals (đồng bộ với VIP dashboard)
+        if user_tier == 'vip':
+            signals = session.query(Signal).filter(
+                Signal.action == 'BUY', Signal.status == 'open',
+                Signal.strength >= 65, Signal.ticker.in_(VN30_TICKERS)
+            ).all()
+        else:
+            signals = session.query(Signal).filter(
+                Signal.action == 'BUY', Signal.status == 'open',
+                Signal.strength >= 65
+            ).all()
         signal_tickers = set([s.ticker for s in signals])
 
         # MARKET DASHBOARD: Inject latest market risk into context
@@ -1730,7 +1744,7 @@ def chat():
             session.rollback()
             print(f"[/api/chat] history load failed (non-fatal): {_hist_err}")
             history = []
-        portfolio_context, signal_tickers = get_portfolio_context(user_id)
+        portfolio_context, signal_tickers = get_portfolio_context(user_id, user_tier=user_tier)
         ai_response = chat_with_gpt(
             message, portfolio_context, signal_tickers,
             iis_section=iis_section, history=history
