@@ -444,6 +444,25 @@ function InlineAIChat({ userId }) {
   const [input, setInput]       = useState('')
   const [loading, setLoading]   = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [histLoaded, setHistLoaded] = useState(false)
+
+  // Load chat history on mount
+  useEffect(() => {
+    if (!userId || histLoaded) return
+    fetch(`${API_BASE}/chat/history?user_id=${encodeURIComponent(userId)}&limit=20`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.history && d.history.length > 0) {
+          const hist = d.history.map(h => ([
+            { role: 'user',      content: h.message,  faded: true },
+            { role: 'assistant', content: h.response, faded: true },
+          ])).flat()
+          setMessages(hist)
+        }
+        setHistLoaded(true)
+      })
+      .catch(() => setHistLoaded(true))
+  }, [userId])
   const chatEndRef = useRef(null)
   const inputRef   = useRef(null)
 
@@ -562,8 +581,11 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
                       {m.meta.iis_level_name && <span style={{ opacity:.7, marginLeft:'4px' }}>· {m.meta.iis_level_name}</span>}
                     </div>
                   )}
-                  <div style={{ padding: '8px 12px', borderRadius: '12px', fontSize: '13px', lineHeight: '1.5', color: '#fff',
-                    background: m.role === 'user' ? `linear-gradient(135deg, ${C.purple}, ${C.purpleLight})` : '#1e1b2e',
+                  <div style={{ padding: '8px 12px', borderRadius: '12px', fontSize: '13px', lineHeight: '1.5',
+                    color: m.faded ? 'rgba(255,255,255,0.4)' : '#fff',
+                    background: m.role === 'user'
+                      ? (m.faded ? 'rgba(99,60,180,0.3)' : `linear-gradient(135deg, ${C.purple}, ${C.purpleLight})`)
+                      : (m.faded ? 'rgba(20,17,36,0.6)' : '#1e1b2e'),
                     borderBottomRightRadius: m.role === 'user' ? '3px' : '12px',
                     borderBottomLeftRadius:  m.role === 'user' ? '12px' : '3px' }}>
                     {m.content}
