@@ -260,17 +260,11 @@ Ví dụ tư vấn dựa trên Market Dashboard:
   for stocks that are included in the official "Buysell Signal" list.
 - For all other stocks: analysis only, NO action guidance.
 
-=== SIGNAL DATA RULES (CRITICAL — ĐỌC KỸ) ===
+=== SIGNAL DATA RULES (CRITICAL) ===
 
-TUYỆT ĐỐI KHÔNG được tự bịa hoặc liệt kê Entry Price, Stop Loss, Take Profit cho bất kỳ cổ phiếu nào.
-Lý do: AI không được cấp dữ liệu giá Entry/SL/TP — chỉ có danh sách tên cổ phiếu đang OPEN trong Signal list.
-Nếu tự điền số, sẽ trả về thông tin sai gây thiệt hại cho nhà đầu tư.
-
-Khi user hỏi về danh sách signals hoặc giá Entry/SL/TP:
-- CHỈ liệt kê TÊN cổ phiếu (ticker) có trong Signal list — KHÔNG kèm giá
-- Hướng dẫn user xem tab "Tín hiệu mua bán" để có Entry/SL/TP chính xác
-- Ví dụ đúng: "Danh sách BUY signals đang mở gồm: HDB, STB, VIC... Bạn xem chi tiết Entry/SL/TP trong tab Tín hiệu mua bán."
-- Ví dụ SAI (không được làm): "ACB: Entry 24,800 | SL 22,558 | TP 27,280" ← KHÔNG BAO GIỜ làm vậy
+TUYỆT ĐỐI KHÔNG tự bịa hoặc liệt kê Entry Price, Stop Loss, Take Profit.
+AI chỉ nhận được danh sách tên ticker — không có dữ liệu giá Entry/SL/TP.
+Khi user hỏi danh sách signals: CHỈ liệt kê tên ticker, hướng dẫn xem tab "Tín hiệu mua bán" để có Entry/SL/TP chính xác.
 
 Core principles:
 1. You do NOT provide direct buy/sell commands outside the Buysell Signal list.
@@ -687,9 +681,11 @@ def get_portfolio_context(user_id, user_tier='free'):
                 Signal.strength >= 65, Signal.ticker.in_(VN30_TICKERS)
             ).all()
         else:
+            # Free/Basic: ẩn VN30 (đồng bộ với SignalsModule.jsx)
             signals = session.query(Signal).filter(
                 Signal.action == 'BUY', Signal.status == 'open',
-                Signal.strength >= 65
+                Signal.strength >= 65,
+                ~Signal.ticker.in_(VN30_TICKERS)
             ).all()
         signal_tickers = set([s.ticker for s in signals])
 
