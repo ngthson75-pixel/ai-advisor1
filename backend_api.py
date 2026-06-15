@@ -682,12 +682,13 @@ def get_portfolio_context(user_id, user_tier='free'):
                 Signal.strength >= 65, Signal.ticker.in_(VN30_TICKERS)
             ).all()
         else:
-            # Free/Basic: ẩn VN30 (đồng bộ với SignalsModule.jsx)
-            signals = session.query(Signal).filter(
+            # Query tất cả open BUY signals, filter VN30 bằng Python (tránh SQLAlchemy NOT IN bug)
+            _all_signals = session.query(Signal).filter(
                 Signal.action == 'BUY', Signal.status == 'open',
-                Signal.strength >= 65,
-                ~Signal.ticker.in_(VN30_TICKERS)
+                Signal.strength >= 65
             ).all()
+            vn30_set = set(VN30_TICKERS)
+            signals = [s for s in _all_signals if s.ticker not in vn30_set]
         signal_tickers = set([s.ticker for s in signals])
 
         # MARKET DASHBOARD: Inject latest market risk into context
@@ -841,13 +842,9 @@ def chat_with_gpt(message, portfolio_context, signal_tickers,
         system_message += "\n\n" + portfolio_context
         messages = [{"role": "system", "content": system_message}]
         if history:
-            # Chỉ inject user messages (không inject assistant responses cũ có thể sai)
-            # Tránh AI học lại danh sách sai từ lịch sử chat
-            for h in history[-3:]:
+            for h in history[-5:]:
                 messages.append({"role": "user",      "content": h.get("message", "")})
-                # Truncate assistant response để tránh nhiễu, chỉ giữ 200 chars đầu
-                prev_resp = h.get("response", "")[:200] + "..." if len(h.get("response", "")) > 200 else h.get("response", "")
-                messages.append({"role": "assistant",  "content": prev_resp})
+                messages.append({"role": "assistant",  "content": h.get("response", "")})
         messages.append({"role": "user", "content": message})
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
