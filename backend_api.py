@@ -841,9 +841,13 @@ def chat_with_gpt(message, portfolio_context, signal_tickers,
         system_message += "\n\n" + portfolio_context
         messages = [{"role": "system", "content": system_message}]
         if history:
-            for h in history[-5:]:
+            # Chỉ inject user messages (không inject assistant responses cũ có thể sai)
+            # Tránh AI học lại danh sách sai từ lịch sử chat
+            for h in history[-3:]:
                 messages.append({"role": "user",      "content": h.get("message", "")})
-                messages.append({"role": "assistant",  "content": h.get("response", "")})
+                # Truncate assistant response để tránh nhiễu, chỉ giữ 200 chars đầu
+                prev_resp = h.get("response", "")[:200] + "..." if len(h.get("response", "")) > 200 else h.get("response", "")
+                messages.append({"role": "assistant",  "content": prev_resp})
         messages.append({"role": "user", "content": message})
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
