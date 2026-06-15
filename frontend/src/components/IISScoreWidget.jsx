@@ -28,12 +28,12 @@ const METHOD_LABELS = {
 
 // ── Styles ───────────────────────────────────────────────────────────
 const card = {
-  background: '#1e293b',
-  border: '1px solid #334155',
-  borderRadius: '12px',
-  marginBottom: '20px',
+  background: '#0f172a',
+  border: '1px solid #1e3a5f',
+  borderRadius: '16px',
   overflow: 'hidden',
   fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  boxShadow: '0 4px 24px rgba(59,130,246,0.08)',
 }
 const tag = (color) => ({
   display: 'inline-block', fontSize: '11px', fontWeight: 500,
@@ -160,7 +160,7 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
       {/* Header */}
       <div style={{
         padding: '14px 18px 12px',
-        background: '#0f172a',
+        background: 'linear-gradient(135deg, #3b82f622, #3b82f611)',
         borderBottom: '1px solid #1e293b',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>

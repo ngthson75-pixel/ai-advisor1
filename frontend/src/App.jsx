@@ -570,10 +570,13 @@ function App() {
 
           {activeTab === 'portfolio' && (
             <>
-              <IISScoreWidget
-                userId={user.email}
-                onRequestUpdate={() => setShowIISModal(true)}
-              />
+              {/* IIS Widget — cùng maxWidth và padding với InlineAIChat */}
+              <div style={{ maxWidth: '900px', margin: '0 auto 16px', padding: '0 16px' }}>
+                <IISScoreWidget
+                  userId={user.email}
+                  onRequestUpdate={() => setShowIISModal(true)}
+                />
+              </div>
               <AIPortfolioManager userId={user.email} userTier={resolvedTier} hideChat={!isVip} />
             </>
           )}
