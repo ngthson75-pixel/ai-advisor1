@@ -97,7 +97,7 @@ function InlineAIChat({ userId, userTier }) {
     <div style={{ maxWidth: '900px', margin: '0 auto 16px', padding: '0 16px' }}>
       <div style={{
         background: '#0f172a', border: `1px solid ${accentColor}44`,
-        borderRadius: '16px', overflow: 'hidden',
+        borderRadius: '16px',
         boxShadow: `0 4px 24px ${accentColor}18`,
       }}>
         {/* Header */}
@@ -134,11 +134,15 @@ function InlineAIChat({ userId, userTier }) {
 
         {/* Messages — hidden when collapsed and no messages */}
         <div style={{
-          minHeight: expanded ? '80px' : '0px',
-          maxHeight: expanded ? '340px' : '0px',
-          overflowY: 'auto', padding: expanded ? '12px 16px' : '0',
-          display: 'flex', flexDirection: 'column', gap: '8px',
-          transition: 'all 0.25s ease', overflow: 'hidden',
+          minHeight: expanded ? '120px' : '0px',
+          maxHeight: expanded ? '480px' : '0px',
+          height: expanded ? 'auto' : '0',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: expanded ? '12px 16px' : '0',
+          display: expanded ? 'flex' : 'none',
+          flexDirection: 'column', gap: '8px',
+          transition: 'max-height 0.3s ease',
         }}>
           {messages.length === 0 ? (
             <div style={{ color: '#64748b', fontSize: '13px', lineHeight: '1.6' }}>
