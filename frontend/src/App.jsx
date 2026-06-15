@@ -32,6 +32,7 @@ function InlineAIChat({ userId, userTier }) {
   const [input,     setInput]     = useState('')
   const [loading,   setLoading]   = useState(false)
   const [expanded,  setExpanded]  = useState(false)
+  const [focused,   setFocused]   = useState(false)
   const chatEndRef = useRef(null)
   const inputRef   = useRef(null)
   const isFree     = userTier === 'free'
@@ -126,19 +127,18 @@ function InlineAIChat({ userId, userTier }) {
               </span>
             )}
           </div>
-          {messages.length > 3 && (
-            <button onClick={() => setExpanded(e => !e)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '12px' }}>
-              {expanded ? '▲ Thu gọn' : `▼ Xem ${messages.length} tin nhắn`}
+          <button onClick={() => setExpanded(e => !e)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '12px' }}>
+              {expanded ? '▲ Thu gọn' : messages.length > 0 ? `▼ Xem lịch sử (${messages.length})` : '▼ Mở chat'}
             </button>
-          )}
         </div>
 
-        {/* Messages */}
+        {/* Messages — hidden when collapsed and no messages */}
         <div style={{
-          minHeight: '88px', maxHeight: expanded ? '320px' : '96px',
-          overflowY: 'auto', padding: '12px 16px',
+          minHeight: expanded ? '80px' : '0px',
+          maxHeight: expanded ? '340px' : '0px',
+          overflowY: 'auto', padding: expanded ? '12px 16px' : '0',
           display: 'flex', flexDirection: 'column', gap: '8px',
-          transition: 'max-height 0.3s ease',
+          transition: 'all 0.25s ease', overflow: 'hidden',
         }}>
           {messages.length === 0 ? (
             <div style={{ color: '#64748b', fontSize: '13px', lineHeight: '1.6' }}>
@@ -177,7 +177,8 @@ function InlineAIChat({ userId, userTier }) {
         <form onSubmit={handleSend} style={{ padding: '10px 12px', borderTop: '1px solid #1e293b', display: 'flex', gap: '8px', background: '#080f1e' }}>
           <input
             ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
-            onFocus={() => messages.length > 0 && setExpanded(true)}
+            onFocus={() => { setExpanded(true); setFocused(true) }}
+            onBlur={() => setFocused(false)}
             placeholder={isFree ? 'Hỏi về cổ phiếu, xu hướng thị trường...' : 'Hỏi về cổ phiếu, danh mục, FOMO/Panic coaching...'}
             style={{ flex: 1, background: '#0f1a2e', border: '1px solid #1e293b', color: '#e2e8f0', borderRadius: '10px', padding: '8px 14px', fontSize: '13px', outline: 'none' }}
           />
@@ -569,7 +570,7 @@ function App() {
                 userId={user.email}
                 onRequestUpdate={() => setShowIISModal(true)}
               />
-              <AIPortfolioManager userId={user.email} userTier={resolvedTier} />
+              <AIPortfolioManager userId={user.email} userTier={resolvedTier} hideChat={!isVip} />
             </>
           )}
 

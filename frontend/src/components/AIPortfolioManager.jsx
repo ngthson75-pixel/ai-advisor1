@@ -5,7 +5,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 const fmt = (n) => n?.toLocaleString('vi-VN') || '0'
 const fmtPct = (n) => (n >= 0 ? '+' : '') + n?.toFixed(1) + '%'
 
-export default function AIPortfolioManager({ userId, userTier = 'free' }) {
+export default function AIPortfolioManager({ userId, userTier = 'free', hideChat = false }) {
   // ── Portfolio state ──────────────────────────────────────────
   const [portfolio, setPortfolio] = useState([])
   const [cash, setCash]           = useState(0)
@@ -234,9 +234,9 @@ export default function AIPortfolioManager({ userId, userTier = 'free' }) {
       )}
 
       {/* ══════════════════════════════════════════════
-          PHẦN 1: AI CHAT (ưu tiên trên cùng)
+          PHẦN 1: AI CHAT — ẩn khi hideChat=true (đã có InlineAIChat ở App.jsx)
       ══════════════════════════════════════════════ */}
-      <div style={{
+      {!hideChat && <div style={{
         background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)',
         borderRadius: '16px',
         border: '1px solid #1e3a5f',
@@ -438,7 +438,7 @@ export default function AIPortfolioManager({ userId, userTier = 'free' }) {
             ▶
           </button>
         </form>
-      </div>
+      </div>}
 
       {/* ══════════════════════════════════════════════
           PHẦN 2: DANH MỤC (bên dưới)
