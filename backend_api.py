@@ -262,9 +262,10 @@ Ví dụ tư vấn dựa trên Market Dashboard:
 
 === SIGNAL DATA RULES (CRITICAL) ===
 
-TUYỆT ĐỐI KHÔNG tự bịa hoặc liệt kê Entry Price, Stop Loss, Take Profit.
-AI chỉ nhận được danh sách tên ticker — không có dữ liệu giá Entry/SL/TP.
-Khi user hỏi danh sách signals: CHỈ liệt kê tên ticker, hướng dẫn xem tab "Tín hiệu mua bán" để có Entry/SL/TP chính xác.
+Khi liệt kê danh sách Buysell Signal:
+- CHỈ được liệt kê ĐÚNG số mã và ĐÚNG tên như trong context (có ghi "Tong so: X ma")
+- TUYỆT ĐỐI KHÔNG thêm bất kỳ mã nào ngoài danh sách trong context
+- TUYỆT ĐỐI KHÔNG tự bịa Entry/SL/TP nếu không có trong context
 
 Core principles:
 1. You do NOT provide direct buy/sell commands outside the Buysell Signal list.
@@ -681,11 +682,9 @@ def get_portfolio_context(user_id, user_tier='free'):
                 Signal.strength >= 65, Signal.ticker.in_(VN30_TICKERS)
             ).all()
         else:
-            # Free/Basic: ẩn VN30 (đồng bộ với SignalsModule.jsx)
             signals = session.query(Signal).filter(
                 Signal.action == 'BUY', Signal.status == 'open',
-                Signal.strength >= 65,
-                ~Signal.ticker.in_(VN30_TICKERS)
+                Signal.strength >= 65
             ).all()
         signal_tickers = set([s.ticker for s in signals])
 
@@ -737,8 +736,13 @@ def get_portfolio_context(user_id, user_tier='free'):
         # Empty portfolio
         if not portfolios and cash == 0:
             context = f"{market_context}\nDanh muc: Trong\n"
-            context += f"\nCO PHIEU TRONG BUYSELL SIGNAL SYSTEM:\n"
-            context += ", ".join(sorted(signal_tickers)) if signal_tickers else "Chua co signal nao"
+            context += f"\nCO PHIEU TRONG BUYSELL SIGNAL (BUY - DANG MO - DANH SACH CHINH XAC):\n"
+            context += f"(Tong so: {len(signal_tickers)} ma. CHI DUOC dung dung {len(signal_tickers)} ma nay, KHONG them bat ky ma nao khac):\n"
+            if signal_tickers:
+                for _i, _t in enumerate(sorted(signal_tickers), 1):
+                    context += f"  {_i}. {_t}\n"
+            else:
+                context += "  Chua co signal nao dang mo\n"
             return context, signal_tickers
 
         context = f"{market_context}\n"
@@ -799,7 +803,8 @@ def get_portfolio_context(user_id, user_tier='free'):
             except Exception:
                 pass
 
-        context += f"\n\nCO PHIEU TRONG BUYSELL SIGNAL (BUY - DANG MO):\n"
+        context += f"\n\nCO PHIEU TRONG BUYSELL SIGNAL (BUY - DANG MO - DANH SACH CHINH XAC):\n"
+        context += f"(Tong so: {len(signals)} ma. CHI DUOC dung dung {len(signals)} ma nay, KHONG them bat ky ma nao khac):\n"
         if signals:
             for _s in sorted(signals, key=lambda x: x.ticker):
                 _entry = f"{_s.entry_price:,.0f}" if _s.entry_price else "N/A"
