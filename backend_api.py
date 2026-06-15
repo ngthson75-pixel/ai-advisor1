@@ -682,13 +682,12 @@ def get_portfolio_context(user_id, user_tier='free'):
                 Signal.strength >= 65, Signal.ticker.in_(VN30_TICKERS)
             ).all()
         else:
-            # Query tất cả open BUY signals, filter VN30 bằng Python (tránh SQLAlchemy NOT IN bug)
-            _all_signals = session.query(Signal).filter(
+            _all_sigs = session.query(Signal).filter(
                 Signal.action == 'BUY', Signal.status == 'open',
                 Signal.strength >= 65
             ).all()
-            vn30_set = set(VN30_TICKERS)
-            signals = [s for s in _all_signals if s.ticker not in vn30_set]
+            _vn30_set = set(VN30_TICKERS)
+            signals = [s for s in _all_sigs if s.ticker not in _vn30_set]
         signal_tickers = set([s.ticker for s in signals])
 
         # MARKET DASHBOARD: Inject latest market risk into context
@@ -836,15 +835,33 @@ def chat_with_gpt(message, portfolio_context, signal_tickers,
     if not openai_client:
         return "Xin lỗi, AI chưa được cấu hình."
     try:
-        system_message = AI_SYSTEM_PROMPT
+        # Build signal rule từ signal_tickers để lock cứng vào system prompt
+        if signal_tickers:
+            _tlist = ", ".join(sorted(signal_tickers))
+            _tcount = len(signal_tickers)
+            _signal_rule = (
+                f"\n\n=== BUYSELL SIGNAL DANG MO (CHINH XAC - {_tcount} MA) ===\n"
+                f"Chi co {_tcount} ma: {_tlist}\n"
+                f"TUYET DOI KHONG them ma nao khac ngoai danh sach tren.\n"
+                f"Neu khong co trong danh sach tren thi KHONG phai Buysell Signal.\n"
+                f"=== HET DANH SACH ==="
+            )
+        else:
+            _signal_rule = "\n\n=== BUYSELL SIGNAL: Hien chua co signal nao dang mo ==="
+
+        system_message = AI_SYSTEM_PROMPT + _signal_rule
         if iis_section:
             system_message += "\n" + iis_section
         system_message += "\n\n" + portfolio_context
         messages = [{"role": "system", "content": system_message}]
         if history:
-            for h in history[-5:]:
-                messages.append({"role": "user",      "content": h.get("message", "")})
-                messages.append({"role": "assistant",  "content": h.get("response", "")})
+            # Chỉ lấy 3 turns gần nhất, truncate response cũ để tránh AI học lại data sai
+            for h in history[-3:]:
+                messages.append({"role": "user", "content": h.get("message", "")})
+                prev = h.get("response", "")
+                if len(prev) > 150:
+                    prev = prev[:150] + "..."
+                messages.append({"role": "assistant", "content": prev})
         messages.append({"role": "user", "content": message})
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",

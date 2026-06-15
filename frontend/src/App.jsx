@@ -80,7 +80,7 @@ function InlineAIChat({ userId, userTier }) {
     try {
       const r = await fetch(`${API_URL}/chat`, {
         method: 'POST', headers: getAuthHeaders(),
-        body: JSON.stringify({ user_id: userId, message: msg }),
+        body: JSON.stringify({ user_id: userId, message: msg, user_tier: userTier }),
       })
       const d = await r.json()
       setMessages(prev => [...prev, { role: 'assistant', content: d.response || d.message || '...' }])
