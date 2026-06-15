@@ -682,9 +682,11 @@ def get_portfolio_context(user_id, user_tier='free'):
                 Signal.strength >= 65, Signal.ticker.in_(VN30_TICKERS)
             ).all()
         else:
+            # Free/Basic: ẩn VN30 (đồng bộ với SignalsModule.jsx)
             signals = session.query(Signal).filter(
                 Signal.action == 'BUY', Signal.status == 'open',
-                Signal.strength >= 65
+                Signal.strength >= 65,
+                ~Signal.ticker.in_(VN30_TICKERS)
             ).all()
         signal_tickers = set([s.ticker for s in signals])
 
