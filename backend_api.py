@@ -345,7 +345,7 @@ def get_iis_profile_cached(user_id):
     session = Session()
     try:
         row = session.execute(
-            text("SELECT total, level_name, method, kl_score, kt_score "
+            text("SELECT total, level_name, method, kl_score, kt_score, created_at "
                  "FROM iis_results WHERE user_id = :uid "
                  "ORDER BY created_at DESC LIMIT 1"),
             {"uid": str(user_id)}
@@ -353,7 +353,8 @@ def get_iis_profile_cached(user_id):
         if row:
             profile = {
                 "total": row[0], "level": row[1], "method": row[2],
-                "kl": row[3], "kt": row[4]
+                "kl": row[3], "kt": row[4],
+                "created_at": str(row[5]) if row[5] else None
             }
         else:
             profile = None
@@ -1764,8 +1765,24 @@ def chat():
 
         # IIS coaching chỉ cho Basic+ và VIP
         user_tier = data.get('user_tier', 'free')
-        COACHING_TIERS = {'basic', 'basic_trial', 'early_adopter', 'vip'}
-        coaching_enabled = user_tier in COACHING_TIERS
+        PAID_TIERS = {'basic', 'basic_trial', 'early_adopter', 'vip'}
+        is_paid    = user_tier in PAID_TIERS
+
+        # 30-day free trial — tính từ ngày làm IIS test
+        trial_active    = False
+        trial_days_left = 0
+        if iis_profile and iis_profile.get('created_at'):
+            from datetime import datetime, timedelta
+            try:
+                _trial_start   = datetime.fromisoformat(str(iis_profile['created_at'])[:19])
+                _trial_expires = _trial_start + timedelta(days=30)
+                _now           = datetime.now()
+                trial_active   = _now < _trial_expires
+                trial_days_left = max(0, (_trial_expires - _now).days)
+            except Exception as _te:
+                print(f"[Trial] {_te}")
+
+        coaching_enabled = is_paid or trial_active
         iis_section = build_iis_coaching_section(iis_profile, emotional_state) if coaching_enabled else ""
         tier_locked  = not coaching_enabled
         # Load history — resilient: nếu fail (vd: cột mới chưa có) thì dùng []
@@ -1805,6 +1822,8 @@ def chat():
                 'iis_level_name': iis_profile.get('level') if iis_profile else None,
                 'tier_locked': tier_locked,
                 'user_tier': user_tier,
+                'trial_active': trial_active,
+                'trial_days_left': trial_days_left,
             }
         })
     except Exception as e:

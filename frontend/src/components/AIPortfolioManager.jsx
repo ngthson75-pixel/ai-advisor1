@@ -5,7 +5,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 const fmt = (n) => n?.toLocaleString('vi-VN') || '0'
 const fmtPct = (n) => (n >= 0 ? '+' : '') + n?.toFixed(1) + '%'
 
-export default function AIPortfolioManager({ userId, userTier = 'free', hideChat = false }) {
+export default function AIPortfolioManager({ userId, userTier = 'free' }) {
   // ── Portfolio state ──────────────────────────────────────────
   const [portfolio, setPortfolio] = useState([])
   const [cash, setCash]           = useState(0)
@@ -234,9 +234,9 @@ export default function AIPortfolioManager({ userId, userTier = 'free', hideChat
       )}
 
       {/* ══════════════════════════════════════════════
-          PHẦN 1: AI CHAT — ẩn khi hideChat=true (đã có InlineAIChat ở App.jsx)
+          PHẦN 1: AI CHAT (ưu tiên trên cùng)
       ══════════════════════════════════════════════ */}
-      {!hideChat && <div style={{
+      <div style={{
         background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)',
         borderRadius: '16px',
         border: '1px solid #1e3a5f',
@@ -325,7 +325,7 @@ export default function AIPortfolioManager({ userId, userTier = 'free', hideChat
                       }}>
                         <span>🔒</span>
                         <span>
-                          Nâng cấp lên <strong style={{ color: '#818cf8' }}>Basic</strong> để nhận coaching IIS cá nhân hóa theo level của bạn
+                          Thời gian dùng thử 30 ngày đã hết. Nâng cấp <strong style={{ color: '#818cf8' }}>Basic</strong> hoặc <strong style={{ color: '#a855f7' }}>VIP</strong> để tiếp tục nhận coaching IIS cá nhân hóa.
                         </span>
                       </div>
                     )}
@@ -438,7 +438,7 @@ export default function AIPortfolioManager({ userId, userTier = 'free', hideChat
             ▶
           </button>
         </form>
-      </div>}
+      </div>
 
       {/* ══════════════════════════════════════════════
           PHẦN 2: DANH MỤC (bên dưới)

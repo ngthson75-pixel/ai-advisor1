@@ -28,12 +28,12 @@ const METHOD_LABELS = {
 
 // ── Styles ───────────────────────────────────────────────────────────
 const card = {
-  background: '#0f172a',
-  border: '1px solid #1e3a5f',
-  borderRadius: '16px',
+  background: '#1e293b',
+  border: '1px solid #334155',
+  borderRadius: '12px',
+  marginBottom: '20px',
   overflow: 'hidden',
   fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-  boxShadow: '0 4px 24px rgba(59,130,246,0.08)',
 }
 const tag = (color) => ({
   display: 'inline-block', fontSize: '11px', fontWeight: 500,
@@ -160,7 +160,7 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
       {/* Header */}
       <div style={{
         padding: '14px 18px 12px',
-        background: 'linear-gradient(135deg, #3b82f622, #3b82f611)',
+        background: '#0f172a',
         borderBottom: '1px solid #1e293b',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
@@ -262,18 +262,49 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
           </div>
         )}
 
-        {/* Motivating CTA — hối thúc dùng app thường xuyên */}
-        <div style={{
-          marginTop: '12px', borderTop: '1px solid #1e293b', paddingTop: '12px',
-          display: 'flex', gap: '10px', alignItems: 'flex-start',
-        }}>
-          <span style={{ fontSize: '18px', flexShrink: 0, marginTop: '1px' }}>💬</span>
-          <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.7 }}>
-            Hãy thường xuyên trao đổi với{' '}
-            <span style={{ color: lvl.color, fontWeight: 500 }}>AI-Advisor chat</span>
-            {' '}để hệ thống giúp bạn kỷ luật và từng bước nâng hiệu quả đầu tư của bạn.
-          </div>
-        </div>
+        {/* Trial countdown hoặc motivating CTA */}
+        {(() => {
+          // Tính trial days remaining từ data.tested_at
+          let daysLeft = null
+          if (data.tested_at) {
+            const trialExpires = new Date(new Date(data.tested_at).getTime() + 30*24*60*60*1000)
+            daysLeft = Math.max(0, Math.ceil((trialExpires - new Date()) / 86400000))
+          }
+          return (
+            <div style={{ marginTop: '12px', borderTop: '1px solid #1e293b', paddingTop: '12px' }}>
+              {daysLeft !== null && daysLeft <= 30 && daysLeft > 0 ? (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center',
+                  padding: '8px 12px', borderRadius: '8px',
+                  background: daysLeft <= 5 ? 'rgba(239,68,68,0.1)' : 'rgba(234,160,32,0.1)',
+                  border: `1px solid ${daysLeft <= 5 ? '#ef444430' : '#e8a02030'}` }}>
+                  <span style={{ fontSize: '16px' }}>{daysLeft <= 5 ? '⏰' : '🎁'}</span>
+                  <div style={{ fontSize: '12px', lineHeight: 1.6,
+                    color: daysLeft <= 5 ? '#fca5a5' : '#fcd34d' }}>
+                    {daysLeft <= 5
+                      ? <><strong>Còn {daysLeft} ngày</strong> dùng thử IIS miễn phí — <a href="/upgrade" style={{ color: '#818cf8' }}>Nâng cấp ngay</a></>
+                      : <><strong>Còn {daysLeft} ngày</strong> trải nghiệm IIS miễn phí</>
+                    }
+                  </div>
+                </div>
+              ) : daysLeft === 0 ? (
+                <div style={{ padding: '8px 12px', borderRadius: '8px',
+                  background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
+                  fontSize: '12px', color: '#a5b4fc' }}>
+                  🔒 <strong>Hết thời gian dùng thử.</strong> Nâng cấp Basic/VIP để tiếp tục nhận coaching IIS.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: '18px', flexShrink: 0 }}>💬</span>
+                  <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.7 }}>
+                    Hãy thường xuyên trao đổi với{' '}
+                    <span style={{ color: lvl.color, fontWeight: 500 }}>AI-Advisor chat</span>
+                    {' '}để hệ thống giúp bạn kỷ luật và từng bước nâng hiệu quả đầu tư của bạn.
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Chuyên gia */}
         {lvlIdx === 5 && (
