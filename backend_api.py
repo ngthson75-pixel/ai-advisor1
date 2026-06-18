@@ -956,13 +956,15 @@ def signals_endpoint():
     if request.method == 'GET':
         # GET: Return all signals with rounding and deduplication
         # Auto delay: free tier sau 1/6/2026 → delay 7 ngày
+        # VIP/Basic/Pro → luôn real-time
         FREE_DELAY_DAYS = 7
         TRIAL_END = datetime(2026, 6, 1)
+        PAID_TIERS = ('vip', 'basic', 'pro', 'basic_trial')
 
         delay_days = request.args.get('delay', type=int)
 
         # Auto-detect tier từ JWT token
-        if delay_days is None:
+        if delay_days is None and datetime.now() > TRIAL_END:
             auth_header = request.headers.get('Authorization', '')
             if auth_header.startswith('Bearer '):
                 try:
@@ -972,18 +974,22 @@ def signals_endpoint():
                         _s = Session()
                         try:
                             _u = _s.query(_VUser).filter_by(id=payload['user_id']).first()
-                            if _u and datetime.now() > TRIAL_END:
-                                _exp = _u.subscription_expires_at
-                                if _u.tier == 'free' or _exp is None or _exp < datetime.now():
+                            if _u:
+                                # Paid tier → không delay
+                                if _u.tier in PAID_TIERS:
+                                    delay_days = 0  # real-time
+                                else:
+                                    # Free tier → delay 7 ngày
                                     delay_days = FREE_DELAY_DAYS
                         finally:
                             _s.close()
+                    else:
+                        delay_days = FREE_DELAY_DAYS  # token invalid → delay
                 except Exception:
-                    pass
+                    delay_days = FREE_DELAY_DAYS  # lỗi → delay để an toàn
             else:
-                # Không có token → public view → apply delay sau trial end
-                if datetime.now() > TRIAL_END:
-                    delay_days = FREE_DELAY_DAYS
+                # Không có token → public view → delay
+                delay_days = FREE_DELAY_DAYS
 
         session = Session()
         try:
