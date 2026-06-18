@@ -278,7 +278,10 @@ function App() {
       setLoading(true)
       const isFullAccess = ['basic_trial', 'basic', 'vip'].includes(currentTier)
       const url = isFullAccess ? `${API_URL}/signals` : `${API_URL}/signals?delay=7`
-      const response = await fetch(url)
+      const token = localStorage.getItem('authToken') || ''
+      const response = await fetch(url, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
       const data = await response.json()
       if (data.success) {
         setSignals(data.signals)
