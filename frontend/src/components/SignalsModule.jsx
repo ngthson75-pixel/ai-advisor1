@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, AlertCircle, RefreshCw } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api';
+// FIX: hostname detection — VITE_API_URL không set trên Cloudflare Pages
+const _h = typeof window !== 'undefined' ? window.location.hostname : ''
+const API_BASE = _h.includes('staging')
+  ? 'https://ai-advisor1-staging.onrender.com/api'
+  : (_h === 'localhost' || _h === '127.0.0.1')
+    ? 'http://localhost:10000/api'
+    : 'https://ai-advisor1-backend.onrender.com/api'
 
 // VN30 tickers — dành riêng cho VIP Dashboard, ẩn khỏi Basic
 const VN30_TICKERS = new Set([
@@ -10,52 +16,50 @@ const VN30_TICKERS = new Set([
   'TCB','TPB','VCB','VHM','VIB','VIC','VJC','VNM','VPB','VRE',
 ]);
 
-export default function SignalsModule() {
-  const [signals, setSignals] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [scanning, setScanning] = useState(false);
-  const [activeTab, setActiveTab] = useState('buy'); // NEW: Tab state
+// Nhận props từ App.jsx — dùng chung data, không tự fetch riêng (tránh URL sai)
+export default function SignalsModule({ signals: propSignals, loading: propLoading, onRefresh }) {
+  const [signals,   setSignals]   = useState(propSignals || []);
+  const [loading,   setLoading]   = useState(propLoading ?? true);
+  const [error,     setError]     = useState(null);
+  const [scanning,  setScanning]  = useState(false);
+  const [activeTab, setActiveTab] = useState('buy');
 
-  const fetchSignals = async () => {
+  // Sync khi App.jsx fetch xong
+  useEffect(() => { if (propSignals !== undefined) { setSignals(propSignals); setError(null); } }, [propSignals]);
+  useEffect(() => { if (propLoading !== undefined) setLoading(propLoading); }, [propLoading]);
+
+  // Fallback fetch — chỉ chạy nếu render standalone (không có propSignals)
+  const fetchSignalsFallback = async () => {
     try {
-      setLoading(true);
-      setError(null);
-      const response = await fetch(`${API_BASE}/signals`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setSignals(data.signals || []);
-      } else {
-        setError('Không thể tải tín hiệu');
-      }
+      setLoading(true); setError(null);
+      const res = await fetch(`${API_BASE}/signals`);
+      const data = await res.json();
+      if (data.success) setSignals(data.signals || []);
+      else setError('Không thể tải tín hiệu');
     } catch (err) {
       setError('Lỗi kết nối: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
+
+  useEffect(() => {
+    if (propSignals === undefined) fetchSignalsFallback();
+  }, []);
+
+  const handleRefresh = () => { onRefresh ? onRefresh() : fetchSignalsFallback(); };
 
   const triggerScan = async () => {
     try {
       setScanning(true);
-      const response = await fetch(`${API_BASE}/scan`, { method: 'POST' });
-      const data = await response.json();
-      
+      const res = await fetch(`${API_BASE}/scan`, { method: 'POST' });
+      const data = await res.json();
       if (data.success) {
         alert('Đã bắt đầu quét! Vui lòng đợi 2-3 phút và refresh lại.');
-        setTimeout(fetchSignals, 180000); // Auto refresh sau 3 phút
+        setTimeout(handleRefresh, 180000);
       }
     } catch (err) {
       alert('Lỗi khi quét: ' + err.message);
-    } finally {
-      setScanning(false);
-    }
+    } finally { setScanning(false); }
   };
-
-  useEffect(() => {
-    fetchSignals();
-  }, []);
 
   // Filter signals by tab
   const buySignals = signals
@@ -129,7 +133,7 @@ const getExitReason = (signal) => {
         </div>
 
         <button 
-          onClick={fetchSignals}
+          onClick={handleRefresh}
           disabled={scanning}
           style={{
             padding: '10px 20px',

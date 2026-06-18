@@ -10,7 +10,7 @@ import Blog from './components/Blog'
 import IISTest from './components/IISTest'
 import IISScoreWidget from './components/IISScoreWidget'
 
-// API Configuration — hostname detection, không dùng VITE_API_URL (chưa set trên Cloudflare)
+// API Configuration — hostname detection (VITE_API_URL không set trên Cloudflare Pages)
 const _h = typeof window !== 'undefined' ? window.location.hostname : ''
 const API_URL = _h.includes('staging')
   ? 'https://ai-advisor1-staging.onrender.com/api'
@@ -277,18 +277,24 @@ function App() {
   }, [])
 
   // ── Fetch signals: truyền ?delay=7 cho Free users ─────────────────────
+  // BUG FIX: tier PHẢI lấy từ param trực tiếp, không fallback về resolvedTier (state stale)
+  // BUG FIX: token lấy từ user.token trong localStorage, không phải key 'authToken' riêng
   const fetchSignals = async (tier) => {
-    const currentTier = tier || resolvedTier
+    // Nếu không truyền tier → tính lại từ localStorage để tránh stale state
+    let currentTier = tier
+    if (!currentTier) {
+      try {
+        const u = JSON.parse(localStorage.getItem('user') || '{}')
+        currentTier = resolveUserTier(u)
+      } catch { currentTier = 'free' }
+    }
     try {
       setLoading(true)
       const isFullAccess = ['basic_trial', 'basic', 'vip'].includes(currentTier)
       const url = isFullAccess ? `${API_URL}/signals` : `${API_URL}/signals?delay=7`
       // Token nằm trong user object, không phải key 'authToken' riêng
       let token = ''
-      try {
-        const u = JSON.parse(localStorage.getItem('user') || '{}')
-        token = u.token || ''
-      } catch {}
+      try { token = JSON.parse(localStorage.getItem('user') || '{}').token || '' } catch {}
       const response = await fetch(url, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       })
