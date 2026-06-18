@@ -325,7 +325,7 @@ export default function AIPortfolioManager({ userId, userTier = 'free' }) {
                       }}>
                         <span>🔒</span>
                         <span>
-                          Thời gian dùng thử 30 ngày đã hết. Nâng cấp <strong style={{ color: '#818cf8' }}>Basic</strong> hoặc <strong style={{ color: '#a855f7' }}>VIP</strong> để tiếp tục nhận coaching IIS cá nhân hóa.
+                          Bạn được sử dụng miễn phí 30 ngày, hãy nâng cấp gói <strong style={{ color: '#818cf8' }}>Basic</strong> hoặc <strong style={{ color: '#a855f7' }}>VIP</strong> để được AI hỗ trợ kiểm soát cảm xúc và nâng tầm hiệu quả đầu tư.
                         </span>
                       </div>
                     )}
