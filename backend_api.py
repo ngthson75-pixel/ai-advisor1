@@ -955,8 +955,36 @@ def signals_endpoint():
     
     if request.method == 'GET':
         # GET: Return all signals with rounding and deduplication
-        # ?delay=N → chỉ trả tín hiệu cũ hơn N ngày (Free tier)
+        # Auto delay: free tier sau 1/6/2026 → delay 7 ngày
+        FREE_DELAY_DAYS = 7
+        TRIAL_END = datetime(2026, 6, 1)
+
         delay_days = request.args.get('delay', type=int)
+
+        # Auto-detect tier từ JWT token
+        if delay_days is None:
+            auth_header = request.headers.get('Authorization', '')
+            if auth_header.startswith('Bearer '):
+                try:
+                    from vip_auth import _verify_jwt, VIPUser as _VUser
+                    payload = _verify_jwt(auth_header.replace('Bearer ', ''))
+                    if payload:
+                        _s = Session()
+                        try:
+                            _u = _s.query(_VUser).filter_by(id=payload['user_id']).first()
+                            if _u and datetime.now() > TRIAL_END:
+                                _exp = _u.subscription_expires_at
+                                if _u.tier == 'free' or _exp is None or _exp < datetime.now():
+                                    delay_days = FREE_DELAY_DAYS
+                        finally:
+                            _s.close()
+                except Exception:
+                    pass
+            else:
+                # Không có token → public view → apply delay sau trial end
+                if datetime.now() > TRIAL_END:
+                    delay_days = FREE_DELAY_DAYS
+
         session = Session()
         try:
             query = session.query(Signal).filter(
