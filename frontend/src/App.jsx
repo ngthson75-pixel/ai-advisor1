@@ -10,15 +10,11 @@ import Blog from './components/Blog'
 import IISTest from './components/IISTest'
 import IISScoreWidget from './components/IISScoreWidget'
 
-// API Configuration — same pattern as VIPDashboard.jsx (BUG6 fix)
-// VITE_API_URL không set trên Cloudflare Pages → fallback về localhost → signals rỗng
-// Fix: detect hostname để hardcode đúng backend URL
-const _hostname     = typeof window !== 'undefined' ? window.location.hostname : ''
-const _IS_STAGING   = _hostname.includes('staging')
-const _IS_LOCALHOST = _hostname === 'localhost' || _hostname === '127.0.0.1'
-const API_URL = _IS_STAGING
+// API Configuration — hostname detection, không dùng VITE_API_URL (chưa set trên Cloudflare)
+const _h = typeof window !== 'undefined' ? window.location.hostname : ''
+const API_URL = _h.includes('staging')
   ? 'https://ai-advisor1-staging.onrender.com/api'
-  : _IS_LOCALHOST
+  : (_h === 'localhost' || _h === '127.0.0.1')
     ? 'http://localhost:10000/api'
     : 'https://ai-advisor1-backend.onrender.com/api'
 
@@ -287,7 +283,12 @@ function App() {
       setLoading(true)
       const isFullAccess = ['basic_trial', 'basic', 'vip'].includes(currentTier)
       const url = isFullAccess ? `${API_URL}/signals` : `${API_URL}/signals?delay=7`
-      const token = localStorage.getItem('authToken') || ''
+      // Token nằm trong user object, không phải key 'authToken' riêng
+      let token = ''
+      try {
+        const u = JSON.parse(localStorage.getItem('user') || '{}')
+        token = u.token || ''
+      } catch {}
       const response = await fetch(url, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       })
