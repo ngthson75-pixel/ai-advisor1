@@ -10,8 +10,17 @@ import Blog from './components/Blog'
 import IISTest from './components/IISTest'
 import IISScoreWidget from './components/IISScoreWidget'
 
-// API Configuration
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
+// API Configuration — same pattern as VIPDashboard.jsx (BUG6 fix)
+// VITE_API_URL không set trên Cloudflare Pages → fallback về localhost → signals rỗng
+// Fix: detect hostname để hardcode đúng backend URL
+const _hostname     = typeof window !== 'undefined' ? window.location.hostname : ''
+const _IS_STAGING   = _hostname.includes('staging')
+const _IS_LOCALHOST = _hostname === 'localhost' || _hostname === '127.0.0.1'
+const API_URL = _IS_STAGING
+  ? 'https://ai-advisor1-staging.onrender.com/api'
+  : _IS_LOCALHOST
+    ? 'http://localhost:10000/api'
+    : 'https://ai-advisor1-backend.onrender.com/api'
 
 // ── Auth headers helper ──────────────────────────────────────────────────
 function getAuthHeaders() {
