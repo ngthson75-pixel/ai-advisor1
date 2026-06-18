@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
 import LandingPage from './components/LandingPage'
 import SignalsModule from './components/SignalsModule'
@@ -10,203 +10,8 @@ import Blog from './components/Blog'
 import IISTest from './components/IISTest'
 import IISScoreWidget from './components/IISScoreWidget'
 
-// API Configuration — hostname detection (VITE_API_URL không set trên Cloudflare Pages)
-const _h = typeof window !== 'undefined' ? window.location.hostname : ''
-const API_URL = _h.includes('staging')
-  ? 'https://ai-advisor1-staging.onrender.com/api'
-  : (_h === 'localhost' || _h === '127.0.0.1')
-    ? 'http://localhost:10000/api'
-    : 'https://ai-advisor1-backend.onrender.com/api'
-
-// ── Auth headers helper ──────────────────────────────────────────────────
-function getAuthHeaders() {
-  try {
-    const stored = localStorage.getItem('user')
-    if (!stored) return { 'Content-Type': 'application/json' }
-    const u = JSON.parse(stored)
-    if (u.token) return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${u.token}` }
-  } catch {}
-  return { 'Content-Type': 'application/json' }
-}
-
-// ── InlineAIChat — dùng cho Free, Basic, Trial ───────────────────────────
-// Free: chat đầy đủ nhưng không có IIS coaching (FOMO/Panic gated)
-// Basic/Trial: chat đầy đủ + IIS coaching
-function InlineAIChat({ userId, userTier }) {
-  const [messages,  setMessages]  = useState([])
-  const [input,     setInput]     = useState('')
-  const [loading,   setLoading]   = useState(false)
-  const [expanded,  setExpanded]  = useState(false)
-  const [focused,   setFocused]   = useState(false)
-  const chatEndRef = useRef(null)
-  const inputRef   = useRef(null)
-  const isFree     = userTier === 'free'
-
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
-
-  // Load lịch sử chat + chào hỏi thị trường
-  useEffect(() => {
-    async function initChat() {
-      try {
-        const r = await fetch(`${API_URL}/chat/history?user_id=${userId}&limit=30`, { headers: getAuthHeaders() })
-        const d = await r.json()
-        if (d.success && d.messages?.length > 0) {
-          setMessages(d.messages)
-          setExpanded(true)
-          return
-        }
-      } catch {}
-
-      // Chưa có lịch sử → inject market summary
-      try {
-        const mr = await fetch(`${API_URL.replace('/api','')}/api/market-risk`)
-        const md = await mr.json()
-        if (md.success && md.data) {
-          const m    = md.data
-          const date = m.date ? new Date(m.date).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit' }) : ''
-          const riskEmoji = (m.risk_score ?? 50) <= 40 ? '🟢' : (m.risk_score ?? 50) <= 65 ? '🟡' : '🔴'
-          const greeting = isFree
-            ? `Xin chào! Đây là tóm tắt thị trường hôm nay (${date}):\n\n${riskEmoji} Chế độ thị trường: ${m.market_mode || '—'}\n📊 Điểm rủi ro: ${m.risk_score ?? '—'}/100\n💼 Tỷ trọng khuyến nghị: ${m.allocation ?? '—'}%\n\nBạn muốn tôi phân tích cổ phiếu nào không? (Nâng cấp Basic để dùng AI Coach FOMO/Panic)`
-            : `Xin chào! Đây là tóm tắt thị trường hôm nay (${date}):\n\n${riskEmoji} Chế độ thị trường: ${m.market_mode || '—'}\n📊 Điểm rủi ro: ${m.risk_score ?? '—'}/100\n💼 Tỷ trọng khuyến nghị: ${m.allocation ?? '—'}%\n\nBạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục hiện tại không?`
-          setMessages([{ role: 'assistant', content: greeting }])
-        }
-      } catch {}
-    }
-    if (userId) initChat()
-  }, [userId, isFree])
-
-  async function handleSend(e) {
-    e.preventDefault()
-    const msg = input.trim()
-    if (!msg || loading) return
-    setInput(''); setExpanded(true)
-    setMessages(prev => [...prev, { role: 'user', content: msg }])
-    setLoading(true)
-    try {
-      const r = await fetch(`${API_URL}/chat`, {
-        method: 'POST', headers: getAuthHeaders(),
-        body: JSON.stringify({ user_id: userId, message: msg, user_tier: userTier }),
-      })
-      const d = await r.json()
-      setMessages(prev => [...prev, { role: 'assistant', content: d.response || d.message || '...' }])
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Lỗi kết nối. Thử lại sau.' }])
-    }
-    setLoading(false)
-  }
-
-  const latestMessages = expanded ? messages : messages.slice(-3)
-  const accentColor = isFree ? '#3b82f6' : '#10b981'  // blue for free, green for basic
-
-  return (
-    <div style={{ maxWidth: '900px', margin: '0 auto 16px', padding: '0 16px' }}>
-      <div style={{
-        background: '#0f172a', border: `1px solid ${accentColor}44`,
-        borderRadius: '16px',
-        boxShadow: `0 4px 24px ${accentColor}18`,
-      }}>
-        {/* Header */}
-        <div style={{
-          padding: '12px 16px',
-          background: `linear-gradient(135deg, ${accentColor}22, ${accentColor}11)`,
-          borderBottom: '1px solid #1e293b',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '16px' }}>💬</span>
-            <span style={{ fontWeight: '700', fontSize: '13px', color: '#e2e8f0' }}>
-              AI Advisor — Tư vấn riêng
-            </span>
-            {isFree ? (
-              <span style={{ fontSize: '10px', fontWeight: '700', background: '#3b82f644', color: '#60a5fa', padding: '1px 7px', borderRadius: '4px', border: '1px solid #3b82f644' }}>
-                FREE
-              </span>
-            ) : (
-              <span style={{ fontSize: '10px', fontWeight: '700', background: '#10b98144', color: '#34d399', padding: '1px 7px', borderRadius: '4px', border: '1px solid #10b98144' }}>
-                BASIC
-              </span>
-            )}
-            {isFree && (
-              <span style={{ fontSize: '11px', color: '#64748b', marginLeft: '4px' }}>
-                · AI Coach FOMO/Panic cần <span style={{ color: '#f59e0b', fontWeight: 600 }}>Basic</span>
-              </span>
-            )}
-          </div>
-          <button onClick={() => setExpanded(e => !e)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '12px' }}>
-              {expanded ? '▲ Thu gọn' : messages.length > 0 ? `▼ Xem lịch sử (${messages.length})` : '▼ Mở chat'}
-            </button>
-        </div>
-
-        {/* Messages — hidden when collapsed and no messages */}
-        <div style={{
-          minHeight: expanded ? '120px' : '0px',
-          maxHeight: expanded ? '480px' : '0px',
-          height: expanded ? 'auto' : '0',
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          padding: expanded ? '12px 16px' : '0',
-          display: expanded ? 'flex' : 'none',
-          flexDirection: 'column', gap: '8px',
-          transition: 'max-height 0.3s ease',
-        }}>
-          {messages.length === 0 ? (
-            <div style={{ color: '#64748b', fontSize: '13px', lineHeight: '1.6' }}>
-              <div>👋 Xin chào! Tôi có thể giúp bạn:</div>
-              <div style={{ paddingLeft: '8px', marginTop: '4px' }}>• Phân tích cổ phiếu và xu hướng thị trường</div>
-              <div style={{ paddingLeft: '8px' }}>• Đánh giá danh mục và gợi ý tỷ trọng</div>
-              {!isFree && <div style={{ paddingLeft: '8px' }}>• AI Coach: kiểm soát FOMO và panic selling</div>}
-            </div>
-          ) : (
-            latestMessages.map((m, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                <div style={{
-                  maxWidth: '82%', padding: '8px 12px', borderRadius: '12px',
-                  fontSize: '13px', lineHeight: '1.5', color: '#fff',
-                  background: m.role === 'user' ? `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)` : '#1e293b',
-                  borderBottomRightRadius: m.role === 'user' ? '3px' : '12px',
-                  borderBottomLeftRadius:  m.role === 'user' ? '12px' : '3px',
-                  whiteSpace: 'pre-wrap',
-                }}>
-                  {m.content}
-                </div>
-              </div>
-            ))
-          )}
-          {loading && (
-            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-              <div style={{ background: '#1e293b', padding: '8px 12px', borderRadius: '12px', borderBottomLeftRadius: '3px' }}>
-                <span style={{ color: '#64748b', fontSize: '12px' }}>⏳ Đang phân tích...</span>
-              </div>
-            </div>
-          )}
-          <div ref={chatEndRef} />
-        </div>
-
-        {/* Input */}
-        <form onSubmit={handleSend} style={{ padding: '10px 12px', borderTop: '1px solid #1e293b', display: 'flex', gap: '8px', background: '#080f1e' }}>
-          <input
-            ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
-            onFocus={() => { setExpanded(true); setFocused(true) }}
-            onBlur={() => setFocused(false)}
-            placeholder={isFree ? 'Hỏi về cổ phiếu, xu hướng thị trường...' : 'Hỏi về cổ phiếu, danh mục, FOMO/Panic coaching...'}
-            style={{ flex: 1, background: '#0f1a2e', border: '1px solid #1e293b', color: '#e2e8f0', borderRadius: '10px', padding: '8px 14px', fontSize: '13px', outline: 'none' }}
-          />
-          <button
-            type="submit" disabled={loading || !input.trim()}
-            style={{
-              padding: '8px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer',
-              fontWeight: '600', fontSize: '13px', color: '#fff',
-              background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`,
-              opacity: (loading || !input.trim()) ? 0.5 : 1,
-            }}
-          >
-            Gửi ➤
-          </button>
-        </form>
-      </div>
-    </div>
-  )
-}
+// API Configuration
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 
 // ── Tier helpers ─────────────────────────────────────────────────────────
 /**
@@ -277,27 +82,13 @@ function App() {
   }, [])
 
   // ── Fetch signals: truyền ?delay=7 cho Free users ─────────────────────
-  // BUG FIX: tier PHẢI lấy từ param trực tiếp, không fallback về resolvedTier (state stale)
-  // BUG FIX: token lấy từ user.token trong localStorage, không phải key 'authToken' riêng
   const fetchSignals = async (tier) => {
-    // Nếu không truyền tier → tính lại từ localStorage để tránh stale state
-    let currentTier = tier
-    if (!currentTier) {
-      try {
-        const u = JSON.parse(localStorage.getItem('user') || '{}')
-        currentTier = resolveUserTier(u)
-      } catch { currentTier = 'free' }
-    }
+    const currentTier = tier || resolvedTier
     try {
       setLoading(true)
       const isFullAccess = ['basic_trial', 'basic', 'vip'].includes(currentTier)
       const url = isFullAccess ? `${API_URL}/signals` : `${API_URL}/signals?delay=7`
-      // Token nằm trong user object, không phải key 'authToken' riêng
-      let token = ''
-      try { token = JSON.parse(localStorage.getItem('user') || '{}').token || '' } catch {}
-      const response = await fetch(url, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-      })
+      const response = await fetch(url)
       const data = await response.json()
       if (data.success) {
         setSignals(data.signals)
@@ -567,11 +358,6 @@ function App() {
       <main className="main-content">
         <div className="container">
 
-          {/* ── AI Chat — luôn hiển thị cho Free/Basic, không phụ thuộc tab ── */}
-          {!isVip && user && (
-            <InlineAIChat userId={user.email} userTier={resolvedTier} />
-          )}
-
           {/* ── Banners theo tier ── */}
           {isFree   && activeTab === 'signals' && <FreeBanner />}
           {isTrial  && activeTab === 'signals' && <TrialBanner />}
@@ -588,16 +374,11 @@ function App() {
           )}
 
           {activeTab === 'portfolio' && (
-            <>
-              {/* IIS Widget — cùng maxWidth và padding với InlineAIChat */}
-              <div style={{ maxWidth: '900px', margin: '0 auto 16px', padding: '0 16px' }}>
-                <IISScoreWidget
-                  userId={user.email}
-                  onRequestUpdate={() => setShowIISModal(true)}
-                />
-              </div>
-              <AIPortfolioManager userId={user.email} userTier={resolvedTier} hideChat={!isVip} />
-            </>
+            <AIPortfolioManager
+              userId={user.email}
+              userTier={resolvedTier}
+              onOpenIIS={() => setShowIISModal(true)}
+            />
           )}
 
           {activeTab === 'vip' && isVip && (

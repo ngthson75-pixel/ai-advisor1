@@ -1,3 +1,4 @@
+import IISScoreWidget from './IISScoreWidget'
 import { useState, useEffect, useRef } from 'react'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
@@ -5,7 +6,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 const fmt = (n) => n?.toLocaleString('vi-VN') || '0'
 const fmtPct = (n) => (n >= 0 ? '+' : '') + n?.toFixed(1) + '%'
 
-export default function AIPortfolioManager({ userId, userTier = 'free' }) {
+export default function AIPortfolioManager({ userId, userTier = 'free', onOpenIIS }) {
   // ── Portfolio state ──────────────────────────────────────────
   const [portfolio, setPortfolio] = useState([])
   const [cash, setCash]           = useState(0)
@@ -204,6 +205,12 @@ export default function AIPortfolioManager({ userId, userTier = 'free' }) {
       fontFamily: "'DM Sans', sans-serif",
     }}>
 
+      {/* ── IIS SCORE WIDGET ── */}
+      <IISScoreWidget
+        userId={userId}
+        onRequestUpdate={onOpenIIS || (() => {})}
+      />
+
       {/* ── MARKET MODE BADGE ── */}
       {marketMode && (
         <div style={{
@@ -325,7 +332,7 @@ export default function AIPortfolioManager({ userId, userTier = 'free' }) {
                       }}>
                         <span>🔒</span>
                         <span>
-                          Bạn được sử dụng miễn phí 30 ngày, hãy nâng cấp gói <strong style={{ color: '#818cf8' }}>Basic</strong> hoặc <strong style={{ color: '#a855f7' }}>VIP</strong> để được AI hỗ trợ kiểm soát cảm xúc và nâng tầm hiệu quả đầu tư.
+                          Thời gian dùng thử 30 ngày đã hết. Nâng cấp <strong style={{ color: '#818cf8' }}>Basic</strong> hoặc <strong style={{ color: '#a855f7' }}>VIP</strong> để tiếp tục nhận coaching IIS cá nhân hóa.
                         </span>
                       </div>
                     )}
