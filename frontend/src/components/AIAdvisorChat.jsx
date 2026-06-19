@@ -126,10 +126,18 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
                       <div style={{
                         display: 'inline-flex', alignItems: 'center', gap: '5px',
                         padding: '3px 9px', borderRadius: '12px', fontSize: '11px', fontWeight: 500,
-                        background: m.meta.emotional_state === 'panic' ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.25)',
-                        color: m.meta.emotional_state === 'panic' ? '#fcd34d' : '#fca5a5',
+                        background: m.meta.emotional_state === 'panic'    ? 'rgba(245,158,11,0.25)' :
+                          m.meta.emotional_state === 'avg_down' ? 'rgba(249,115,22,0.25)' :
+                          'rgba(239,68,68,0.25)',
+                        color: m.meta.emotional_state === 'panic'    ? '#fcd34d' :
+                               m.meta.emotional_state === 'avg_down' ? '#fb923c' :
+                               '#fca5a5',
                       }}>
-                        ⚠️ {m.meta.emotional_state === 'panic' ? 'Panic detected' : 'FOMO detected'}
+                        ⚠️ {
+          m.meta.emotional_state === 'panic'    ? 'Hoảng loạn detected' :
+          m.meta.emotional_state === 'avg_down' ? 'Bình quân giá xuống detected' :
+          'FOMO detected'
+        }
                       </div>
                     </div>
                   )}
