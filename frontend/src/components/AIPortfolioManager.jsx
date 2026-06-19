@@ -21,7 +21,27 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
   const [messages, setMessages]   = useState([])
   const [input, setInput]         = useState('')
   const [chatLoading, setChatLoading] = useState(false)
+  const [chatExpanded, setChatExpanded] = useState(true)
+  const [histLoaded, setHistLoaded]     = useState(false)
   const chatEndRef = useRef(null)
+
+  // Load chat history on mount
+  useEffect(() => {
+    if (!userId || histLoaded) return
+    fetch(`${API_BASE}/chat/history?user_id=${encodeURIComponent(userId)}&limit=20`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.history && d.history.length > 0) {
+          const hist = d.history.flatMap(h => ([
+            { role: 'user', content: h.message,  meta: null, faded: true },
+            { role: 'ai',   content: h.response, meta: null, faded: true },
+          ]))
+          setMessages(hist)
+        }
+        setHistLoaded(true)
+      })
+      .catch(() => setHistLoaded(true))
+  }, [userId])
 
   // ── Market risk for header badge ─────────────────────────────
   const [marketMode, setMarketMode] = useState(null)
@@ -253,20 +273,27 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
       }}>
         {/* Chat header */}
         <div style={{
-          padding: '16px 20px',
+          padding: '14px 20px',
           borderBottom: '1px solid #1e293b',
-          display: 'flex', alignItems: 'center', gap: '10px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: '8px',
-            background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '16px',
-          }}>🤖</div>
-          <div>
-            <div style={{ fontWeight: 700, color: '#e2e8f0', fontSize: '15px' }}>Tư vấn AI</div>
-            <div style={{ fontSize: '12px', color: '#64748b' }}>Phân tích danh mục · Buysell Signal · Market Risk</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '18px' }}>💬</span>
+            <span style={{ fontWeight: 700, color: '#e2e8f0', fontSize: '14px' }}>
+              AI Advisor — Tư vấn riêng
+            </span>
+            <span style={{
+              background: userTier === 'vip' ? '#7c3aed' : userTier === 'basic' ? '#059669' : '#334155',
+              color: '#fff', fontSize: '11px', padding: '2px 8px',
+              borderRadius: '20px', fontWeight: 600,
+            }}>
+              {userTier === 'vip' ? 'VIP' : userTier === 'basic' ? '✅ Basic' : 'FREE'}
+            </span>
           </div>
+          {chatExpanded
+            ? <span onClick={() => setChatExpanded(false)} style={{ fontSize: '12px', color: '#64748b', cursor: 'pointer' }}>▲ Thu gọn</span>
+            : <span onClick={() => setChatExpanded(true)}  style={{ fontSize: '12px', color: '#64748b', cursor: 'pointer' }}>▼ Mở rộng</span>
+          }
         </div>
 
         {/* Chat messages */}
@@ -341,6 +368,7 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
                 <div style={{
                   padding: '10px 14px',
                   borderRadius: m.role === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
+                  opacity: m.faded ? 0.5 : 1,
                   background: m.role === 'user'
                     ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
                     : 'rgba(255,255,255,0.06)',
