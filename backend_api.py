@@ -1853,7 +1853,7 @@ def chat():
             'success': True,
             'response': ai_response,
             'meta': {
-                'emotional_state': emotional_state if coaching_enabled else ('detected' if emotional_state != 'neutral' else 'neutral'),
+                'emotional_state': emotional_state,  # luôn gửi actual state, dùng tier_locked để control CTA
                 'topic': topic,
                 'ticker': ticker_mentioned,
                 'iis_level': iis_level_now,
