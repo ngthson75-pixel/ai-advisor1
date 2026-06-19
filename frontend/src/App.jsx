@@ -378,7 +378,6 @@ function App() {
           {activeTab === 'portfolio' && (
             <>
               <AIAdvisorChat userId={user.email} userTier={resolvedTier} onOpenIIS={() => setShowIISModal(true)} />
-              <IISScoreWidget userId={user.email} onRequestUpdate={() => setShowIISModal(true)} />
               <AIPortfolioManager userId={user.email} userTier={resolvedTier} onOpenIIS={() => setShowIISModal(true)} />
             </>
           )}

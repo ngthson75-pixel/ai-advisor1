@@ -1,5 +1,5 @@
 import IISScoreWidget from './IISScoreWidget'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 
@@ -27,13 +27,10 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
   useEffect(() => {
     loadPortfolio()
     loadCash()
-    loadChatHistory()
     loadMarketMode()
   }, [userId])
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+
 
   async function loadPortfolio() {
     try {
@@ -54,25 +51,7 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
     } catch {}
   }
 
-  async function loadChatHistory() {
-    try {
-      const r = await fetch(`${API_BASE}/chat/history?user_id=${userId}&limit=30`)
-      const d = await r.json()
-      if (d.success && d.history?.length) {
-        const msgs = []
-        d.history.forEach(h => {
-          msgs.push({ role: 'user', text: h.message, time: h.created_at })
-          msgs.push({ role: 'ai', text: h.response, time: h.created_at })
-        })
-        setMessages(msgs)
-      } else {
-        setMessages([{
-          role: 'ai',
-          text: '👋 Xin chào! Tôi là AI ADVISOR. Tôi có thể tư vấn về danh mục của bạn, phân tích cổ phiếu trong Buysell Signal, và hỗ trợ quản trị rủi ro theo Market Dashboard. Bạn muốn hỏi gì?'
-        }])
-      }
-    } catch {}
-  }
+
 
   async function loadMarketMode() {
     try {
@@ -138,39 +117,7 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
   }
 
   // ── Chat ─────────────────────────────────────────────────────
-  async function handleSend(e) {
-    e?.preventDefault()
-    const msg = input.trim()
-    if (!msg || chatLoading) return
-    setInput('')
-    setMessages(prev => [...prev, { role: 'user', text: msg }])
-    setChatLoading(true)
-    try {
-      // IIS profile fallback từ localStorage
-      let iisLocal = null
-      try {
-        const _c = localStorage.getItem(`iis_result_${userId}`)
-        if (_c) { const _p = JSON.parse(_c); if (_p.has_result) iisLocal = { total: _p.total, level: _p.level, method: _p.method, kl: _p.kl_score, kt: _p.kt_score } }
-      } catch {}
 
-      const r = await fetch(`${API_BASE}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, message: msg, user_tier: userTier, iis_profile_fallback: iisLocal })
-      })
-      const d = await r.json()
-      // DEBUG — xóa sau khi confirm OK
-      console.log('[AI-Advisor Chat] response meta:', d.meta)
-      setMessages(prev => [...prev, {
-        role: 'ai',
-        text: d.response || d.error || 'AI không phản hồi được.',
-        meta: d.meta || null,
-      }])
-    } catch {
-      setMessages(prev => [...prev, { role: 'ai', text: 'Lỗi kết nối. Vui lòng thử lại.' }])
-    }
-    setChatLoading(false)
-  }
 
   // ── Computed totals ──────────────────────────────────────────
   const totalStock   = portfolio.reduce((s, p) => s + (p.current_value || 0), 0)
