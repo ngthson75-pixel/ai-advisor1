@@ -9,6 +9,7 @@ import VIPAdminPanel from './components/VIPAdminPanel'
 import Blog from './components/Blog'
 import IISTest from './components/IISTest'
 import IISScoreWidget from './components/IISScoreWidget'
+import AIAdvisorChat from './components/AIAdvisorChat'
 
 // API Configuration
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
@@ -364,6 +365,7 @@ function App() {
 
           {activeTab === 'signals' && (
             <>
+              <AIAdvisorChat userId={user.email} userTier={resolvedTier} onOpenIIS={() => setShowIISModal(true)} />
               <SignalHistory />
               <SignalsModule
                 signals={signals}
@@ -374,11 +376,11 @@ function App() {
           )}
 
           {activeTab === 'portfolio' && (
-            <AIPortfolioManager
-              userId={user.email}
-              userTier={resolvedTier}
-              onOpenIIS={() => setShowIISModal(true)}
-            />
+            <>
+              <AIAdvisorChat userId={user.email} userTier={resolvedTier} onOpenIIS={() => setShowIISModal(true)} />
+              <IISScoreWidget userId={user.email} onRequestUpdate={() => setShowIISModal(true)} />
+              <AIPortfolioManager userId={user.email} userTier={resolvedTier} onOpenIIS={() => setShowIISModal(true)} />
+            </>
           )}
 
           {activeTab === 'vip' && isVip && (
