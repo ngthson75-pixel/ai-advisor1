@@ -386,6 +386,8 @@ def detect_emotional_state(message):
     ]
     panic_kw = [
         'sập', 'giảm mạnh', 'giảm quá mạnh', 'giảm quá',
+        'xuống mạnh', 'xuống sâu', 'xuống liên tục', 'đang xuống',
+        'xuống quá', 'xuống nhiều', 'giảm sâu', 'giảm liên tục',
         'bán hết', 'thoát hết', 'sợ quá', 'lo quá',
         'cắt lỗ hết', 'panik', 'panic', 'thị trường sập', 'mất hết',
         'nên bán không', 'bán ngay', 'thoát ngay', 'giảm tiếp', 'sắp sập',
@@ -394,9 +396,11 @@ def detect_emotional_state(message):
     ]
     avg_down_kw = [
         'mua thêm', 'mua thêm vào', 'trung bình giá', 'average down',
+        'bình quân giá', 'mua bình quân', 'bình quân xuống', 'bình quân vào',
         'bắt đáy', 'bắt thêm', 'giảm thì mua', 'gom thêm', 'tích thêm',
         'đang lỗ mua thêm', 'lỗ mua thêm', 'đang lỗ muốn mua thêm',
         'lỗ có nên mua thêm', 'đang lỗ', 'tích lũy thêm',
+        'mua xuống', 'mua khi giảm', 'mua vào khi giảm',
     ]
 
     fomo_score  = sum(1 for kw in fomo_kw    if kw in msg)
