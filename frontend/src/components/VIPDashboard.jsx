@@ -342,7 +342,7 @@ function VIPPortfolioTab({ userId }) {
   }
 
   const totalValue = portfolio.reduce((s, x) => s + (x.current_value || 0), 0) + cash
-  const totalPnL   = portfolio.reduce((s, x) => s + (x.pnl || 0), 0)
+  const totalPnL   = portfolio.reduce((s, x) => s + (x.pl_amount || 0), 0)
 
   return (
     <div style={{ maxWidth: '760px', margin: '0 auto', padding: '0 16px' }}>
@@ -411,8 +411,8 @@ function VIPPortfolioTab({ userId }) {
                     <td style={{ padding: '8px 6px' }}>{fmt(s.avg_price)}</td>
                     <td style={{ padding: '8px 6px' }}>{fmt(s.current_price)}</td>
                     <td style={{ padding: '8px 6px' }}>{fmt(s.current_value)}</td>
-                    <td style={{ padding: '8px 6px', color: (s.pnl || 0) >= 0 ? C.green : C.red, fontWeight: '600' }}>
-                      {(s.pnl || 0) >= 0 ? '+' : ''}{fmt(s.pnl)}
+                    <td style={{ padding: '8px 6px', color: (s.pl_amount || 0) >= 0 ? C.green : C.red, fontWeight: '600' }}>
+                      {(s.pl_amount || 0) >= 0 ? '+' : ''}{fmt(s.pl_amount)}
                     </td>
                     <td style={{ padding: '8px 6px' }}>
                       <button onClick={() => handleDeleteStock(s.ticker)} style={{ background: 'none', border: 'none', color: C.red, cursor: 'pointer' }}>🗑️</button>
