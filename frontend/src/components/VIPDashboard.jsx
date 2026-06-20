@@ -412,7 +412,10 @@ function VIPPortfolioTab({ userId }) {
                     <td style={{ padding: '8px 6px' }}>{fmt(s.current_price)}</td>
                     <td style={{ padding: '8px 6px' }}>{fmt(s.current_value)}</td>
                     <td style={{ padding: '8px 6px', color: (s.pl_amount || 0) >= 0 ? C.green : C.red, fontWeight: '600' }}>
-                      {(s.pl_amount || 0) >= 0 ? '+' : ''}{fmt(s.pl_amount)}
+                      <div>{(s.pl_amount || 0) >= 0 ? '+' : ''}{fmt(s.pl_amount)}</div>
+                      <div style={{ fontSize: '11px', opacity: 0.85 }}>
+                        {(s.pl_pct || 0) >= 0 ? '+' : ''}{(s.pl_pct || 0).toFixed(1)}%
+                      </div>
                     </td>
                     <td style={{ padding: '8px 6px' }}>
                       <button onClick={() => handleDeleteStock(s.ticker)} style={{ background: 'none', border: 'none', color: C.red, cursor: 'pointer' }}>🗑️</button>
