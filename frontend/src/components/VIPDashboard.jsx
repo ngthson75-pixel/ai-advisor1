@@ -1,5 +1,5 @@
 /**
- * AI ADVISOR - VIP DASHBOARD v2.2
+ * AI ADVISOR - VIP DASHBOARD v2.3
  * ================================
  * FIXES (2026-03-22):
  *   BUG1 - Gọi đúng /api/vip/signals thay vì /api/signals (public)
@@ -9,6 +9,9 @@
  * FIXES (2026-06-01):
  *   BUG6 - Production (ai-advisor.vn) fallback về localhost vì VITE_API_URL không set
  *          → Fix: detect hostname production → hardcode production backend URL
+ * FIXES (2026-06-22):
+ *   BUG7 - Chat history không load được: frontend đọc d.messages nhưng backend trả d.history
+ *          → Fix: đổi sang d.history + convert format {message,response} → {role,content}
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -460,13 +463,22 @@ function InlineAIChat({ userId }) {
   useEffect(() => {
     async function initChat() {
       // 1. Thử load lịch sử chat
+      // BUG7 FIX: backend trả về d.history (không phải d.messages)
+      // BUG7 FIX: convert format {message, response} → [{role:'user'}, {role:'assistant'}]
       try {
         const r = await fetch(`${API_BASE}/chat/history?user_id=${userId}&limit=30`, { headers: authHeaders() })
         const d = await r.json()
-        if (d.success && d.messages?.length > 0) {
-          setMessages(d.messages)
-          setExpanded(true)
-          return  // Đã có lịch sử → không inject market summary
+        if (d.success && d.history?.length > 0) {
+          const converted = []
+          for (const h of d.history) {
+            if (h.message)  converted.push({ role: 'user',      content: h.message })
+            if (h.response) converted.push({ role: 'assistant', content: h.response })
+          }
+          if (converted.length > 0) {
+            setMessages(converted)
+            setExpanded(true)
+            return  // Đã có lịch sử → không inject market summary
+          }
         }
       } catch {}
 
