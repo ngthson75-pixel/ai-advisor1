@@ -2,6 +2,20 @@ import { useState, useEffect, useRef } from 'react'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 
+// ─── Markdown → HTML converter (strip dấu * từ GPT response) ──
+function renderMarkdown(text) {
+  if (!text) return ''
+  let html = text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.+?)__/g, '<strong>$1</strong>')
+    .replace(/\*([^*\n]+?)\*/g, '<em>$1</em>')
+    .replace(/_([^_\n]+?)_/g, '<em>$1</em>')
+    .replace(/^[-•]\s+(.+)$/gm, '• $1')
+    .replace(/\n/g, '<br/>')
+  return html
+}
+
 export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) {
   const [messages, setMessages]         = useState([])
   const [input, setInput]               = useState('')
@@ -155,18 +169,27 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
                     </div>
                   )}
                   {/* Message bubble */}
-                  <div style={{
-                    padding: '10px 14px',
-                    borderRadius: m.role === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
-                    opacity: m.faded ? 0.5 : 1,
-                    background: m.role === 'user'
-                      ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
-                      : 'rgba(255,255,255,0.06)',
-                    fontSize: '13px', lineHeight: '1.6', color: '#e2e8f0',
-                    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                  }}>
-                    {m.content}
-                  </div>
+                  {m.role === 'ai' ? (
+                    <div style={{
+                      padding: '10px 14px',
+                      borderRadius: '4px 16px 16px 16px',
+                      opacity: m.faded ? 0.5 : 1,
+                      background: 'rgba(255,255,255,0.06)',
+                      fontSize: '13px', lineHeight: '1.6', color: '#e2e8f0',
+                      wordBreak: 'break-word',
+                    }} dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }} />
+                  ) : (
+                    <div style={{
+                      padding: '10px 14px',
+                      borderRadius: '16px 4px 16px 16px',
+                      opacity: m.faded ? 0.5 : 1,
+                      background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                      fontSize: '13px', lineHeight: '1.6', color: '#e2e8f0',
+                      whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                    }}>
+                      {m.content}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
