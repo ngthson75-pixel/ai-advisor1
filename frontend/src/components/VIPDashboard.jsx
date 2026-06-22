@@ -102,6 +102,27 @@ const roundPrice = (n) => n == null ? null : Math.round(Number(n) / 100) * 100
 const fmtPrice   = (n) => n == null ? '—' : roundPrice(n).toLocaleString('vi-VN')
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }) : '—'
 
+// ─── Markdown → HTML converter (strip dấu * từ GPT response) ──
+// Chuyển **bold** → <strong>, *italic* → <em>, xuống dòng → <br>
+// Không dùng thư viện ngoài để tránh tăng bundle size
+function renderMarkdown(text) {
+  if (!text) return ''
+  let html = text
+    // Escape HTML để tránh XSS trước khi inject
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    // **bold** hoặc __bold__
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.+?)__/g, '<strong>$1</strong>')
+    // *italic* hoặc _italic_ (không dính vào bullet - *)
+    .replace(/\*([^*\n]+?)\*/g, '<em>$1</em>')
+    .replace(/_([^_\n]+?)_/g, '<em>$1</em>')
+    // - item hoặc • item → bullet đẹp
+    .replace(/^[\-•]\s+(.+)$/gm, '• $1')
+    // Xuống dòng
+    .replace(/\n/g, '<br/>')
+  return html
+}
+
 // ─── Telegram Status Badge (static — toggle feature pending) ──
 function TelegramBadge() {
   return (
@@ -581,12 +602,19 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
                       {m.meta.iis_level_name && <span style={{ opacity:.7, marginLeft:'4px' }}>· {m.meta.iis_level_name}</span>}
                     </div>
                   )}
-                  <div style={{ padding: '8px 12px', borderRadius: '12px', fontSize: '13px', lineHeight: '1.5', color: '#fff',
-                    background: m.role === 'user' ? `linear-gradient(135deg, ${C.purple}, ${C.purpleLight})` : '#1e1b2e',
-                    borderBottomRightRadius: m.role === 'user' ? '3px' : '12px',
-                    borderBottomLeftRadius:  m.role === 'user' ? '12px' : '3px' }}>
-                    {m.content}
-                  </div>
+                  {m.role === 'assistant' ? (
+                    <div style={{ padding: '8px 12px', borderRadius: '12px', fontSize: '13px', lineHeight: '1.6', color: '#fff',
+                      background: '#1e1b2e',
+                      borderBottomLeftRadius: '3px' }}
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }}
+                    />
+                  ) : (
+                    <div style={{ padding: '8px 12px', borderRadius: '12px', fontSize: '13px', lineHeight: '1.5', color: '#fff',
+                      background: `linear-gradient(135deg, ${C.purple}, ${C.purpleLight})`,
+                      borderBottomRightRadius: '3px' }}>
+                      {m.content}
+                    </div>
+                  )}
                 </div>
               </div>
             ))
