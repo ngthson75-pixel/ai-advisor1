@@ -174,24 +174,61 @@ function SignalCard({ signal }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px' }}>
-        {[
-          { label: '📍 Entry', val: fmtPrice(signal.entry_price), color: C.text },
-          { label: '🛑 Stop Loss', val: fmtPrice(signal.stop_loss), color: C.red },
-          { label: '🎯 Target', val: fmtPrice(signal.take_profit), color: C.green },
-        ].map(({ label, val, color }) => (
-          <div key={label} style={{ background: '#ffffff06', borderRadius: '8px', padding: '8px 10px', border: '1px solid #ffffff08' }}>
-            <div style={{ color: C.muted, fontSize: '10px', marginBottom: '3px' }}>{label}</div>
-            <div style={{ color, fontWeight: '700', fontSize: '14px' }}>{val}</div>
+       {isBuy ? (
+        // ── BUY signal fields ──────────────────────────────────
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px' }}>
+            {[
+              { label: '📍 Entry', val: fmtPrice(signal.entry_price), color: C.text },
+              { label: '🛑 Stop Loss', val: fmtPrice(signal.stop_loss), color: C.red },
+              { label: '🎯 Target', val: fmtPrice(signal.take_profit), color: C.green },
+            ].map(({ label, val, color }) => (
+              <div key={label} style={{ background: '#ffffff06', borderRadius: '8px', padding: '8px 10px', border: '1px solid #ffffff08' }}>
+                <div style={{ color: C.muted, fontSize: '10px', marginBottom: '3px' }}>{label}</div>
+                <div style={{ color, fontWeight: '700', fontSize: '14px' }}>{val}</div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-
-      {(rrRatio || signal.position_pct != null) && (
-        <div style={{ display: 'flex', gap: '12px', marginTop: '10px', fontSize: '12px', color: C.muted }}>
-          {rrRatio > 0 && <span>⚖️ R/R: <b style={{ color: C.text }}>{Number(rrRatio).toFixed(1)}x</b></span>}
-          {signal.position_pct != null && <span>📊 Tỷ trọng: <b style={{ color: C.purpleLight }}>{signal.position_pct}%</b></span>}
-        </div>
+          {(rrRatio || signal.position_pct != null) && (
+            <div style={{ display: 'flex', gap: '12px', marginTop: '10px', fontSize: '12px', color: C.muted }}>
+              {rrRatio > 0 && <span>⚖️ R/R: <b style={{ color: C.text }}>{Number(rrRatio).toFixed(1)}x</b></span>}
+              {signal.position_pct != null && <span>📊 Tỷ trọng: <b style={{ color: C.purpleLight }}>{signal.position_pct}%</b></span>}
+            </div>
+          )}
+        </>
+      ) : (
+        // ── SELL signal fields ─────────────────────────────────
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px' }}>
+            {[
+              { label: '📍 Giá vào', val: fmtPrice(signal.entry_price), color: C.muted },
+              { label: '💰 Giá bán', val: fmtPrice(signal.exit_price), color: C.text },
+              { label: (signal.profit_loss_pct >= 0 ? '🟢 Lãi' : '🔴 Lỗ'),
+                val: signal.profit_loss_pct != null
+                  ? `${signal.profit_loss_pct >= 0 ? '+' : ''}${Number(signal.profit_loss_pct).toFixed(2)}%`
+                  : '—',
+                color: signal.profit_loss_pct >= 0 ? C.green : C.red },
+            ].map(({ label, val, color }) => (
+              <div key={label} style={{ background: '#ffffff06', borderRadius: '8px', padding: '8px 10px', border: '1px solid #ffffff08' }}>
+                <div style={{ color: C.muted, fontSize: '10px', marginBottom: '3px' }}>{label}</div>
+                <div style={{ color, fontWeight: '700', fontSize: '14px' }}>{val}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '10px', fontSize: '12px', color: C.muted, flexWrap: 'wrap' }}>
+            {signal.exit_reason && (
+              <span>📋 Lý do: <b style={{ color: C.text }}>
+                {signal.exit_reason === 'STOP_LOSS' ? '🔴 Cắt lỗ'
+                 : signal.exit_reason === 'TAKE_PROFIT' ? '🟢 Chốt lời'
+                 : signal.exit_reason === 'MA20_STRICT' ? '🟡 MA20 Cross'
+                 : signal.exit_reason}
+              </b></span>
+            )}
+            {signal.exit_quantity_pct != null && signal.exit_quantity_pct < 100 && (
+              <span>📊 Bán: <b style={{ color: C.purpleLight }}>{signal.exit_quantity_pct}%</b></span>
+            )}
+          </div>
+        </>
       )}
     </div>
   )
