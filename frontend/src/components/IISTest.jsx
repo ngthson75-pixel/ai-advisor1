@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { track } from '../analytics'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 
@@ -340,6 +341,13 @@ export default function IISTest({ userId, onComplete }) {
     const clientResult = computeScoreLocally(ans)
     setResult(clientResult)
     setPhase('result')
+    track('iis_test_completed', {
+      iis_score:  clientResult.total,
+      iis_level:  clientResult.level,
+      iis_method: clientResult.method,
+      kl_score:   clientResult.kl_score,
+      kt_score:   clientResult.kt_score,
+    })
 
     // Lưu vào localStorage ngay lập tức — widget đọc được ngay
     const uid = userId || 'guest'
@@ -385,6 +393,11 @@ export default function IISTest({ userId, onComplete }) {
     const tested = prevResult.tested_at
       ? new Date(prevResult.tested_at).toLocaleDateString('vi-VN')
       : null
+
+    // Track: user xem lại kết quả IIS cũ
+    useEffect(() => {
+      track('iis_result_viewed', { iis_score: prevResult.total, iis_level: prevResult.level })
+    }, [])
     return (
       <div style={S.wrap}>
         <div style={{ textAlign: 'center', marginBottom: '20px' }}>
@@ -440,7 +453,7 @@ export default function IISTest({ userId, onComplete }) {
         </div>
 
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button style={S.btn(false, false)} onClick={restart}>Làm lại test</button>
+          <button style={S.btn(false, false)} onClick={() => { track('iis_retest_started', { prev_score: prevResult.total }); restart() }}>Làm lại test</button>
           <button style={{ ...S.btn(true, false), flex: 1 }} onClick={() => setPhase('intro')}>
             Cập nhật IIS Score →
           </button>
@@ -494,7 +507,7 @@ export default function IISTest({ userId, onComplete }) {
 
       <button
         style={{ ...S.btn(true, false), width: '100%', padding: '12px', fontSize: '14px' }}
-        onClick={() => setPhase('test')}
+        onClick={() => { setPhase('test'); track('iis_test_started', {}) }}
       >
         Bắt đầu IIS Test →
       </button>

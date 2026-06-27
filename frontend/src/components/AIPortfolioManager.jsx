@@ -1,5 +1,6 @@
 import IISScoreWidget from './IISScoreWidget'
 import { useState, useEffect } from 'react'
+import { track } from '../analytics'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 
@@ -83,6 +84,7 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
       })
       const d = await r.json()
       if (d.success) {
+        track('portfolio_stock_add', { ticker: addForm.ticker.toUpperCase(), user_tier: userTier })
         setAddForm({ ticker: '', quantity: '', price: '' })
         loadPortfolio()
       } else {
@@ -94,6 +96,7 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
 
   async function handleDeleteStock(ticker) {
     if (!confirm(`Xóa ${ticker} khỏi danh mục?`)) return
+    track('portfolio_stock_del', { ticker, user_tier: userTier })
     try {
       await fetch(`${API_BASE}/portfolio/${ticker}?user_id=${userId}`, { method: 'DELETE' })
       loadPortfolio()
@@ -110,6 +113,7 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
       })
       const d = await r.json()
       if (d.success) {
+        track('portfolio_cash_set', { user_tier: userTier })
         setCash(val)
         setEditingCash(false)
       }

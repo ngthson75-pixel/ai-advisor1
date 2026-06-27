@@ -14,75 +14,72 @@ import AIAdvisorChat from './components/AIAdvisorChat'
 // API Configuration
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 
+// ── GA4 helper (safe — không crash nếu gtag chưa load) ───────────────────
+function track(eventName, params = {}) {
+  try {
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', eventName, params)
+    }
+  } catch (e) { /* silent */ }
+}
+
 // ── Tier helpers ─────────────────────────────────────────────────────────
-/**
- * Trả về tier hiện tại của user, tự động downgrade nếu trial hết hạn.
- * tier values: 'free' | 'basic_trial' | 'basic' | 'vip'
- */
 function resolveUserTier(user) {
   if (!user) return 'free'
   if (user.isVip) return 'vip'
-
   const tier = user.tier || 'free'
-
-  // Basic trial: kiểm tra còn hạn không
   if (tier === 'basic_trial') {
     const end = user.trialEndDate ? new Date(user.trialEndDate) : null
-    if (!end || new Date() > end) {
-      return 'free'   // Hết hạn → downgrade
-    }
+    if (!end || new Date() > end) return 'free'
     return 'basic_trial'
   }
-
-  return tier  // 'basic' hoặc 'free'
+  return tier
 }
 
-/** Số ngày còn lại của trial (trả -1 nếu không phải trial) */
 function trialDaysLeft(user) {
   if (!user || user.tier !== 'basic_trial') return -1
   const end = user.trialEndDate ? new Date(user.trialEndDate) : null
   if (!end) return -1
-  const diff = Math.ceil((end - new Date()) / (1000 * 60 * 60 * 24))
-  return Math.max(0, diff)
+  return Math.max(0, Math.ceil((end - new Date()) / (1000 * 60 * 60 * 24)))
 }
 
 function App() {
   const isAdmin = window.location.pathname === '/admin'
   const isBlog  = window.location.pathname.startsWith('/blog')
 
-  const [user, setUser]             = useState(null)
+  const [user, setUser]                 = useState(null)
   const [resolvedTier, setResolvedTier] = useState('free')
-  const [activeTab, setActiveTab]   = useState('signals')
+  const [activeTab, setActiveTab]       = useState('signals')
   const [showIISModal, setShowIISModal] = useState(false)
-  const [signals, setSignals]       = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [lastUpdate, setLastUpdate] = useState(null)
+  const [signals, setSignals]           = useState([])
+  const [loading, setLoading]           = useState(true)
+  const [lastUpdate, setLastUpdate]     = useState(null)
 
-  // ── Load user từ localStorage ──────────────────────────────────────────
+  // ── Load user từ localStorage ─────────────────────────────────────────
   useEffect(() => {
     const stored = localStorage.getItem('user')
     if (stored) {
       try {
         const parsed = JSON.parse(stored)
-        // Migrate khách cũ chưa có tier → free
-        if (!parsed.tier && !parsed.isVip) {
-          parsed.tier = 'free'
-        }
+        if (!parsed.tier && !parsed.isVip) parsed.tier = 'free'
         const tier = resolveUserTier(parsed)
-        // Nếu trial vừa hết → cập nhật localStorage
         if (parsed.tier === 'basic_trial' && tier === 'free') {
           parsed.tier = 'free'
           localStorage.setItem('user', JSON.stringify(parsed))
         }
         setUser(parsed)
         setResolvedTier(tier)
+
+        // ✅ GA4: User quay lại (session restore từ localStorage)
+        track('session_restore', { user_tier: tier })
+
       } catch (e) {
         localStorage.removeItem('user')
       }
     }
   }, [])
 
-  // ── Fetch signals: truyền ?delay=7 cho Free users ─────────────────────
+  // ── Fetch signals ─────────────────────────────────────────────────────
   const fetchSignals = async (tier) => {
     const currentTier = tier || resolvedTier
     try {
@@ -114,7 +111,7 @@ function App() {
     }
   }, [user])
 
-  // ── Handlers ───────────────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────
   const handleLogin = async (userData) => {
     const tier = resolveUserTier(userData)
     if (!userData.tier && !userData.isVip) {
@@ -123,36 +120,60 @@ function App() {
     }
     setUser(userData)
     setResolvedTier(tier)
+
+    // ✅ GA4: Login event — quan trọng nhất để đo DAU
+    track('login', {
+      user_tier:  tier,
+      is_vip:     !!userData.isVip,
+      login_type: 'email',
+    })
+
     if (userData.isVip) {
       setActiveTab('vip')
-      // VIP cũng check IIS — họ có full coaching
       try {
         const r = await fetch(`${API_URL}/iis/result/${encodeURIComponent(userData.email)}`)
         const d = await r.json()
-        if (!d.has_result) setShowIISModal(true)
+        if (!d.has_result) {
+          setShowIISModal(true)
+          // ✅ GA4: IIS modal hiện ra (chưa làm test)
+          track('iis_modal_shown', { user_tier: tier, trigger: 'login_vip' })
+        }
       } catch {}
       return
     }
 
-    // Auto-show IIS modal nếu user chưa làm test lần nào
     try {
       const r = await fetch(`${API_URL}/iis/result/${encodeURIComponent(userData.email)}`)
       const d = await r.json()
-      if (!d.has_result) setShowIISModal(true)
-    } catch { /* silent — không block login */ }
+      if (!d.has_result) {
+        setShowIISModal(true)
+        // ✅ GA4: IIS modal hiện ra
+        track('iis_modal_shown', { user_tier: tier, trigger: 'login_new' })
+      } else {
+        // ✅ GA4: User đã có IIS score (returning user đã test)
+        track('iis_already_done', { user_tier: tier, iis_score: d.total })
+      }
+    } catch {}
   }
 
   const handleLogout = () => {
+    // ✅ GA4: Logout
+    track('logout', { user_tier: resolvedTier })
     localStorage.removeItem('user')
     setUser(null)
     setResolvedTier('free')
     setActiveTab('signals')
   }
 
-  // ── Blog (public, không cần login) ───────────────────────────────────
-  if (isBlog)  return <Blog />
+  // ── Tab change tracking ───────────────────────────────────────────────
+  const handleTabChange = (tab) => {
+    setActiveTab(tab)
+    // ✅ GA4: Xem tab nào
+    track('tab_view', { tab_name: tab, user_tier: resolvedTier })
+  }
 
-  // ── Admin panel ────────────────────────────────────────────────────────
+  // ── Blog ──────────────────────────────────────────────────────────────
+  if (isBlog)  return <Blog />
   if (isAdmin) return <VIPAdminPanel />
   if (!user)   return <LandingPage onLogin={handleLogin} />
 
@@ -163,43 +184,40 @@ function App() {
   const isVip       = resolvedTier === 'vip'
   const hasFullAccess = isTrial || isBasic || isVip
 
-  // ── Tier badge cho header ──────────────────────────────────────────────
+  // ── Tier badge ────────────────────────────────────────────────────────
   const TierBadge = () => {
     if (isVip)   return <span style={badgeStyle('#7c3aed','#a855f7')}>💎 VIP</span>
     if (isBasic) return <span style={badgeStyle('#059669','#10b981')}>✅ Basic</span>
     if (isTrial) return (
-      <span style={badgeStyle('#d97706','#f59e0b')}>
-        🕐 Trial {daysLeft}d còn
-      </span>
+      <span style={badgeStyle('#d97706','#f59e0b')}>🕐 Trial {daysLeft}d còn</span>
     )
     return <span style={badgeStyle('#475569','#64748b')}>Free</span>
   }
 
-  // ── Banners ────────────────────────────────────────────────────────────
+  // ── Banners ───────────────────────────────────────────────────────────
   const FreeBanner = () => (
     <div style={{
       background: 'linear-gradient(90deg, #1a1200, #1a0a00)',
-      border: '1px solid #f59e0b66',
-      borderRadius: '10px',
-      padding: '10px 18px',
-      margin: '12px 0',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      flexWrap: 'wrap',
-      gap: '8px',
-      fontSize: '13px',
+      border: '1px solid #f59e0b66', borderRadius: '10px',
+      padding: '10px 18px', margin: '12px 0',
+      display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between', flexWrap: 'wrap',
+      gap: '8px', fontSize: '13px',
     }}>
       <div>
         <span style={{color:'#fbbf24', fontWeight:600}}>⏰ Tín hiệu đang hiển thị delay 7 ngày</span>
         <span style={{color:'#94a3b8', marginLeft:'8px'}}>— Nâng lên Basic để xem real-time</span>
       </div>
-      <a href="https://ai-advisor.vn" target="_blank" rel="noreferrer" style={{
-        background:'#f59e0b', color:'#000', border:'none',
-        borderRadius:'6px', padding:'5px 14px',
-        fontSize:'12px', fontWeight:700, cursor:'pointer',
-        textDecoration:'none', whiteSpace:'nowrap',
-      }}>
+      <a
+        href="https://ai-advisor.vn" target="_blank" rel="noreferrer"
+        onClick={() => track('upgrade_click', { source: 'free_banner', user_tier: 'free' })}
+        style={{
+          background:'#f59e0b', color:'#000', border:'none',
+          borderRadius:'6px', padding:'5px 14px',
+          fontSize:'12px', fontWeight:700, cursor:'pointer',
+          textDecoration:'none', whiteSpace:'nowrap',
+        }}
+      >
         Đăng ký Basic →
       </a>
     </div>
@@ -211,15 +229,10 @@ function App() {
       <div style={{
         background: isLow ? 'linear-gradient(90deg,#2d0a0a,#1a0000)' : 'linear-gradient(90deg,#0a1a0a,#001a00)',
         border: `1px solid ${isLow ? '#ef444466' : '#22c55e44'}`,
-        borderRadius: '10px',
-        padding: '10px 18px',
-        margin: '12px 0',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '8px',
-        fontSize: '13px',
+        borderRadius: '10px', padding: '10px 18px', margin: '12px 0',
+        display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', flexWrap: 'wrap',
+        gap: '8px', fontSize: '13px',
       }}>
         <div>
           <span style={{color: isLow ? '#f87171' : '#4ade80', fontWeight:600}}>
@@ -229,19 +242,23 @@ function App() {
             {isLow ? '— Đăng ký ngay để không gián đoạn!' : '— Tín hiệu real-time, đầy đủ tính năng'}
           </span>
         </div>
-        <a href="mailto:aiadvisorhotline@gmail.com" style={{
-          background: isLow ? '#ef4444' : '#22c55e', color:'#fff', border:'none',
-          borderRadius:'6px', padding:'5px 14px',
-          fontSize:'12px', fontWeight:700, cursor:'pointer',
-          textDecoration:'none', whiteSpace:'nowrap',
-        }}>
+        <a
+          href="mailto:aiadvisorhotline@gmail.com"
+          onClick={() => track('upgrade_click', { source: 'trial_banner', days_left: daysLeft, user_tier: 'basic_trial' })}
+          style={{
+            background: isLow ? '#ef4444' : '#22c55e', color:'#fff', border:'none',
+            borderRadius:'6px', padding:'5px 14px',
+            fontSize:'12px', fontWeight:700, cursor:'pointer',
+            textDecoration:'none', whiteSpace:'nowrap',
+          }}
+        >
           {isLow ? 'Đăng ký ngay →' : 'Nâng cấp Basic 199k →'}
         </a>
       </div>
     )
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="app">
       {/* Header */}
@@ -275,10 +292,9 @@ function App() {
                   Updated: {lastUpdate.toLocaleTimeString()}
                 </div>
               )}
-
               <div className="user-menu">
                 <div className="user-avatar" style={
-                  isVip  ? { background:'linear-gradient(135deg,#7c3aed,#a855f7)', boxShadow:'0 0 12px rgba(168,85,247,0.5)' }
+                  isVip   ? { background:'linear-gradient(135deg,#7c3aed,#a855f7)', boxShadow:'0 0 12px rgba(168,85,247,0.5)' }
                   : isBasic ? { background:'linear-gradient(135deg,#059669,#10b981)', boxShadow:'0 0 8px rgba(16,185,129,0.3)' }
                   : isTrial ? { background:'linear-gradient(135deg,#d97706,#f59e0b)', boxShadow:'0 0 8px rgba(245,158,11,0.3)' }
                   : {}
@@ -286,9 +302,7 @@ function App() {
                   {user.name?.charAt(0).toUpperCase() || 'U'}
                 </div>
                 <div className="user-info">
-                  <div className="user-name">
-                    {user.name} <TierBadge />
-                  </div>
+                  <div className="user-name">{user.name} <TierBadge /></div>
                   <button onClick={handleLogout} className="logout-btn">Đăng xuất</button>
                 </div>
               </div>
@@ -305,7 +319,7 @@ function App() {
               <>
                 <button
                   className={`tab ${activeTab === 'signals' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('signals')}
+                  onClick={() => handleTabChange('signals')}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
@@ -316,7 +330,7 @@ function App() {
 
                 <button
                   className={`tab ${activeTab === 'portfolio' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('portfolio')}
+                  onClick={() => handleTabChange('portfolio')}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
@@ -330,7 +344,7 @@ function App() {
               <>
                 <button
                   className={`tab ${activeTab === 'vip' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('vip')}
+                  onClick={() => handleTabChange('vip')}
                   style={activeTab === 'vip' ? {
                     background: 'linear-gradient(135deg,#7c3aed22,#a855f722)',
                     borderBottom: '2px solid #a855f7', color: '#c084fc',
@@ -340,7 +354,7 @@ function App() {
                 </button>
                 <button
                   className={`tab ${activeTab === 'basic' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('basic')}
+                  onClick={() => handleTabChange('basic')}
                   style={{
                     color: activeTab === 'basic' ? '#94a3b8' : '#64748b',
                     fontSize: '13px',
@@ -359,19 +373,14 @@ function App() {
       <main className="main-content">
         <div className="container">
 
-          {/* ── Banners theo tier ── */}
-          {isFree   && activeTab === 'signals' && <FreeBanner />}
-          {isTrial  && activeTab === 'signals' && <TrialBanner />}
+          {isFree  && activeTab === 'signals' && <FreeBanner />}
+          {isTrial && activeTab === 'signals' && <TrialBanner />}
 
           {activeTab === 'signals' && (
             <>
               <AIAdvisorChat userId={user.email} userTier={resolvedTier} onOpenIIS={() => setShowIISModal(true)} />
               <SignalHistory />
-              <SignalsModule
-                signals={signals}
-                loading={loading}
-                onRefresh={fetchSignals}
-              />
+              <SignalsModule signals={signals} loading={loading} onRefresh={fetchSignals} />
             </>
           )}
 
@@ -383,7 +392,7 @@ function App() {
           )}
 
           {activeTab === 'vip' && isVip && (
-            <VIPDashboard user={user} onSwitchBasic={() => setActiveTab('basic')} onOpenIIS={() => setShowIISModal(true)} />
+            <VIPDashboard user={user} onSwitchBasic={() => handleTabChange('basic')} onOpenIIS={() => setShowIISModal(true)} />
           )}
 
           {activeTab === 'basic' && isVip && (
@@ -399,14 +408,11 @@ function App() {
       {showIISModal && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,
-          background: '#0a0f1e',
-          overflowY: 'auto',
+          background: '#0a0f1e', overflowY: 'auto',
           display: 'flex', flexDirection: 'column',
         }}>
-          {/* Header bar */}
           <div style={{
-            padding: '12px 20px',
-            borderBottom: '1px solid #1e293b',
+            padding: '12px 20px', borderBottom: '1px solid #1e293b',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             background: '#0f172a', flexShrink: 0,
           }}>
@@ -414,7 +420,11 @@ function App() {
               AI ADVISOR — Investor Intelligence Score
             </span>
             <button
-              onClick={() => setShowIISModal(false)}
+              onClick={() => {
+                setShowIISModal(false)
+                // ✅ GA4: User bỏ qua IIS modal — friction point quan trọng
+                track('iis_modal_skipped', { user_tier: resolvedTier })
+              }}
               style={{
                 background: 'transparent', border: '1px solid #334155',
                 color: '#64748b', borderRadius: '6px',
@@ -424,13 +434,19 @@ function App() {
               Bỏ qua ✕
             </button>
           </div>
-          {/* IIS Test */}
           <div style={{ flex: 1 }}>
             <IISTest
               userId={user?.email}
               onComplete={(result) => {
                 setShowIISModal(false)
                 setActiveTab('portfolio')
+                // ✅ GA4: IIS hoàn thành — event quan trọng nhất để đo activation
+                track('iis_test_completed', {
+                  iis_score:  result?.total,
+                  iis_level:  result?.level,
+                  iis_method: result?.method,
+                  user_tier:  resolvedTier,
+                })
               }}
             />
           </div>
@@ -450,7 +466,6 @@ function App() {
   )
 }
 
-// ── Helper ─────────────────────────────────────────────────────────────────
 function badgeStyle(from, to) {
   return {
     marginLeft: '6px', fontSize: '10px', fontWeight: '700',

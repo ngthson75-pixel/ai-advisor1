@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, AlertCircle, RefreshCw } from 'lucide-react';
+import { track } from '../analytics';
 
 // FIX: hostname detection — VITE_API_URL không set trên Cloudflare Pages
 const _h = typeof window !== 'undefined' ? window.location.hostname : ''
@@ -17,7 +18,7 @@ const VN30_TICKERS = new Set([
 ]);
 
 // Nhận props từ App.jsx — dùng chung data, không tự fetch riêng (tránh URL sai)
-export default function SignalsModule({ signals: propSignals, loading: propLoading, onRefresh }) {
+export default function SignalsModule({ signals: propSignals, loading: propLoading, onRefresh, userTier = 'free' }) {
   const [signals,   setSignals]   = useState(propSignals || []);
   const [loading,   setLoading]   = useState(propLoading ?? true);
   const [error,     setError]     = useState(null);
@@ -45,7 +46,10 @@ export default function SignalsModule({ signals: propSignals, loading: propLoadi
     if (propSignals === undefined) fetchSignalsFallback();
   }, []);
 
-  const handleRefresh = () => { onRefresh ? onRefresh() : fetchSignalsFallback(); };
+  const handleRefresh = () => {
+    track('signals_refresh', { user_tier: userTier, trigger: 'manual' })
+    onRefresh ? onRefresh() : fetchSignalsFallback()
+  };
 
   const triggerScan = async () => {
     try {
@@ -155,7 +159,7 @@ const getExitReason = (signal) => {
       {/* NEW: Tabs */}
       <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         <button
-          onClick={() => setActiveTab('buy')}
+          onClick={() => { setActiveTab('buy'); track('signals_tab_view', { tab: 'buy', signal_count: buySignals.length, user_tier: userTier }) }}
           style={{
             padding: '12px 24px',
             backgroundColor: activeTab === 'buy' ? '#10b981' : '#334155',
@@ -175,7 +179,7 @@ const getExitReason = (signal) => {
         </button>
         
         <button
-          onClick={() => setActiveTab('sell')}
+          onClick={() => { setActiveTab('sell'); track('signals_tab_view', { tab: 'sell', signal_count: sellSignals.length, user_tier: userTier }) }}
           style={{
             padding: '12px 24px',
             backgroundColor: activeTab === 'sell' ? '#ef4444' : '#334155',
