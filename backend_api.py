@@ -17,7 +17,7 @@ import json
 import subprocess
 import sqlite3
 from openai import OpenAI
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Date, Text, func, Boolean, and_, not_, exists
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Date, Text, func, Boolean, and_, or_, not_, exists
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from vnstock import Vnstock
@@ -1007,8 +1007,20 @@ def signals_endpoint():
             )
             if delay_days and delay_days > 0:
                 cutoff = datetime.utcnow() - timedelta(days=delay_days)
-                query = query.filter(Signal.created_at <= cutoff)
-            signals = query.order_by(Signal.created_at.desc()).all()
+                # SELL signals are never delayed -- always visible regardless of tier
+                # Only apply delay to BUY signals (created_at NULL-safe: treat NULL as current)
+                query = query.filter(
+                    or_(
+                        Signal.action == 'SELL',
+                        Signal.created_at == None,  # NULL created_at = show always
+                        Signal.created_at <= cutoff
+                    )
+                )
+            # Sort: signals with created_at first (desc), NULL created_at last but still included
+            signals = query.order_by(
+                Signal.created_at.desc().nullslast(),
+                Signal.id.desc()
+            ).all()
             
             # Build signals with rounded prices
             signals_data = []
@@ -1070,7 +1082,6 @@ def signals_endpoint():
                         deduplicated.remove(seen[key])
                         seen[key] = signal
                         deduplicated.append(signal)
-            
             return jsonify({
                 'success': True,
                 'signals': deduplicated,
