@@ -256,7 +256,8 @@ function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysCh
   ))
 
   // Tab BÁN: đang mở, mới nhất lên trên
-  const allSell = sortDesc(signals.filter(s => s.action === 'SELL' && isOpen(s)))
+  // SELL signals: VN30 only, không filter isOpen (SELL đã là lệnh đã thực hiện)
+  const allSell = sortDesc(signals.filter(s => s.action === 'SELL' && isVN30s(s)))
 
   const filtered = filter === 'vn30' ? vn30Buy
                  : filter === 'buy'  ? allBuy

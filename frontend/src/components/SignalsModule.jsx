@@ -80,7 +80,17 @@ export default function SignalsModule({ signals: propSignals, loading: propLoadi
       return db - da;
     });
   const sellSignals = signals
-    .filter(s => s.action === 'SELL')
+    .filter(s => {
+      if (s.action !== 'SELL') return false;
+      const ticker = (s.ticker || s.code || '').toUpperCase();
+      if (userTier === 'vip') {
+        // VIP: chỉ show VN30 SELL signals
+        return VN30_TICKERS.has(ticker);
+      } else {
+        // Basic/Free: ẩn VN30 SELL (những lệnh đó thuộc VIP dashboard)
+        return !VN30_TICKERS.has(ticker);
+      }
+    })
     .sort((a, b) => {
       const da = a.date ? new Date(a.date).getTime() : 0;
       const db = b.date ? new Date(b.date).getTime() : 0;

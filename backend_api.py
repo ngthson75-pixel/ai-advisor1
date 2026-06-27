@@ -1345,19 +1345,31 @@ def create_sell_signal():
             if not buy_signal:
                 return jsonify({'error': f'Signal {buy_signal_code} not found'}), 404
             
+            # Warn if BUY signal already fully closed
+            if buy_signal.status == 'closed' or (buy_signal.position_pct is not None and buy_signal.position_pct <= 0):
+                return jsonify({
+                    'error': f'Signal {buy_signal_code} is already fully closed (position_pct=0). '
+                             f'Cannot create SELL against a closed position.'
+                }), 400
+            
             selection_method = 'manual'
         else:
-            # AUTO FIFO: Find oldest open signal for this ticker
+            # AUTO FIFO: Find oldest OPEN/PARTIAL signal for this ticker
+            # Only match BUY signals that still have position (not fully closed)
             buy_signal = session.query(Signal).filter(
                 Signal.ticker == ticker,
-                Signal.action == 'BUY'
+                Signal.action == 'BUY',
+                Signal.status.in_(['open', 'partial'])
             ).order_by(
                 Signal.date.asc(),
                 Signal.created_at.asc()
             ).first()
             
             if not buy_signal:
-                return jsonify({'error': f'No BUY signal found for {ticker}'}), 404
+                return jsonify({
+                    'error': f'No open BUY signal found for {ticker}. '
+                             f'All positions may already be closed.'
+                }), 404
             
             selection_method = 'auto_fifo'
         

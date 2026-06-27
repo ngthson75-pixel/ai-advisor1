@@ -380,7 +380,7 @@ function App() {
             <>
               <AIAdvisorChat userId={user.email} userTier={resolvedTier} onOpenIIS={() => setShowIISModal(true)} />
               <SignalHistory />
-              <SignalsModule signals={signals} loading={loading} onRefresh={fetchSignals} />
+              <SignalsModule signals={signals} loading={loading} onRefresh={fetchSignals} userTier={resolvedTier} />
             </>
           )}
 
@@ -398,7 +398,7 @@ function App() {
           {activeTab === 'basic' && isVip && (
             <>
               <SignalHistory />
-              <SignalsModule signals={signals} loading={loading} onRefresh={fetchSignals} />
+              <SignalsModule signals={signals} loading={loading} onRefresh={fetchSignals} userTier="basic" />
             </>
           )}
         </div>
