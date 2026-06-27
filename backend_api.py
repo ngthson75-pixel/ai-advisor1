@@ -1039,22 +1039,32 @@ def signals_endpoint():
                     'exit_date': s.exit_date,
                 })
             
-            # Deduplicate: Keep BEST signal per ticker per date (highest strength)
-            seen = {}  # Track: ticker_date Ã¢â€ â€™ signal
+            # Deduplicate: Only deduplicate BUY signals with same ticker+date
+            # SELL signals are NEVER deduplicated -- each is a real trade event
+            seen = {}  # Track: ticker_date -> signal (BUY only)
             deduplicated = []
-            
+
             for signal in signals_data:
-                key = f"{signal['ticker']}_{signal['date']}"
-                
+                action = signal.get('action', 'BUY')
+
+                # SELL signals: always keep, never deduplicate
+                if action == 'SELL':
+                    deduplicated.append(signal)
+                    continue
+
+                # BUY signals: deduplicate by ticker+date, keep highest strength
+                # Use signal id as fallback when date is None
+                date_part = signal['date'] or f"id_{signal['id']}"
+                key = f"{signal['ticker']}_{date_part}"
+
                 if key not in seen:
-                    # First signal for this ticker+date Ã¢â€ â€™ Keep it
                     seen[key] = signal
                     deduplicated.append(signal)
                 else:
-                    # Duplicate found Ã¢â€ â€™ Keep signal with HIGHER strength
+                    # Duplicate found -- Keep signal with HIGHER strength
                     existing_strength = seen[key].get('strength', 0)
                     new_strength = signal.get('strength', 0)
-                    
+
                     if new_strength > existing_strength:
                         # Replace with better signal
                         deduplicated.remove(seen[key])
