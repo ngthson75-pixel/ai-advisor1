@@ -98,10 +98,22 @@ def _signal_to_dict(row) -> dict:
         return val
 
     ticker = (safe('ticker') or '').upper()
+    action = safe('action') or safe('signal_type') or 'BUY'
+
+    # exit_price: round to nearest 100 (same as /api/signals)
+    raw_exit = safe('exit_price')
+    exit_price_val = round(float(raw_exit) / 100) * 100 if raw_exit else None
+
+    # date: use date field, fallback to created_at
+    raw_date = safe('date')
+    if not raw_date:
+        ca = safe('created_at')
+        raw_date = ca.strftime('%Y-%m-%d') if ca else None
+
     return {
         'id':            safe('id'),
         'ticker':        ticker,
-        'action':        safe('action') or safe('signal_type') or 'BUY',
+        'action':        action,
         'strategy':      safe('strategy') or safe('signal_code') or '',
         'strategy_type': safe('strategy_type') or safe('strategy') or '',
         'confidence':    float(safe('confidence') or safe('strength') or 0),
@@ -115,10 +127,20 @@ def _signal_to_dict(row) -> dict:
         'ema20':         float(safe('ema20') or 0) if safe('ema20') else None,
         'ema50':         float(safe('ema50') or 0) if safe('ema50') else None,
         'reasoning':     safe('reasoning') or safe('ai_reasoning') or '',
-        'status':        safe('status') or 'open',
+        'status':        safe('status') or ('open' if action == 'BUY' else 'closed'),
         'is_vn30':       _is_vn30(ticker),
         'created_at':    safe('created_at').isoformat() if safe('created_at') else None,
         'vip_score':     _get_signal_score(row),
+        # SELL signal fields (missing before — caused "—" in VIP dashboard)
+        'exit_price':    exit_price_val,
+        'exit_date':     str(safe('exit_date')) if safe('exit_date') else raw_date,
+        'exit_reason':   safe('exit_reason'),
+        'exit_quantity_pct': safe('exit_quantity_pct'),
+        'position_pct':  safe('position_pct') if safe('position_pct') is not None else (100 if action == 'BUY' else 0),
+        'signal_code':   safe('signal_code') or f"{ticker}-{safe('id')}",
+        'buy_signal_code': safe('buy_signal_code'),
+        'date':          raw_date,
+        'stock_type':    safe('stock_type'),
     }
 
 
