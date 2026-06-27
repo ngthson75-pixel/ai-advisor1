@@ -141,6 +141,12 @@ def _signal_to_dict(row) -> dict:
         'buy_signal_code': safe('buy_signal_code'),
         'date':          raw_date,
         'stock_type':    safe('stock_type'),
+        # P/L calculation for SELL signals
+        'profit_loss_pct': (
+            round((exit_price_val - float(safe('entry_price') or 0)) / float(safe('entry_price')) * 100, 2)
+            if exit_price_val and safe('entry_price') and float(safe('entry_price')) > 0
+            else safe('profit_loss_pct')
+        ),
     }
 
 
