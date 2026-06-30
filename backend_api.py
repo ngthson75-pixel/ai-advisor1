@@ -950,6 +950,30 @@ def __parse_date(value):
     except Exception:
         return None
 
+@app.route('/api/debug-signals-count', methods=['GET'])
+def debug_signals_count():
+    """TEMPORARY DEBUG endpoint - remove after diagnosis"""
+    session = Session()
+    try:
+        total = session.query(Signal).count()
+        max_id = session.query(func.max(Signal.id)).scalar()
+        top20 = session.query(Signal.id, Signal.ticker, Signal.action, Signal.created_at)\
+            .order_by(Signal.id.desc()).limit(20).all()
+        return jsonify({
+            'total_count': total,
+            'max_id': max_id,
+            'top20_ids': [
+                {'id': r[0], 'ticker': r[1], 'action': r[2], 'created_at': r[3].isoformat() if r[3] else None}
+                for r in top20
+            ],
+            'db_url_host': str(engine.url.host) if hasattr(engine, 'url') else 'unknown',
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 @app.route('/api/signals', methods=['GET', 'POST'])
 def signals_endpoint():
     """
