@@ -994,6 +994,7 @@ def debug_signals_real():
             'min_id_in_result': min_id_in_result,
             'active_blacklist_tickers': blacklist_tickers,
             'total_ids_returned': len(ids_in_result),
+            'render_git_commit': os.environ.get('RENDER_GIT_COMMIT', 'unknown'),
         })
     except Exception as e:
         import traceback
