@@ -85,7 +85,12 @@ function App() {
     try {
       setLoading(true)
       const isFullAccess = ['basic_trial', 'basic', 'vip'].includes(currentTier)
-      const url = isFullAccess ? `${API_URL}/signals` : `${API_URL}/signals?delay=7`
+      // FIX (2026-07-01): luôn truyền ?delay tường minh (0 hoặc 7).
+      // Trước đây full-access gọi /signals KHÔNG kèm param, khiến backend
+      // tự ý auto-detect qua JWT token (mà FE không hề gửi) và MẶC ĐỊNH
+      // ép delay=7 cho mọi request thiếu token — kể cả VIP đã login.
+      // Truyền rõ delay=0 đảm bảo backend luôn nhận đúng ý định real-time.
+      const url = isFullAccess ? `${API_URL}/signals?delay=0` : `${API_URL}/signals?delay=7`
       const response = await fetch(url)
       const data = await response.json()
       if (data.success) {

@@ -950,59 +950,6 @@ def __parse_date(value):
     except Exception:
         return None
 
-@app.route('/api/debug-signals-real', methods=['GET'])
-def debug_signals_real():
-    """TEMPORARY DEBUG: run the EXACT same query as /api/signals to find discrepancy"""
-    session = Session()
-    try:
-        # Step 1: raw count
-        raw_count = session.query(Signal).count()
-
-        # Step 2: exact same filter as /api/signals
-        query = session.query(Signal).filter(
-            ~exists().where(
-                and_(
-                    TickerBlacklist.ticker == Signal.ticker,
-                    TickerBlacklist.is_active == True
-                )
-            )
-        )
-        after_blacklist_filter = query.count()
-
-        # Step 3: exact same order_by as /api/signals
-        signals = query.order_by(Signal.created_at.desc()).all()
-        after_order_by = len(signals)
-
-        # Step 4: check where GEX-1007 / ORS-1008 are in this exact list
-        ids_in_result = [s.id for s in signals]
-        has_1007 = 1007 in ids_in_result
-        has_1008 = 1008 in ids_in_result
-        max_id_in_result = max(ids_in_result) if ids_in_result else None
-        min_id_in_result = min(ids_in_result) if ids_in_result else None
-
-        # Step 5: blacklist contents
-        blacklist_rows = session.query(TickerBlacklist).filter(TickerBlacklist.is_active == True).all()
-        blacklist_tickers = [b.ticker for b in blacklist_rows]
-
-        return jsonify({
-            'raw_count': raw_count,
-            'after_blacklist_filter_count': after_blacklist_filter,
-            'after_order_by_count': after_order_by,
-            'has_1007_GEX': has_1007,
-            'has_1008_ORS': has_1008,
-            'max_id_in_result': max_id_in_result,
-            'min_id_in_result': min_id_in_result,
-            'active_blacklist_tickers': blacklist_tickers,
-            'total_ids_returned': len(ids_in_result),
-            'render_git_commit': os.environ.get('RENDER_GIT_COMMIT', 'unknown'),
-        })
-    except Exception as e:
-        import traceback
-        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
-    finally:
-        session.close()
-
-
 @app.route('/api/signals', methods=['GET', 'POST'])
 def signals_endpoint():
     """
@@ -1019,6 +966,13 @@ def signals_endpoint():
         PAID_TIERS = ('vip', 'basic', 'pro', 'basic_trial')
 
         delay_days = request.args.get('delay', type=int)
+        # NOTE (2026-07-01): Root cause của bug "VIP không thấy tín hiệu mới":
+        # App.jsx trước đây gọi /signals KHÔNG kèm ?delay cho full-access user,
+        # khiến nhánh auto-detect bên dưới chạy và ép delay=7 vì FE không gửi
+        # Authorization Bearer token tới route này. Đã fix tại App.jsx: FE giờ
+        # luôn gửi ?delay=0 (full access) hoặc ?delay=7 (free) tường minh, nên
+        # delay_days sẽ KHÔNG còn None khi gọi từ app chính → nhánh dưới chỉ
+        # còn là fallback an toàn cho client gọi trực tiếp không qua FE.
 
         # Auto-detect tier từ JWT token
         if delay_days is None and datetime.now() > TRIAL_END:
