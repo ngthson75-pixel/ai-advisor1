@@ -950,26 +950,54 @@ def __parse_date(value):
     except Exception:
         return None
 
-@app.route('/api/debug-signals-count', methods=['GET'])
-def debug_signals_count():
-    """TEMPORARY DEBUG endpoint - remove after diagnosis"""
+@app.route('/api/debug-signals-real', methods=['GET'])
+def debug_signals_real():
+    """TEMPORARY DEBUG: run the EXACT same query as /api/signals to find discrepancy"""
     session = Session()
     try:
-        total = session.query(Signal).count()
-        max_id = session.query(func.max(Signal.id)).scalar()
-        top20 = session.query(Signal.id, Signal.ticker, Signal.action, Signal.created_at)\
-            .order_by(Signal.id.desc()).limit(20).all()
+        # Step 1: raw count
+        raw_count = session.query(Signal).count()
+
+        # Step 2: exact same filter as /api/signals
+        query = session.query(Signal).filter(
+            ~exists().where(
+                and_(
+                    TickerBlacklist.ticker == Signal.ticker,
+                    TickerBlacklist.is_active == True
+                )
+            )
+        )
+        after_blacklist_filter = query.count()
+
+        # Step 3: exact same order_by as /api/signals
+        signals = query.order_by(Signal.created_at.desc()).all()
+        after_order_by = len(signals)
+
+        # Step 4: check where GEX-1007 / ORS-1008 are in this exact list
+        ids_in_result = [s.id for s in signals]
+        has_1007 = 1007 in ids_in_result
+        has_1008 = 1008 in ids_in_result
+        max_id_in_result = max(ids_in_result) if ids_in_result else None
+        min_id_in_result = min(ids_in_result) if ids_in_result else None
+
+        # Step 5: blacklist contents
+        blacklist_rows = session.query(TickerBlacklist).filter(TickerBlacklist.is_active == True).all()
+        blacklist_tickers = [b.ticker for b in blacklist_rows]
+
         return jsonify({
-            'total_count': total,
-            'max_id': max_id,
-            'top20_ids': [
-                {'id': r[0], 'ticker': r[1], 'action': r[2], 'created_at': r[3].isoformat() if r[3] else None}
-                for r in top20
-            ],
-            'db_url_host': str(engine.url.host) if hasattr(engine, 'url') else 'unknown',
+            'raw_count': raw_count,
+            'after_blacklist_filter_count': after_blacklist_filter,
+            'after_order_by_count': after_order_by,
+            'has_1007_GEX': has_1007,
+            'has_1008_ORS': has_1008,
+            'max_id_in_result': max_id_in_result,
+            'min_id_in_result': min_id_in_result,
+            'active_blacklist_tickers': blacklist_tickers,
+            'total_ids_returned': len(ids_in_result),
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
     finally:
         session.close()
 
