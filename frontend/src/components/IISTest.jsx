@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
-import { track } from '../analytics'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 
 // ── Question bank (mirrors iis_engine.py) ─────────────────────────────
-const QUESTIONS = [
+const QUESTIONS_A = [
   // Chiều 1: IIS Kỷ Luật
   {
     id: 'Q1', dim: 'kl',
@@ -154,6 +153,324 @@ const QUESTIONS = [
   },
 ]
 
+// ── SET B — 15 câu hoàn toàn mới ─────────────────────────────────
+const QUESTIONS_B = [
+  // Kỷ Luật B
+  {
+    id: 'B_KL1', dim: 'kl',
+    text: 'Bạn vừa đặt lệnh mua STB theo setup đã chuẩn bị. Trong phiên, có tin tức tiêu cực bất ngờ về ngành ngân hàng. Bạn làm gì?',
+    options: [
+      { text: 'Bán ngay — tin xấu là lý do đủ để thoát', score: 0 },
+      { text: 'Lo lắng, hỏi ý kiến group rồi quyết định', score: 1 },
+      { text: 'Xem lại: tin này có thay đổi luận điểm ban đầu không? Nếu không → giữ', score: 3 },
+      { text: 'Giữ nguyên vì stop loss đã đặt — chỉ hành động khi SL hit hoặc thesis thay đổi', score: 4 },
+    ]
+  },
+  {
+    id: 'B_KL2', dim: 'kl',
+    text: 'Cổ phiếu đạt TP bạn đặt là +15%. Ngay lúc đó có người nói "còn lên thêm nữa". Bạn làm gì?',
+    options: [
+      { text: 'Giữ nguyên, tham vọng thêm dựa trên lời khuyên', score: 0 },
+      { text: 'Do dự, không biết nên chốt hay giữ', score: 1 },
+      { text: 'Chốt một nửa, giữ một nửa để không bỏ lỡ', score: 3 },
+      { text: 'Chốt đúng theo kế hoạch — kết quả thực tế mới quan trọng, không phải dự đoán', score: 4 },
+    ]
+  },
+  {
+    id: 'B_KL3', dim: 'kl',
+    text: 'Tháng này bạn đã thua 2 lệnh liên tiếp. Xuất hiện một setup hấp dẫn. Bạn quyết định như thế nào?',
+    options: [
+      { text: 'Vào mạnh hơn để gỡ lại tiền đã mất', score: 0 },
+      { text: 'Phân vân, nhưng vẫn vào vì muốn gỡ', score: 1 },
+      { text: 'Vào đúng size bình thường — kết quả quá khứ không ảnh hưởng quyết định mới', score: 3 },
+      { text: 'Giảm size 50% — sau 2 lệnh thua cần kiểm tra lại hệ thống trước khi tiếp tục', score: 4 },
+    ]
+  },
+  {
+    id: 'B_KL4', dim: 'kl',
+    text: 'Bạn có quy tắc "không giữ quá 5 mã cùng lúc". Hiện đang giữ 5 mã, xuất hiện cơ hội thứ 6 rất hấp dẫn. Bạn làm gì?',
+    options: [
+      { text: 'Mua thêm — quy tắc là hướng dẫn chứ không phải luật', score: 0 },
+      { text: 'Mua một lượng nhỏ, xem như ngoại lệ', score: 1 },
+      { text: 'Xem xét thoát một mã yếu nhất để có chỗ cho mã mới', score: 3 },
+      { text: 'Bỏ qua — kỷ luật về số lượng vị thế quan trọng hơn một cơ hội đơn lẻ', score: 4 },
+    ]
+  },
+  {
+    id: 'B_KL5', dim: 'kl',
+    text: 'Bạn nhìn lại 10 lệnh gần nhất và nhận ra rằng 4 lệnh thua đều không có setup rõ ràng. Bạn phản ứng thế nào?',
+    options: [
+      { text: 'Bình thường — đầu tư thì có thắng có thua', score: 0 },
+      { text: 'Ghi nhớ để tránh, nhưng không thay đổi quy trình', score: 1 },
+      { text: 'Thêm điều kiện bắt buộc: chỉ giao dịch khi có setup cụ thể', score: 3 },
+      { text: 'Viết lại trading rule, backtesting, cam kết tuân thủ 100% — đây là dữ liệu quan trọng', score: 4 },
+    ]
+  },
+  // Phương Pháp B
+  {
+    id: 'B_PP1', dim: 'pp',
+    text: 'Nếu danh mục giảm 25% trong 3 tháng (nhưng luận điểm vẫn đúng), phản ứng cảm xúc của bạn gần nhất với?',
+    options: [
+      { text: 'Cực kỳ căng thẳng, mất ngủ, không thể tập trung làm việc', method: 's' },
+      { text: 'Khó chịu nhưng vẫn kiểm soát được, theo dõi nhiều hơn bình thường', method: 'm' },
+      { text: 'Chấp nhận được — đây là biến động ngắn hạn, không ảnh hưởng kế hoạch', method: 'l' },
+    ]
+  },
+  {
+    id: 'B_PP2', dim: 'pp',
+    text: 'Bạn có 500 triệu để đầu tư. Bạn muốn phân bổ như thế nào?',
+    options: [
+      { text: 'Tất cả vào 2-3 mã tốt nhất — tập trung để tối đa lợi nhuận', method: 's' },
+      { text: '4-6 mã — cân bằng giữa tập trung và phân tán', method: 'm' },
+      { text: '8-15 mã hoặc quỹ ETF — phân tán rộng để giảm rủi ro', method: 'l' },
+    ]
+  },
+  {
+    id: 'B_PP3', dim: 'pp',
+    text: 'Trước khi mua một cổ phiếu, bạn thường dành bao lâu để nghiên cứu?',
+    options: [
+      { text: '5-15 phút — xem chart và một số chỉ số cơ bản', method: 's' },
+      { text: '30 phút đến 2 tiếng — đọc báo cáo tài chính gần nhất và chart', method: 'm' },
+      { text: 'Nhiều ngày đến vài tuần — phân tích toàn diện trước khi quyết định', method: 'l' },
+    ]
+  },
+  {
+    id: 'B_PP4', dim: 'pp',
+    text: 'Kiếm được lợi nhuận 20% từ cổ phiếu sau 18 tháng nắm giữ. Cảm giác của bạn?',
+    options: [
+      { text: 'Bình thường — tôi muốn lợi nhuận nhanh hơn và cao hơn trong thời gian ngắn hơn', method: 's' },
+      { text: 'Tốt — nhưng lý tưởng nhất là 6-9 tháng', method: 'm' },
+      { text: 'Hài lòng — 20% trong 18 tháng là kết quả đúng với kế hoạch tích lũy của tôi', method: 'l' },
+    ]
+  },
+  {
+    id: 'B_PP5', dim: 'pp',
+    text: 'Bạn thích theo dõi và điều chỉnh danh mục như thế nào?',
+    options: [
+      { text: 'Hàng ngày — tôi thích nắm bắt cơ hội ngắn hạn và phản ứng nhanh', method: 's' },
+      { text: 'Hàng tuần — review cuối tuần và điều chỉnh khi cần', method: 'm' },
+      { text: 'Hàng tháng hoặc theo quý — mua xong thì kiên nhẫn chờ', method: 'l' },
+    ]
+  },
+  // Kiến Thức B
+  {
+    id: 'B_KT1', dim: 'kt',
+    text: 'RSI cổ phiếu ở mức 78, MACD cắt lên, giá phá kháng cự với volume gấp 3 lần trung bình. Bạn đọc tín hiệu này thế nào?',
+    options: [
+      { text: 'Mua ngay — tất cả chỉ báo đều tốt, đà tăng mạnh', score: 0 },
+      { text: 'RSI 78 là overbought, tôi cần hỏi thêm ý kiến', score: 1 },
+      { text: 'RSI overbought là cảnh báo — chờ pullback hoặc xác nhận tín hiệu thứ hai', score: 3 },
+      { text: 'Tín hiệu mâu thuẫn: MACD + volume tốt nhưng RSI 78 = rủi ro mua đuổi đỉnh. Chờ RSI về 50-60', score: 4 },
+    ]
+  },
+  {
+    id: 'B_KT2', dim: 'kt',
+    text: 'Cổ phiếu A tăng 40% năm qua nhưng Sharpe Ratio chỉ là 0.4. Bạn kết luận gì?',
+    options: [
+      { text: 'Cổ phiếu tốt — lãi 40% là xuất sắc', score: 0 },
+      { text: 'Chưa rõ — tôi không biết Sharpe Ratio có nghĩa gì', score: 0 },
+      { text: 'Lãi cao nhưng biến động lớn — rủi ro điều chỉnh khá mạnh', score: 3 },
+      { text: 'Sharpe 0.4 = mỗi đơn vị rủi ro chỉ tạo 0.4 đơn vị lợi nhuận — hiệu quả rủi ro thấp dù lãi tuyệt đối cao', score: 4 },
+    ]
+  },
+  {
+    id: 'B_KT3', dim: 'kt',
+    text: 'Giá VIC tăng mạnh 3 phiên liên tiếp nhưng volume giảm dần mỗi phiên. Bạn đánh giá thế nào?',
+    options: [
+      { text: 'Tốt — giá tăng là tín hiệu quan trọng nhất', score: 0 },
+      { text: 'Bình thường — volume lên xuống là chuyện thường', score: 1 },
+      { text: 'Cảnh báo — tăng giá mà volume giảm là tín hiệu yếu, thiếu xác nhận', score: 3 },
+      { text: 'Bearish divergence: buying pressure đang cạn kiệt. Có thể là bull trap — không mua mới, cân nhắc chốt lời', score: 4 },
+    ]
+  },
+  {
+    id: 'B_KT4', dim: 'kt',
+    text: 'FED tăng lãi suất 0.5% đột ngột. Cổ phiếu nào trong danh mục bạn cần xem lại ngay lập tức?',
+    options: [
+      { text: 'Tôi không biết lãi suất ảnh hưởng đến cổ phiếu nào', score: 0 },
+      { text: 'Tất cả đều bị ảnh hưởng như nhau', score: 1 },
+      { text: 'Cổ phiếu tăng trưởng (P/E cao) và bất động sản sẽ bị ảnh hưởng nhiều nhất', score: 3 },
+      { text: 'Growth stocks (định giá theo DCF nhạy với discount rate), REITs, và cổ phiếu nợ cao — cần giảm tỷ trọng nhóm này', score: 4 },
+    ]
+  },
+  {
+    id: 'B_KT5', dim: 'kt',
+    text: 'Tài khoản 200 triệu. Bạn muốn risk tối đa 3% mỗi lệnh. Stop loss dự kiến -5% từ giá vào. Mua tối đa bao nhiêu tiền?',
+    options: [
+      { text: 'Không biết tính — mua theo cảm tính hoặc theo số tiền có sẵn', score: 0 },
+      { text: 'Khoảng 30-40 triệu, ước chừng', score: 1 },
+      { text: '200M × 3% = 6M risk. 6M ÷ 5% = 120 triệu', score: 4 },
+    ]
+  },
+]
+
+// ── SET C — 15 câu hoàn toàn mới ─────────────────────────────────
+const QUESTIONS_C = [
+  // Kỷ Luật C
+  {
+    id: 'C_KL1', dim: 'kl',
+    text: 'Bạn mua MBB dựa trên phân tích kỹ thuật. Ngay phiên sau, CEO của công ty đăng Facebook ca ngợi cổ phiếu. Bạn phản ứng thế nào?',
+    options: [
+      { text: 'Mua thêm — đây là tín hiệu tốt từ người trong cuộc', score: 0 },
+      { text: 'Cảm thấy được xác nhận, tự tin hơn nhưng không thay đổi gì', score: 1 },
+      { text: 'Bình thường — đây không phải thông tin ảnh hưởng đến setup kỹ thuật', score: 3 },
+      { text: 'Cẩn thận hơn — CEO quảng bá cổ phiếu của mình đôi khi là tín hiệu phân phối', score: 4 },
+    ]
+  },
+  {
+    id: 'C_KL2', dim: 'kl',
+    text: 'Thị trường hôm nay rất sôi động. Bạn đã thực hiện 4 lệnh từ sáng đến giờ — nhiều hơn kế hoạch tuần. Bạn làm gì?',
+    options: [
+      { text: 'Tiếp tục — thị trường đang có nhiều cơ hội', score: 0 },
+      { text: 'Xem xét thêm một hai lệnh nếu thấy hấp dẫn', score: 1 },
+      { text: 'Dừng lại xem mình có đang overtrading không', score: 3 },
+      { text: 'Đặt quy tắc cứng: không quá X lệnh/tuần — đóng app nếu đã đủ', score: 4 },
+    ]
+  },
+  {
+    id: 'C_KL3', dim: 'kl',
+    text: 'Bạn thắng lớn tháng trước (+30%). Tháng này bạn đang thua (-8%). Tâm lý của bạn hiện tại?',
+    options: [
+      { text: 'Tức giận và gấp rút muốn gỡ lại', score: 0 },
+      { text: 'Lo lắng nhiều hơn bình thường, theo dõi app liên tục', score: 1 },
+      { text: 'Nhắc nhở bản thân: tháng trước và tháng này là độc lập', score: 3 },
+      { text: 'Bình thản — performance ngắn hạn không thay đổi quy trình. Review lại từng lệnh để học', score: 4 },
+    ]
+  },
+  {
+    id: 'C_KL4', dim: 'kl',
+    text: 'Bạn đang lãi 18% với VCB. TP của bạn là +20%. Có người nói mã này còn lên đến +35%. Bạn làm gì?',
+    options: [
+      { text: 'Nâng TP lên +35% theo gợi ý', score: 0 },
+      { text: 'Không chắc — giữ thêm một chút rồi tính', score: 1 },
+      { text: 'Chốt một nửa ở +18%, để nửa còn lại chạy thêm', score: 3 },
+      { text: 'Giữ TP +20% theo plan. Nếu muốn nâng, phải có lý do kỹ thuật mới — không phải lời khuyên', score: 4 },
+    ]
+  },
+  {
+    id: 'C_KL5', dim: 'kl',
+    text: 'Bạn có đang ghi chép lại lý do mua, SL, TP và kết quả từng lệnh không?',
+    options: [
+      { text: 'Không — tôi nhớ được và không cần ghi', score: 0 },
+      { text: 'Thỉnh thoảng, không đều', score: 1 },
+      { text: 'Có ghi chép cơ bản: entry, SL, TP, kết quả', score: 3 },
+      { text: 'Có trading journal đầy đủ — ghi cả tâm lý, lý do, sai lầm. Review định kỳ để cải thiện', score: 4 },
+    ]
+  },
+  // Phương Pháp C
+  {
+    id: 'C_PP1', dim: 'pp',
+    text: 'Bạn mô tả bản thân khi đưa ra quyết định đầu tư quan trọng?',
+    options: [
+      { text: 'Quyết đoán và nhanh — cơ hội đến phải nắm ngay', method: 's' },
+      { text: 'Cân nhắc kỹ nhưng vẫn có thể quyết định trong 1-2 ngày', method: 'm' },
+      { text: 'Thận trọng, cần nhiều thông tin và thời gian để chắc chắn', method: 'l' },
+    ]
+  },
+  {
+    id: 'C_PP2', dim: 'pp',
+    text: 'Nguồn thông tin chính bạn dùng để đưa ra quyết định đầu tư?',
+    options: [
+      { text: 'Chart kỹ thuật, các chỉ báo, volume — price action là chủ yếu', method: 's' },
+      { text: 'Kết hợp chart kỹ thuật + báo cáo tài chính + tin tức ngành', method: 'm' },
+      { text: 'Báo cáo thường niên, phân tích ngành, mô hình định giá DCF/P/E', method: 'l' },
+    ]
+  },
+  {
+    id: 'C_PP3', dim: 'pp',
+    text: 'Nếu thị trường sideway 3 tháng liên tiếp, bạn cảm thấy thế nào?',
+    options: [
+      { text: 'Bực bội — không có cơ hội, không thể kiếm tiền', method: 's' },
+      { text: 'Có thể chờ, nhưng tìm cách tận dụng biên độ dao động', method: 'm' },
+      { text: 'Bình thường — đây là thời gian tích lũy thêm và nghiên cứu', method: 'l' },
+    ]
+  },
+  {
+    id: 'C_PP4', dim: 'pp',
+    text: 'Bạn sẽ đánh giá lại hiệu quả danh mục của mình theo tần suất nào?',
+    options: [
+      { text: 'Hàng ngày hoặc mỗi phiên giao dịch', method: 's' },
+      { text: 'Mỗi 1-2 tuần, khi có biến động đáng kể', method: 'm' },
+      { text: 'Hàng quý hoặc theo năm — nhìn bức tranh dài hạn', method: 'l' },
+    ]
+  },
+  {
+    id: 'C_PP5', dim: 'pp',
+    text: 'Nếu có thêm 100 triệu để đầu tư ngay lúc này, bạn sẽ làm gì?',
+    options: [
+      { text: 'Tìm cổ phiếu đang tăng mạnh nhất để mua ngay', method: 's' },
+      { text: 'Thêm vào các vị thế đang tốt và một số cơ hội mới', method: 'm' },
+      { text: 'Đa dạng hóa thêm hoặc tích lũy dần trong 3-6 tháng tới', method: 'l' },
+    ]
+  },
+  // Kiến Thức C
+  {
+    id: 'C_KT1', dim: 'kt',
+    text: 'Bạn có danh mục 5 cổ phiếu, tất cả đều thuộc ngành bất động sản. Rủi ro chính là gì?',
+    options: [
+      { text: 'Không thấy rủi ro đặc biệt — đều là cổ phiếu tốt', score: 0 },
+      { text: 'Có thể thua nếu một mã nào đó đi xấu', score: 1 },
+      { text: 'Tập trung ngành — nếu ngành bất động sản khó khăn, cả danh mục bị ảnh hưởng', score: 3 },
+      { text: 'Correlation risk: 5 mã cùng ngành = thực chất chỉ là 1 bet vào ngành BĐS. Cần sector diversification', score: 4 },
+    ]
+  },
+  {
+    id: 'C_KT2', dim: 'kt',
+    text: 'Cổ phiếu X: giá 45k, P/E=22, EPS tăng trưởng 35%/năm 3 năm liên tiếp, PEG = 0.63. Nhận xét?',
+    options: [
+      { text: 'P/E=22 là đắt — không mua', score: 0 },
+      { text: 'Cần hỏi thêm — không hiểu hết các chỉ số', score: 0 },
+      { text: 'Tăng trưởng tốt, P/E hợp lý so với growth rate', score: 3 },
+      { text: 'PEG < 1 = trả giá thấp hơn tăng trưởng thực. P/E=22 với growth 35% là rẻ — đáng nghiên cứu mua', score: 4 },
+    ]
+  },
+  {
+    id: 'C_KT3', dim: 'kt',
+    text: 'Cổ phiếu của bạn giảm 30% từ đỉnh. Cần tăng bao nhiêu % để hòa vốn?',
+    options: [
+      { text: '30% — giảm bao nhiêu thì tăng bấy nhiêu là hòa', score: 0 },
+      { text: 'Khoảng 35-40% gì đó', score: 1 },
+      { text: 'Tăng 43% — vì 70% × 1.43 ≈ 100%', score: 4 },
+    ]
+  },
+  {
+    id: 'C_KT4', dim: 'kt',
+    text: 'Bạn có 3 cổ phiếu: A lãi 25%, B lãi 5%, C lỗ -15%. Danh mục được phân bổ đều nhau (1/3 mỗi mã). Tổng danh mục lãi/lỗ bao nhiêu?',
+    options: [
+      { text: 'Không tính được nhanh trong đầu', score: 0 },
+      { text: 'Lãi khoảng 10-15% gì đó', score: 1 },
+      { text: '(25+5-15)/3 = 5% — danh mục lãi 5%', score: 4 },
+    ]
+  },
+  {
+    id: 'C_KT5', dim: 'kt',
+    text: 'Một nhà đầu tư kiếm được 15%/năm đều đặn trong 10 năm. Người khác kiếm 30% một năm, -10% năm sau, xen kẽ. Sau 10 năm, ai giàu hơn?',
+    options: [
+      { text: 'Người kiếm 30%/-10% — năm tốt cao hơn nhiều', score: 0 },
+      { text: 'Ngang nhau vì trung bình cộng bằng nhau', score: 0 },
+      { text: 'Người kiếm 15% đều — lãi kép nhất quán thắng biến động', score: 3 },
+      { text: 'Người 15% thắng rõ ràng: CAGR 15% → x4 sau 10 năm. Người kia: (1.3×0.9)^5 = 1.26^5 ≈ x3.2 — biến động phá hủy lãi kép', score: 4 },
+    ]
+  },
+]
+
+
+// ── Combined pool + random selection ─────────────────────────────
+const ALL_QUESTIONS = [...QUESTIONS_A, ...QUESTIONS_B, ...QUESTIONS_C]
+
+function selectRandomQuestions() {
+  const shuffle = arr => [...arr].sort(() => Math.random() - 0.5)
+  const byDim   = dim => ALL_QUESTIONS.filter(q => q.dim === dim)
+  // Pick 5 from each dimension, shuffle each group
+  const selected = [
+    ...shuffle(byDim('kl')).slice(0, 5),
+    ...shuffle(byDim('pp')).slice(0, 5),
+    ...shuffle(byDim('kt')).slice(0, 5),
+  ]
+  // Shuffle final order (mix 3 dimensions together)
+  return shuffle(selected)
+}
+
 const LEVELS = [
   { name: 'Khởi Hành',  min: 0,  max: 24,  color: '#ef4444', bg: '#1a0a0a' },
   { name: 'Định Hướng', min: 25, max: 39,  color: '#f59e0b', bg: '#1a1000' },
@@ -235,10 +552,10 @@ const S = {
 
 
 // ── Client-side scoring (mirrors iis_engine.py) ──────────────────────
-function computeScoreLocally(answers) {
+function computeScoreLocally(answers, questions) {
   let kl = 0, kt = 0
   const mv = { s: 0, m: 0, l: 0 }
-  QUESTIONS.forEach((q, i) => {
+  questions.forEach((q, i) => {
     const opt = q.options[answers[i]]
     if (!opt) return
     if (q.dim === 'kl') kl += opt.score || 0
@@ -284,13 +601,13 @@ function computeScoreLocally(answers) {
 }
 
 // Lưu kết quả lên backend trong nền — không block UI
-async function saveToBackgroundSilent(userId, answers) {
+async function saveToBackgroundSilent(userId, answers, questions) {
   for (let attempt = 1; attempt <= 6; attempt++) {
     try {
       const res = await fetch(`${API_URL}/iis/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, answers }),
+        body: JSON.stringify({ user_id: userId, answers, question_ids: selectedQuestions.map(q => q.id) }),
       })
       const data = await res.json()
       if (data.success) return  // Lưu thành công
@@ -302,6 +619,7 @@ async function saveToBackgroundSilent(userId, answers) {
 
 // ── Component ──────────────────────────────────────────────────────────
 export default function IISTest({ userId, onComplete }) {
+  const [selectedQuestions] = useState(() => selectRandomQuestions())
   const [phase, setPhase]       = useState('loading')   // loading|check|intro|test|submitting|result
   const [cur,   setCur]         = useState(0)
   const [ans,   setAns]         = useState(new Array(15).fill(null))
@@ -338,16 +656,9 @@ export default function IISTest({ userId, onComplete }) {
     setPhase('submitting')
 
     // Tính điểm ngay trên frontend — không chờ server
-    const clientResult = computeScoreLocally(ans)
+    const clientResult = computeScoreLocally(ans, selectedQuestions)
     setResult(clientResult)
     setPhase('result')
-    track('iis_test_completed', {
-      iis_score:  clientResult.total,
-      iis_level:  clientResult.level,
-      iis_method: clientResult.method,
-      kl_score:   clientResult.kl_score,
-      kt_score:   clientResult.kt_score,
-    })
 
     // Lưu vào localStorage ngay lập tức — widget đọc được ngay
     const uid = userId || 'guest'
@@ -375,7 +686,7 @@ export default function IISTest({ userId, onComplete }) {
     setPhase('intro')
   }
 
-  const q      = QUESTIONS[cur]
+  const q      = selectedQuestions[cur]
   const dimCfg = q ? DIM_CONFIG[q.dim] : null
   const pct    = Math.round(cur / 15 * 100)
 
@@ -393,11 +704,6 @@ export default function IISTest({ userId, onComplete }) {
     const tested = prevResult.tested_at
       ? new Date(prevResult.tested_at).toLocaleDateString('vi-VN')
       : null
-
-    // Track: user xem lại kết quả IIS cũ
-    useEffect(() => {
-      track('iis_result_viewed', { iis_score: prevResult.total, iis_level: prevResult.level })
-    }, [])
     return (
       <div style={S.wrap}>
         <div style={{ textAlign: 'center', marginBottom: '20px' }}>
@@ -453,7 +759,7 @@ export default function IISTest({ userId, onComplete }) {
         </div>
 
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button style={S.btn(false, false)} onClick={() => { track('iis_retest_started', { prev_score: prevResult.total }); restart() }}>Làm lại test</button>
+          <button style={S.btn(false, false)} onClick={restart}>Làm lại test</button>
           <button style={{ ...S.btn(true, false), flex: 1 }} onClick={() => setPhase('intro')}>
             Cập nhật IIS Score →
           </button>
@@ -507,7 +813,7 @@ export default function IISTest({ userId, onComplete }) {
 
       <button
         style={{ ...S.btn(true, false), width: '100%', padding: '12px', fontSize: '14px' }}
-        onClick={() => { setPhase('test'); track('iis_test_started', {}) }}
+        onClick={() => setPhase('test')}
       >
         Bắt đầu IIS Test →
       </button>
@@ -529,7 +835,7 @@ export default function IISTest({ userId, onComplete }) {
           <div style={{ height: '100%', borderRadius: '2px', background: '#3b82f6', width: `${pct}%`, transition: 'width .3s' }} />
         </div>
         <div style={{ display: 'flex', gap: '3px' }}>
-          {QUESTIONS.map((qq, i) => (
+          {selectedQuestions.map((qq, i) => (
             <div key={i} style={S.dimPip(ans[i] !== null ? 'done' : i === cur ? 'active' : 'idle', qq.dim)} />
           ))}
         </div>
