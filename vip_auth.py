@@ -59,8 +59,10 @@ class VIPUser(VIPBase):
     is_active       = Column(Boolean, default=True)
     notes           = Column(Text)                              # Admin private notes
     telegram_chat_id = Column(String(50))                      # Telegram chat_id để gửi notification
-    created_at      = Column(DateTime, default=datetime.now)
-    last_login_at   = Column(DateTime)
+    created_at           = Column(DateTime, default=datetime.now)
+    last_login_at        = Column(DateTime)
+    reset_token          = Column(String(64), nullable=True)
+    reset_token_expires  = Column(DateTime, nullable=True)
 
 
 # ============================================================
@@ -391,6 +393,114 @@ def init_vip_system(app, engine, Session):
             user.password_hash = _hash_password(new_password)
             session.commit()
             return jsonify({'success': True, 'message': 'Đổi mật khẩu thành công'})
+        finally:
+            session.close()
+
+
+    # ─────────────────────────────────────────────
+    # FORGOT / RESET PASSWORD
+    # ─────────────────────────────────────────────
+
+    @app.route('/api/auth/forgot-password', methods=['POST'])
+    def vip_forgot_password():
+        """POST /api/auth/forgot-password
+        Body: { "email": "user@email.com" }
+        Tạo reset token → gửi email link đặt lại mật khẩu
+        """
+        import secrets, json
+        from datetime import timedelta
+
+        data  = request.get_json() or {}
+        email = (data.get('email') or '').strip().lower()
+
+        if not email:
+            return jsonify({'error': 'Vui lòng nhập email'}), 400
+
+        session = Session()
+        try:
+            user = session.query(VIPUser).filter_by(email=email).first()
+            # Luôn trả 200 dù email không tồn tại (tránh email enumeration)
+            if not user:
+                return jsonify({'success': True, 'message': 'Nếu email tồn tại, bạn sẽ nhận được link đặt lại mật khẩu.'})
+
+            # Tạo reset token 32 bytes, hết hạn sau 1 giờ
+            token   = secrets.token_urlsafe(32)
+            expires = datetime.now() + timedelta(hours=1)
+
+            user.reset_token         = token
+            user.reset_token_expires = expires
+            session.commit()
+
+            # Gửi email qua Gmail API (tái sử dụng từ campaign_api)
+            try:
+                from campaign_api import _send_email
+                frontend_url = os.getenv('FRONTEND_URL', 'https://ai-advisor.vn')
+                reset_url    = f"{frontend_url}/reset-password?token={token}&email={email}"
+
+                html = f"""
+                <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;background:#f7f5f0;padding:32px">
+                  <div style="background:#0d0f12;padding:24px;border-top:3px solid #c9a84c;border-radius:4px 4px 0 0;text-align:center">
+                    <h2 style="margin:0;color:#c9a84c;font-size:20px">🔐 Đặt lại mật khẩu</h2>
+                    <p style="margin:6px 0 0;color:#888;font-size:13px">AI Advisor</p>
+                  </div>
+                  <div style="background:#fff;padding:28px;border:1px solid #e0dbd0;border-top:none">
+                    <p style="font-size:14px;color:#333;line-height:1.7">
+                      Xin chào <strong>{user.full_name or email}</strong>,<br><br>
+                      Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản AI Advisor của bạn.
+                    </p>
+                    <div style="text-align:center;margin:24px 0">
+                      <a href="{reset_url}" style="background:#c9a84c;color:#0d0f12;padding:14px 32px;text-decoration:none;border-radius:4px;font-weight:800;font-size:14px;display:inline-block">
+                        🔑 ĐẶT LẠI MẬT KHẨU
+                      </a>
+                    </div>
+                    <p style="font-size:12px;color:#aaa;text-align:center">
+                      Link có hiệu lực trong <strong>1 giờ</strong>.<br>
+                      Nếu bạn không yêu cầu điều này, hãy bỏ qua email này.
+                    </p>
+                  </div>
+                  <p style="font-size:11px;color:#aaa;margin-top:16px;text-align:center">
+                    AI Advisor · ai-advisor.vn
+                  </p>
+                </div>"""
+
+                _send_email(email, "🔐 Đặt lại mật khẩu AI Advisor", html)
+            except Exception as e:
+                print(f"[ForgotPassword] Email error: {e}")
+
+            return jsonify({'success': True, 'message': 'Nếu email tồn tại, bạn sẽ nhận được link đặt lại mật khẩu.'})
+        finally:
+            session.close()
+
+    @app.route('/api/auth/reset-password', methods=['POST'])
+    def vip_reset_password():
+        """POST /api/auth/reset-password
+        Body: { "token": "xxx", "email": "user@email.com", "new_password": "xxx" }
+        """
+        data         = request.get_json() or {}
+        token        = (data.get('token') or '').strip()
+        email        = (data.get('email') or '').strip().lower()
+        new_password = data.get('new_password', '')
+
+        if not token or not email or not new_password:
+            return jsonify({'error': 'Thiếu thông tin'}), 400
+        if len(new_password) < 6:
+            return jsonify({'error': 'Mật khẩu phải ít nhất 6 ký tự'}), 400
+
+        session = Session()
+        try:
+            user = session.query(VIPUser).filter_by(email=email, reset_token=token).first()
+            if not user:
+                return jsonify({'error': 'Link không hợp lệ hoặc đã được sử dụng'}), 400
+            if user.reset_token_expires and user.reset_token_expires < datetime.now():
+                return jsonify({'error': 'Link đã hết hạn (1 giờ). Vui lòng yêu cầu lại.'}), 400
+
+            user.password_hash       = _hash_password(new_password)
+            user.reset_token         = None
+            user.reset_token_expires = None
+            user.last_login_at       = None  # force re-login
+            session.commit()
+
+            return jsonify({'success': True, 'message': 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập.'})
         finally:
             session.close()
 
