@@ -155,6 +155,40 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
     ? Math.round(((data.total - lvl.min) / (lvl.max - lvl.min + 1)) * 100)
     : 100
 
+  // ── Positive framing helpers ─────────────────────────────────────
+  // Thay vì show điểm số thô, dùng label tích cực theo ngưỡng
+  const getDimLabel = (score) => {
+    if (score >= 75) return { label: 'Xuất sắc ✦',    color: '#22c55e' }
+    if (score >= 55) return { label: 'Đang tiến bộ →', color: '#3b82f6' }
+    if (score >= 35) return { label: 'Đang xây dựng →', color: '#f59e0b' }
+    return              { label: 'Bắt đầu hành trình →', color: '#94a3b8' }
+  }
+  const klLabel  = getDimLabel(data.kl_score)
+  const ktLabel  = getDimLabel(data.kt_score)
+
+  // Coaching message cụ thể theo level — động viên, không phán xét
+  const coachMsg = [
+    'Bạn đang đặt những viên gạch đầu tiên. Mỗi lần đặt stop loss đúng là một bước tiến thực sự.',
+    'Bạn đã có nền tảng. Tập trung vào việc thực hiện nhất quán — kỷ luật nhỏ tạo ra kết quả lớn.',
+    'Bạn đang tiến bộ rõ rệt. Giữ vững hệ thống, đặc biệt khi thị trường biến động mạnh.',
+    'Bạn có hệ thống vững chắc. Hãy tập trung tối ưu win rate và risk/reward theo từng lệnh.',
+    'Bạn đầu tư như một doanh nghiệp. AI-Advisor đồng hành để cùng phân tích các quyết định phức tạp.',
+    'Bạn đã đạt đỉnh cao. Kinh nghiệm của bạn là tài sản — hãy tiếp tục đồng hành cùng AI-Advisor.',
+  ][lvlIdx] || ''
+
+  // Next step action cụ thể theo level
+  const nextAction = [
+    'Bước tiếp theo: Đặt stop loss cho lệnh tiếp theo trước khi mua.',
+    'Bước tiếp theo: Hoàn thành checklist ≥ 70% số lệnh trong tháng này.',
+    'Bước tiếp theo: Giữ ít nhất 1 lệnh đến đúng target đã đặt, không panic sell.',
+    'Bước tiếp theo: Duy trì win rate ≥ 45% trong 3 tháng liên tiếp.',
+    'Bước tiếp theo: Cải thiện ≥ 2 behavioral bias đã nhận diện trong 90 ngày.',
+    'Bạn đã đạt cấp độ cao nhất trong hệ thống IIS.',
+  ][lvlIdx] || ''
+
+  // Show/hide điểm chi tiết
+  const [showDetail, setShowDetail] = useState(false)
+
   return (
     <div style={card}>
       {/* Header */}
@@ -166,7 +200,7 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
       }}>
         <div>
           <div style={{ fontSize: '13px', fontWeight: 600, color: '#e2e8f0' }}>
-            Investor Intelligence Score
+            Hành trình đầu tư của bạn
           </div>
           {testedAt && (
             <div style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>
@@ -176,7 +210,6 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
         </div>
         <button
           onClick={() => {
-            // Xoá cache để sau khi retest sẽ lưu kết quả mới
             try { localStorage.removeItem(`iis_result_${userId}`) } catch {}
             onRequestUpdate()
           }}
@@ -194,50 +227,26 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
         </button>
       </div>
 
-      {/* Score area */}
+      {/* Main content */}
       <div style={{ padding: '16px 18px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '20px', alignItems: 'start' }}>
 
-          {/* Left — big score */}
-          <div style={{ textAlign: 'center', minWidth: '90px' }}>
-            <div style={{ fontSize: '52px', fontWeight: 600, color: lvl.color, lineHeight: 1 }}>
-              {data.total}
+        {/* Level badge — nổi bật, tích cực */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px' }}>
+          <div style={{
+            width: '52px', height: '52px', borderRadius: '14px', flexShrink: 0,
+            background: `${lvl.color}18`, border: `2px solid ${lvl.color}55`,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: lvl.color, lineHeight: 1 }}>
+              {lvlIdx + 1}
             </div>
-            <div style={{ fontSize: '11px', color: '#475569', marginTop: '4px' }}>/100</div>
-            <div style={{
-              marginTop: '8px', fontSize: '12px', fontWeight: 600, color: lvl.color,
-              background: `${lvl.color}18`, border: `1px solid ${lvl.color}44`,
-              borderRadius: '6px', padding: '3px 8px',
-            }}>
-              {lvlIdx + 1}. {lvl.name}
-            </div>
+            <div style={{ fontSize: '9px', color: `${lvl.color}99`, marginTop: '1px' }}>LEVEL</div>
           </div>
-
-          {/* Right — bars + method */}
-          <div>
-            {/* IIS Kỷ Luật */}
-            <div style={{ marginBottom: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>
-                <span>IIS Kỷ Luật</span>
-                <span style={{ fontWeight: 500, color: '#e2e8f0' }}>{data.kl_score}/100</span>
-              </div>
-              <div style={{ height: '5px', background: '#0f172a', borderRadius: '3px', overflow: 'hidden' }}>
-                <div style={{ height: '100%', borderRadius: '3px', background: '#ef4444', width: `${data.kl_score}%`, transition: 'width .6s ease' }} />
-              </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: lvl.color, marginBottom: '2px' }}>
+              {lvl.name}
             </div>
-
-            {/* IIS Kiến Thức */}
-            <div style={{ marginBottom: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>
-                <span>IIS Kiến Thức</span>
-                <span style={{ fontWeight: 500, color: '#e2e8f0' }}>{data.kt_score}/100</span>
-              </div>
-              <div style={{ height: '5px', background: '#0f172a', borderRadius: '3px', overflow: 'hidden' }}>
-                <div style={{ height: '100%', borderRadius: '3px', background: '#3b82f6', width: `${data.kt_score}%`, transition: 'width .6s ease' }} />
-              </div>
-            </div>
-
-            {/* Method */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <span style={tag(method.color)}>{method.name}</span>
               <span style={{ fontSize: '11px', color: '#475569' }}>
@@ -247,73 +256,137 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
           </div>
         </div>
 
-        {/* Level progress */}
+        {/* 2 chiều đánh giá — label tích cực, không show số điểm */}
+        <div style={{ marginBottom: '12px' }}>
+          {/* Kỷ Luật */}
+          <div style={{ marginBottom: '9px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <span style={{ fontSize: '12px', color: '#94a3b8' }}>Kỷ luật giao dịch</span>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: klLabel.color }}>
+                {klLabel.label}
+              </span>
+            </div>
+            <div style={{ height: '5px', background: '#0f172a', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: '3px', background: klLabel.color,
+                width: `${data.kl_score}%`, transition: 'width .6s ease',
+                opacity: 0.85,
+              }} />
+            </div>
+          </div>
+
+          {/* Kiến Thức */}
+          <div style={{ marginBottom: '4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <span style={{ fontSize: '12px', color: '#94a3b8' }}>Nền tảng kiến thức</span>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: ktLabel.color }}>
+                {ktLabel.label}
+              </span>
+            </div>
+            <div style={{ height: '5px', background: '#0f172a', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: '3px', background: ktLabel.color,
+                width: `${data.kt_score}%`, transition: 'width .6s ease',
+                opacity: 0.85,
+              }} />
+            </div>
+          </div>
+
+          {/* Toggle xem điểm chi tiết */}
+          <button
+            onClick={() => setShowDetail(v => !v)}
+            style={{
+              marginTop: '6px', background: 'none', border: 'none',
+              color: '#334155', fontSize: '11px', cursor: 'pointer',
+              padding: '2px 0', textDecoration: 'underline',
+            }}
+          >
+            {showDetail ? 'Ẩn điểm chi tiết ↑' : 'Xem điểm chi tiết ↓'}
+          </button>
+
+          {/* Chi tiết — chỉ hiện khi user chủ động click */}
+          {showDetail && (
+            <div style={{
+              marginTop: '8px', padding: '10px 12px',
+              background: '#0f172a', borderRadius: '8px',
+              border: '1px solid #1e293b',
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                {[
+                  { label: 'IIS Score',    value: `${data.total}/100`,    color: lvl.color },
+                  { label: 'Kỷ Luật',     value: `${data.kl_score}/100`, color: '#ef4444' },
+                  { label: 'Kiến Thức',   value: `${data.kt_score}/100`, color: '#3b82f6' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: '#475569', marginBottom: '3px' }}>{label}</div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Progress đến level tiếp theo */}
         {nextLvl && (
-          <div style={{ marginTop: '14px', padding: '10px 12px', background: '#0f172a', borderRadius: '8px' }}>
+          <div style={{ padding: '10px 12px', background: '#0f172a', borderRadius: '8px', marginBottom: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
               <span style={{ fontSize: '11px', color: '#64748b' }}>
-                Tiến độ → <span style={{ color: nextLvl.color, fontWeight: 500 }}>{nextLvl.name}</span>
+                Tiến độ lên{' '}
+                <span style={{ color: nextLvl.color, fontWeight: 600 }}>{nextLvl.name}</span>
               </span>
-              <span style={{ fontSize: '11px', color: '#475569' }}>{progressInLvl}%</span>
+              <span style={{ fontSize: '11px', color: nextLvl.color, fontWeight: 600 }}>
+                {progressInLvl}%
+              </span>
             </div>
-            <div style={{ height: '3px', background: '#1e293b', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{ height: '100%', background: `linear-gradient(90deg, ${lvl.color}, ${nextLvl.color})`, width: `${progressInLvl}%`, transition: 'width .6s ease', borderRadius: '2px' }} />
+            <div style={{ height: '4px', background: '#1e293b', borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                background: `linear-gradient(90deg, ${lvl.color}, ${nextLvl.color})`,
+                width: `${progressInLvl}%`,
+                transition: 'width .6s ease', borderRadius: '2px',
+              }} />
             </div>
           </div>
         )}
 
-        {/* Trial countdown hoặc motivating CTA */}
-        {(() => {
-          // Tính trial days remaining từ data.tested_at
-          let daysLeft = null
-          if (data.tested_at) {
-            const trialExpires = new Date(new Date(data.tested_at).getTime() + 30*24*60*60*1000)
-            daysLeft = Math.max(0, Math.ceil((trialExpires - new Date()) / 86400000))
-          }
-          return (
-            <div style={{ marginTop: '12px', borderTop: '1px solid #1e293b', paddingTop: '12px' }}>
-              {daysLeft !== null && daysLeft <= 30 && daysLeft > 0 ? (
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center',
-                  padding: '8px 12px', borderRadius: '8px',
-                  background: daysLeft <= 5 ? 'rgba(239,68,68,0.1)' : 'rgba(234,160,32,0.1)',
-                  border: `1px solid ${daysLeft <= 5 ? '#ef444430' : '#e8a02030'}` }}>
-                  <span style={{ fontSize: '16px' }}>{daysLeft <= 5 ? '⏰' : '🎁'}</span>
-                  <div style={{ fontSize: '12px', lineHeight: 1.6,
-                    color: daysLeft <= 5 ? '#fca5a5' : '#fcd34d' }}>
-                    {daysLeft <= 5
-                      ? <><strong>Còn {daysLeft} ngày</strong> dùng thử IIS miễn phí — <a href="/upgrade" style={{ color: '#818cf8' }}>Nâng cấp ngay</a></>
-                      : <><strong>Còn {daysLeft} ngày</strong> trải nghiệm IIS miễn phí</>
-                    }
-                  </div>
-                </div>
-              ) : daysLeft === 0 ? (
-                <div style={{ padding: '8px 12px', borderRadius: '8px',
-                  background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
-                  fontSize: '12px', color: '#a5b4fc' }}>
-                  🔒 <strong>Hết thời gian dùng thử.</strong> Nâng cấp Basic/VIP để tiếp tục nhận coaching IIS.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: '18px', flexShrink: 0 }}>💬</span>
-                  <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.7 }}>
-                    Hãy thường xuyên trao đổi với{' '}
-                    <span style={{ color: lvl.color, fontWeight: 500 }}>AI-Advisor chat</span>
-                    {' '}để hệ thống giúp bạn kỷ luật và từng bước nâng hiệu quả đầu tư của bạn.
-                  </div>
-                </div>
-              )}
-            </div>
-          )
-        })()}
-
-        {/* Chuyên gia */}
+        {/* Chuyên gia badge */}
         {lvlIdx === 5 && (
-          <div style={{ marginTop: '12px', padding: '10px 12px', background: '#2e1065', borderRadius: '8px', border: '1px solid #7c3aed44' }}>
+          <div style={{ padding: '10px 12px', background: '#2e1065', borderRadius: '8px', marginBottom: '12px', border: '1px solid #7c3aed44' }}>
             <div style={{ fontSize: '12px', color: '#c084fc' }}>
-              🏆 Bạn đã đạt cấp độ cao nhất — Chuyên Gia. Cảm ơn bạn đã đồng hành cùng AI-Advisor!
+              🏆 Bạn đã đạt cấp độ cao nhất trong hệ thống IIS.
             </div>
           </div>
         )}
+
+        {/* Coaching message — động viên theo level */}
+        <div style={{
+          borderTop: '1px solid #1e293b', paddingTop: '12px',
+          display: 'flex', flexDirection: 'column', gap: '8px',
+        }}>
+          {/* Coach message */}
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+            <span style={{ fontSize: '16px', flexShrink: 0 }}>💬</span>
+            <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.7 }}>
+              {coachMsg}
+            </div>
+          </div>
+
+          {/* Next action — cụ thể, actionable */}
+          {nextAction && (
+            <div style={{
+              display: 'flex', gap: '10px', alignItems: 'flex-start',
+              background: `${lvl.color}10`, borderRadius: '8px',
+              padding: '8px 10px', border: `1px solid ${lvl.color}22`,
+            }}>
+              <span style={{ fontSize: '14px', flexShrink: 0 }}>🎯</span>
+              <div style={{ fontSize: '12px', color: lvl.color, lineHeight: 1.6, fontWeight: 500 }}>
+                {nextAction}
+              </div>
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   )
