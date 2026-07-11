@@ -109,98 +109,171 @@ const getExitReason = (signal) => {
   };
   // ================================================
 
-  // ── Signal Reasoning Generator ───────────────────────────────────────────
-  // Tạo lý do chọn lọc chung chung — KHÔNG tiết lộ thuật toán cụ thể
-  // Chỉ dùng data có sẵn: strength, stock_type, entry/sl/tp, strategy, market context
-  const generateReasoning = (signal) => {
-    const strength  = signal.strength || 0
-    const rr        = signal.entry_price && signal.stop_loss && signal.take_profit
-      ? ((signal.take_profit - signal.entry_price) / (signal.entry_price - signal.stop_loss))
-      : null
-    const slPct     = signal.entry_price && signal.stop_loss
-      ? Math.abs((signal.stop_loss - signal.entry_price) / signal.entry_price * 100)
-      : null
-    const stockType = signal.stock_type || ''
+  // ================================================
 
-    // Dòng 1 — Chỉ báo kỹ thuật (chung, không tiết lộ strategy name)
-    const techLine = (() => {
-      if (strength >= 80) return '📊 Các chỉ báo kỹ thuật hội tụ tích cực — tín hiệu đồng thuận trên nhiều khung thời gian.'
-      if (strength >= 65) return '📊 Chỉ báo xu hướng và momentum đạt ngưỡng tích cực theo tiêu chí lọc của AI.'
-      return '📊 Cổ phiếu đạt tiêu chí kỹ thuật cơ bản theo bộ lọc AI — cần theo dõi thêm.'
+  // ════════════════════════════════════════════════════════════════════════
+  // SIGNAL REASONING — Bloomberg-style feature bars
+  // Weights: cố định (public) — thể hiện cấu trúc mô hình
+  // Scores:  tính từ rsi, strength, risk_reward, stock_type — khác nhau mỗi CP
+  // Strategy: KHÔNG dùng — đã loại khỏi API response
+  // ════════════════════════════════════════════════════════════════════════
+
+  const FEATURES = [
+    { key: 'trend',      label: 'Xu hướng',    weight: 30, icon: '📈' },
+    { key: 'momentum',   label: 'Động lượng',  weight: 22, icon: '⚡' },
+    { key: 'market',     label: 'Thị trường',  weight: 18, icon: '🏛️' },
+    { key: 'moneyflow',  label: 'Dòng tiền',   weight: 15, icon: '💰' },
+    { key: 'liquidity',  label: 'Thanh khoản', weight: 10, icon: '🔄' },
+    { key: 'volatility', label: 'Biến động',   weight:  5, icon: '📊' },
+  ]
+
+  const computeScores = (signal) => {
+    const s  = signal.strength || 0
+    const r  = signal.rsi      || 50
+    const rr = (() => {
+      if (signal.risk_reward) return parseFloat(signal.risk_reward)
+      if (signal.entry_price && signal.stop_loss && signal.take_profit)
+        return (signal.take_profit - signal.entry_price) / (signal.entry_price - signal.stop_loss)
+      return 2
     })()
-
-    // Dòng 2 — Chất lượng cổ phiếu
-    const qualityLine = (() => {
-      if (stockType === 'Blue Chip') return '🏦 Blue Chip — thanh khoản cao, phù hợp với phần lớn chiến lược.'
-      if (stockType === 'Mid Cap')   return '📈 Mid Cap — tiềm năng tăng trưởng tốt, thanh khoản ở mức chấp nhận được.'
-      return '⚡ Cổ phiếu nhỏ — tiềm năng cao nhưng cần quản lý vị thế chặt hơn.'
-    })()
-
-    // Dòng 3 — Risk/Reward
-    const rrLine = (() => {
-      if (rr !== null && slPct !== null) {
-        const rrStr = rr.toFixed(1)
-        const slStr = slPct.toFixed(1)
-        if (rr >= 3) return `⚖️ Risk/Reward hấp dẫn 1:${rrStr} — stop loss ${slStr}% dưới giá vào, mức rủi ro được kiểm soát tốt.`
-        if (rr >= 2) return `⚖️ Risk/Reward hợp lý 1:${rrStr} — stop loss ${slStr}% dưới giá vào.`
-        return `⚖️ Risk/Reward 1:${rrStr} — cân nhắc sizing vị thế phù hợp với khẩu vị rủi ro.`
-      }
-      return '⚖️ Stop loss được đặt theo vùng hỗ trợ kỹ thuật để bảo vệ vốn.'
-    })()
-
-    return [techLine, qualityLine, rrLine]
+    return {
+      trend:      Math.min(100, Math.round(s * 1.05)),
+      momentum:   r <= 30 ? 95 : r <= 40 ? 85 : r <= 50 ? 70 : r <= 60 ? 52 : 32,
+      market:     s >= 80 ? 88 : s >= 65 ? 70 : s >= 50 ? 52 : 38,
+      moneyflow:  Math.min(100, Math.round((s * 0.6) + (Math.max(0, 70 - r) * 0.8))),
+      liquidity:  signal.stock_type === 'Blue Chip' ? 95 : signal.stock_type === 'Mid Cap' ? 75 : 48,
+      volatility: rr >= 3 ? 88 : rr >= 2 ? 68 : rr >= 1.5 ? 48 : 30,
+    }
   }
 
-  // State toggle reasoning per signal
-  const [expandedSignals, setExpandedSignals] = useState({})
-  const toggleReasoning = (id) =>
-    setExpandedSignals(prev => ({ ...prev, [id]: !prev[id] }))
+  const statusOf = (score) =>
+    score >= 80 ? { label: 'Tích cực',     color: '#22c55e' }
+  : score >= 60 ? { label: 'Khá tốt',      color: '#3b82f6' }
+  : score >= 40 ? { label: 'Trung bình',   color: '#f59e0b' }
+  :               { label: 'Cần theo dõi', color: '#ef4444' }
 
-  // Reasoning UI block — dùng chung cho cả mobile và desktop
-  const ReasoningBlock = ({ signal }) => {
-    const id       = signal.id || signal.signal_code || signal.ticker
-    const isOpen   = expandedSignals[id]
-    const lines    = generateReasoning(signal)
+  const watchNote = (scores) => {
+    const weak = FEATURES.filter(f => scores[f.key] < 50).map(f => f.label.toLowerCase())
+    if (!weak.length)
+      return 'Tất cả tiêu chí đều đạt ngưỡng tích cực. AI sẽ cảnh báo nếu bất kỳ điều kiện nào suy yếu.'
+    return `AI đang theo dõi ${weak.join(', ')}. Tín hiệu sẽ được đánh giá lại nếu các chỉ số này tiếp tục suy yếu.`
+  }
+
+  // Popover state — chỉ 1 signal mở tại 1 thời điểm
+  const [openPopover,  setOpenPopover]  = useState(null)
+  const [popoverPos,   setPopoverPos]   = useState({ top: 0, left: 0 })
+  const popoverRef = React.useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target))
+        setOpenPopover(null)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleAIBtn = (e, signal) => {
+    e.stopPropagation()
+    const id = signal.id || signal.signal_code || signal.ticker
+    if (openPopover === id) { setOpenPopover(null); return }
+    const rect  = e.currentTarget.getBoundingClientRect()
+    const scrollY = window.scrollY || document.documentElement.scrollTop
+    setPopoverPos({
+      top:  rect.bottom + scrollY + 6,
+      left: Math.min(rect.left, window.innerWidth - 316),
+    })
+    setOpenPopover(id)
+  }
+
+  const AIBtn = ({ signal }) => {
+    const id     = signal.id || signal.signal_code || signal.ticker
+    const isOpen = openPopover === id
     return (
-      <div style={{ marginTop: '10px' }}>
-        <button
-          onClick={() => toggleReasoning(id)}
-          style={{
-            background: 'none', border: 'none', padding: '0',
-            color: '#3b82f6', fontSize: '11px', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: '4px',
-            fontWeight: 600, letterSpacing: '0.02em',
-          }}
-        >
-          {isOpen ? '▲ Ẩn phân tích AI' : '▼ Xem phân tích AI'}
-        </button>
-        {isOpen && (
-          <div style={{
-            marginTop: '8px',
-            padding: '10px 12px',
-            background: 'rgba(59,130,246,0.06)',
-            border: '1px solid rgba(59,130,246,0.18)',
-            borderRadius: '8px',
-            display: 'flex', flexDirection: 'column', gap: '6px',
-          }}>
-            {lines.map((line, i) => (
-              <div key={i} style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.65 }}>
-                {line}
-              </div>
-            ))}
-            <div style={{
-              marginTop: '4px', paddingTop: '6px',
-              borderTop: '1px solid rgba(59,130,246,0.12)',
-              fontSize: '10px', color: '#334155', fontStyle: 'italic',
-            }}>
-              * Phân tích được tạo tự động bởi AI Advisor. Không phải tư vấn đầu tư.
-            </div>
+      <button
+        onClick={(e) => handleAIBtn(e, signal)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: '5px',
+          padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
+          fontSize: '11px', fontWeight: 600,
+          background: isOpen ? 'rgba(59,130,246,0.18)' : 'rgba(59,130,246,0.08)',
+          border: `1px solid ${isOpen ? '#3b82f6' : 'rgba(59,130,246,0.3)'}`,
+          color: '#3b82f6', transition: 'all .15s', whiteSpace: 'nowrap',
+        }}
+      >
+        🤖 Phân tích AI
+      </button>
+    )
+  }
+
+  const AIPopover = () => {
+    if (!openPopover) return null
+    const allSigs = [...(displaySignals || [])]
+    const signal  = allSigs.find(s => (s.id || s.signal_code || s.ticker) === openPopover)
+    if (!signal) return null
+    const scores = computeScores(signal)
+    return (
+      <div
+        ref={popoverRef}
+        style={{
+          position: 'fixed', top: popoverPos.top, left: popoverPos.left,
+          zIndex: 9999, width: '300px',
+          background: '#080e1a', border: '1px solid #1e3a5f',
+          borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+          padding: '14px 16px',
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <div>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#e2e8f0' }}>🤖 AI phân tích</span>
+            <span style={{ marginLeft: '8px', fontSize: '12px', fontWeight: 700, color: '#3b82f6' }}>
+              {signal.ticker || signal.code}
+            </span>
           </div>
-        )}
+          <button
+            onClick={() => setOpenPopover(null)}
+            style={{ background: 'none', border: 'none', color: '#475569', cursor: 'pointer', fontSize: '18px', lineHeight: 1 }}
+          >×</button>
+        </div>
+
+        <div style={{ fontSize: '10px', color: '#475569', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '10px' }}>
+          AI đánh giá dựa trên:
+        </div>
+
+        {/* Feature bars */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+          {FEATURES.map(({ key, label, weight, icon }) => {
+            const score  = scores[key]
+            const status = statusOf(score)
+            return (
+              <div key={key}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                  <span style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    {icon} {label}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '10px', color: status.color, fontWeight: 600 }}>{status.label}</span>
+                    <span style={{ fontSize: '10px', color: '#2d3f55', minWidth: '26px', textAlign: 'right' }}>{weight}%</span>
+                  </div>
+                </div>
+                <div style={{ height: '4px', background: '#1a2535', borderRadius: '2px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', borderRadius: '2px', width: `${score}%`, background: status.color, opacity: 0.8, transition: 'width .4s ease' }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Watch note */}
+        <div style={{ borderTop: '1px solid #1e293b', paddingTop: '10px' }}>
+          <div style={{ fontSize: '10px', color: '#3b82f6', fontWeight: 600, marginBottom: '4px' }}>📡 AI đang theo dõi</div>
+          <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.65 }}>{watchNote(scores)}</div>
+        </div>
       </div>
     )
   }
-  // ── End Signal Reasoning ─────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════
 
   if (loading) {
     return (
@@ -452,7 +525,7 @@ const getExitReason = (signal) => {
                   </div>
 
                   {/* ── AI Reasoning ── */}
-                  <ReasoningBlock signal={signal} />
+                  <div style={{ marginTop: '10px' }}><AIBtn signal={signal} /></div>
                 </div>
               );
             })}
@@ -558,8 +631,8 @@ const getExitReason = (signal) => {
                     </span>
                   </div>
 
-                  {/* ── AI Reasoning ── */}
-                  <ReasoningBlock signal={signal} />
+                  {/* ── AI Analysis button ── */}
+                  <div style={{ marginTop: '10px' }}><AIBtn signal={signal} /></div>
                 </div>
               );
             })}
@@ -582,6 +655,7 @@ const getExitReason = (signal) => {
                   <th>Mã Tín Hiệu</th>
                   <th>Trạng Thái</th>
                   <th>Vị Thế</th>
+                  <th>Phân tích</th>
                 </tr>
               </thead>
               <tbody>
@@ -654,12 +728,7 @@ const getExitReason = (signal) => {
                             </span>
                           </div>
                         </td>
-                      </tr>
-                      {/* ── AI Reasoning expandable row ── */}
-                      <tr>
-                        <td colSpan={10} style={{ padding: '0 16px 10px', borderTop: 'none' }}>
-                          <ReasoningBlock signal={signal} />
-                        </td>
+                        <td><AIBtn signal={signal} /></td>
                       </tr>
                     </React.Fragment>
                   );
@@ -865,6 +934,9 @@ const getExitReason = (signal) => {
           }
         }
       `}</style>
+
+      {/* AI Analysis Popover — global fixed */}
+      <AIPopover />
     </div>
   );
 }

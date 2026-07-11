@@ -1036,7 +1036,7 @@ def signals_endpoint():
                     'id': s.id,
                     'ticker': s.ticker,
                     'code': s.ticker,
-                    'strategy': s.strategy,
+                    # 'strategy' excluded — proprietary algorithm
                     'entry_price': round(s.entry_price / 100) * 100 if s.entry_price else 0,
                     'stop_loss': round(s.stop_loss / 100) * 100 if s.stop_loss else 0,
                     'take_profit': round(s.take_profit / 100) * 100 if s.take_profit else 0,
@@ -1288,10 +1288,10 @@ def get_open_buy_signals(ticker):
                 'id': s.id,
                 'signal_code': s.signal_code,
                 'ticker': s.ticker,
-                'strategy': s.strategy,
+                # 'strategy' excluded — proprietary algorithm
                 'entry_price': round(s.entry_price / 100) * 100,
                 'date': s.date,
-                'display_text': f"{s.signal_code or f'#{s.id}'} @ {round(s.entry_price/1000, 1)}k ({s.strategy})"
+                'display_text': f"{s.signal_code or f'#{s.id}'} @ {round(s.entry_price/1000, 1)}k"
             })
         
         return jsonify({
