@@ -111,6 +111,7 @@ const getExitReason = (signal) => {
 
   // ════════════════════════════════════════════════════════════════════════
   // SIGNAL REASONING — Bloomberg-style feature bars (Popover)
+  // Strategy field excluded from API — moat protected
   // ════════════════════════════════════════════════════════════════════════
 
   const FEATURES = [
@@ -153,13 +154,12 @@ const getExitReason = (signal) => {
     return `AI đang theo dõi ${weak.join(', ')}. Tín hiệu sẽ được đánh giá lại nếu các chỉ số này tiếp tục suy yếu.`
   }
 
-  // id luôn là string để so sánh nhất quán
+  // id luôn là string để tránh type mismatch
   const sigId = (s) => String(s.id || s.signal_code || s.ticker || '')
 
-  // Popover state
-  const [openPopover, setOpenPopover] = useState(null)
-  const [popoverPos,  setPopoverPos]  = useState({ top: 0, left: 0 })
-  const [popoverSignal, setPopoverSignal] = useState(null)  // lưu signal object trực tiếp
+  const [openPopover,    setOpenPopover]    = useState(null)
+  const [popoverPos,     setPopoverPos]     = useState({ top: 0, left: 0 })
+  const [popoverSignal,  setPopoverSignal]  = useState(null)
   const popoverRef = React.useRef(null)
 
   useEffect(() => {
@@ -182,7 +182,7 @@ const getExitReason = (signal) => {
       left: Math.max(8, Math.min(rect.left, window.innerWidth - 316)),
     })
     setOpenPopover(id)
-    setPopoverSignal(signal)  // lưu trực tiếp — tránh stale closure
+    setPopoverSignal(signal)
   }
 
   const AIBtn = ({ signal }) => {
@@ -209,17 +209,13 @@ const getExitReason = (signal) => {
     if (!openPopover || !popoverSignal) return null
     const scores = computeScores(popoverSignal)
     return (
-      <div
-        ref={popoverRef}
-        style={{
-          position: 'fixed', top: popoverPos.top, left: popoverPos.left,
-          zIndex: 99999, width: '300px',
-          background: '#080e1a', border: '1px solid #1e3a5f',
-          borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
-          padding: '14px 16px',
-        }}
-      >
-        {/* Header */}
+      <div ref={popoverRef} style={{
+        position: 'fixed', top: popoverPos.top, left: popoverPos.left,
+        zIndex: 99999, width: '300px',
+        background: '#080e1a', border: '1px solid #1e3a5f',
+        borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+        padding: '14px 16px',
+      }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
           <div>
             <span style={{ fontSize: '13px', fontWeight: 700, color: '#e2e8f0' }}>🤖 AI phân tích</span>
@@ -228,26 +224,19 @@ const getExitReason = (signal) => {
             </span>
           </div>
           <button onClick={() => setOpenPopover(null)}
-            style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: '0 2px' }}>
-            ×
-          </button>
+            style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '20px', lineHeight: 1 }}>×</button>
         </div>
-
         <div style={{ fontSize: '10px', color: '#475569', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '10px' }}>
           AI đánh giá dựa trên:
         </div>
-
-        {/* Feature bars */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
           {FEATURES.map(({ key, label, weight, icon }) => {
-            const score  = scores[key]
+            const score  = computeScores(popoverSignal)[key]
             const status = statusOf(score)
             return (
               <div key={key}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                  <span style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    {icon} {label}
-                  </span>
+                  <span style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '5px' }}>{icon} {label}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '10px', color: status.color, fontWeight: 600 }}>{status.label}</span>
                     <span style={{ fontSize: '10px', color: '#2d3f55', minWidth: '26px', textAlign: 'right' }}>{weight}%</span>
@@ -260,8 +249,6 @@ const getExitReason = (signal) => {
             )
           })}
         </div>
-
-        {/* Watch note */}
         <div style={{ borderTop: '1px solid #1e293b', paddingTop: '10px' }}>
           <div style={{ fontSize: '10px', color: '#3b82f6', fontWeight: 600, marginBottom: '4px' }}>📡 AI đang theo dõi</div>
           <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.65 }}>{watchNote(scores)}</div>
@@ -627,7 +614,7 @@ const getExitReason = (signal) => {
                     </span>
                   </div>
 
-                  {/* ── AI Analysis ── */}
+                  {/* ── AI Reasoning ── */}
                   <div style={{ marginTop: '10px' }}><AIBtn signal={signal} /></div>
                 </div>
               );
@@ -931,7 +918,7 @@ const getExitReason = (signal) => {
         }
       `}</style>
 
-      {/* AI Analysis Popover — global fixed position */}
+      {/* AI Analysis Popover */}
       <AIPopover />
     </div>
   );

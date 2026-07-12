@@ -137,7 +137,8 @@ function TelegramBadge() {
   )
 }
 
-// ─── AI Analysis Popover (Bloomberg-style) ───────────────────
+
+// ─── AI Analysis Popover (Bloomberg-style, VIP theme) ────────
 const VIP_FEATURES = [
   { key: 'trend',      label: 'Xu hướng',    weight: 30, icon: '📈' },
   { key: 'momentum',   label: 'Động lượng',  weight: 22, icon: '⚡' },
@@ -146,7 +147,6 @@ const VIP_FEATURES = [
   { key: 'liquidity',  label: 'Thanh khoản', weight: 10, icon: '🔄' },
   { key: 'volatility', label: 'Biến động',   weight:  5, icon: '📊' },
 ]
-
 function computeVIPScores(signal) {
   const s  = signal.strength || signal.confidence || 0
   const r  = signal.rsi || 50
@@ -167,24 +167,22 @@ function computeVIPScores(signal) {
     volatility: rr >= 3 ? 88 : rr >= 2 ? 68 : rr >= 1.5 ? 48 : 30,
   }
 }
-
 function vipStatusOf(score) {
   return score >= 80 ? { label: 'Tích cực',     color: '#22c55e' }
        : score >= 60 ? { label: 'Khá tốt',      color: '#a855f7' }
        : score >= 40 ? { label: 'Trung bình',   color: '#f59e0b' }
        :               { label: 'Cần theo dõi', color: '#f87171' }
 }
-
 function vipWatchNote(scores) {
   const weak = VIP_FEATURES.filter(f => scores[f.key] < 50).map(f => f.label.toLowerCase())
   if (!weak.length) return 'Tất cả tiêu chí đều đạt ngưỡng tích cực. AI sẽ cảnh báo nếu bất kỳ điều kiện nào suy yếu.'
   return `AI đang theo dõi ${weak.join(', ')}. Tín hiệu sẽ được đánh giá lại nếu các chỉ số này tiếp tục suy yếu.`
 }
 
-// Global popover state — dùng React context pattern đơn giản qua module-level ref
+// Module-level refs để VIPAIBtn (non-hook component) gọi được setter
 let _setVIPPopover = null
-let _setVIPPopoverPos = null
-let _setVIPPopoverSignal = null
+let _setVIPPos     = null
+let _setVIPSig     = null
 
 function VIPAIBtn({ signal }) {
   const id = String(signal.id || signal.signal_code || signal.ticker || '')
@@ -195,11 +193,8 @@ function VIPAIBtn({ signal }) {
         if (!_setVIPPopover) return
         const rect   = e.currentTarget.getBoundingClientRect()
         const scrollY = window.scrollY || 0
-        _setVIPPopoverPos({
-          top:  rect.bottom + scrollY + 6,
-          left: Math.max(8, Math.min(rect.left, window.innerWidth - 316)),
-        })
-        _setVIPPopoverSignal(prev => {
+        _setVIPPos({ top: rect.bottom + scrollY + 6, left: Math.max(8, Math.min(rect.left, window.innerWidth - 316)) })
+        _setVIPSig(prev => {
           const prevId = prev ? String(prev.id || prev.signal_code || prev.ticker || '') : null
           return prevId === id ? null : signal
         })
@@ -208,89 +203,63 @@ function VIPAIBtn({ signal }) {
       style={{
         display: 'inline-flex', alignItems: 'center', gap: '5px',
         padding: '5px 12px', borderRadius: '8px', cursor: 'pointer',
-        fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
-        background: 'rgba(168,85,247,0.12)',
-        border: '1px solid rgba(168,85,247,0.35)',
-        color: '#a855f7', marginTop: '10px',
+        fontSize: '11px', fontWeight: 600, marginTop: '10px',
+        background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.35)',
+        color: '#a855f7',
       }}
-    >
-      🤖 Phân tích AI
-    </button>
+    >🤖 Phân tích AI</button>
   )
 }
 
 function VIPAIPopoverRoot() {
-  const [openId,  setOpenId]  = useState(null)
-  const [pos,     setPos]     = useState({ top: 0, left: 0 })
-  const [signal,  setSignal]  = useState(null)
+  const [openId, setOpenId] = useState(null)
+  const [pos,    setPos]    = useState({ top: 0, left: 0 })
+  const [sig,    setSig]    = useState(null)
   const ref = useRef(null)
-
-  // Đăng ký setters vào module-level vars để VIPAIBtn dùng được
   useEffect(() => {
-    _setVIPPopover       = setOpenId
-    _setVIPPopoverPos    = setPos
-    _setVIPPopoverSignal = setSignal
-    return () => { _setVIPPopover = null; _setVIPPopoverPos = null; _setVIPPopoverSignal = null }
+    _setVIPPopover = setOpenId; _setVIPPos = setPos; _setVIPSig = setSig
+    return () => { _setVIPPopover = null; _setVIPPos = null; _setVIPSig = null }
   }, [])
-
   useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpenId(null) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpenId(null) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
   }, [])
-
-  if (!openId || !signal) return null
-  const scores = computeVIPScores(signal)
-
+  if (!openId || !sig) return null
+  const scores = computeVIPScores(sig)
   return (
     <div ref={ref} style={{
-      position: 'fixed', top: pos.top, left: pos.left,
-      zIndex: 99999, width: '300px',
+      position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999, width: '300px',
       background: '#080e1a', border: '1px solid #3b1f6b',
-      borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.8)',
-      padding: '14px 16px',
+      borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', padding: '14px 16px',
     }}>
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <div>
           <span style={{ fontSize: '13px', fontWeight: 700, color: '#e2d9f3' }}>🤖 AI phân tích</span>
-          <span style={{ marginLeft: '8px', fontSize: '13px', fontWeight: 700, color: '#a855f7' }}>
-            {signal.ticker || signal.code}
-          </span>
+          <span style={{ marginLeft: '8px', fontSize: '13px', fontWeight: 700, color: '#a855f7' }}>{sig.ticker || sig.code}</span>
         </div>
-        <button onClick={() => setOpenId(null)}
-          style={{ background: 'none', border: 'none', color: '#7c6fa0', cursor: 'pointer', fontSize: '20px', lineHeight: 1 }}>×</button>
+        <button onClick={() => setOpenId(null)} style={{ background: 'none', border: 'none', color: '#7c6fa0', cursor: 'pointer', fontSize: '20px', lineHeight: 1 }}>×</button>
       </div>
-
-      <div style={{ fontSize: '10px', color: '#7c6fa0', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '10px' }}>
-        AI đánh giá dựa trên:
-      </div>
-
-      {/* Feature bars */}
+      <div style={{ fontSize: '10px', color: '#7c6fa0', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '10px' }}>AI đánh giá dựa trên:</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
         {VIP_FEATURES.map(({ key, label, weight, icon }) => {
-          const score  = scores[key]
-          const status = vipStatusOf(score)
+          const score = scores[key]; const st = vipStatusOf(score)
           return (
             <div key={key}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                <span style={{ fontSize: '12px', color: '#9d8ec0', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  {icon} {label}
-                </span>
+                <span style={{ fontSize: '12px', color: '#9d8ec0', display: 'flex', alignItems: 'center', gap: '5px' }}>{icon} {label}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '10px', color: status.color, fontWeight: 600 }}>{status.label}</span>
+                  <span style={{ fontSize: '10px', color: st.color, fontWeight: 600 }}>{st.label}</span>
                   <span style={{ fontSize: '10px', color: '#2d2550', minWidth: '26px', textAlign: 'right' }}>{weight}%</span>
                 </div>
               </div>
               <div style={{ height: '4px', background: '#1a1230', borderRadius: '2px', overflow: 'hidden' }}>
-                <div style={{ height: '100%', borderRadius: '2px', width: `${score}%`, background: status.color, opacity: 0.85, transition: 'width .4s ease' }} />
+                <div style={{ height: '100%', borderRadius: '2px', width: `${score}%`, background: st.color, opacity: 0.85, transition: 'width .4s' }} />
               </div>
             </div>
           )
         })}
       </div>
-
-      {/* Watch note */}
       <div style={{ borderTop: '1px solid #2d2550', paddingTop: '10px' }}>
         <div style={{ fontSize: '10px', color: '#a855f7', fontWeight: 600, marginBottom: '4px' }}>📡 AI đang theo dõi</div>
         <div style={{ fontSize: '11px', color: '#7c6fa0', lineHeight: 1.65 }}>{vipWatchNote(scores)}</div>
@@ -685,14 +654,12 @@ function InlineAIChat({ userId }) {
   // ─── Load chat history + inject market summary nếu chưa có lịch sử ───
   useEffect(() => {
     async function initChat() {
-      // AbortController + timeout để tránh treo cứng khi Render cold start (50s+)
-      const ctrl1  = new AbortController()
-      const timer1 = setTimeout(() => ctrl1.abort(), 8000)
+      // 1. Thử load lịch sử chat
+      // BUG7 FIX: backend trả về d.history (không phải d.messages)
+      // BUG7 FIX: convert format {message, response} → [{role:'user'}, {role:'assistant'}]
       try {
-        const r = await fetch(`${API_BASE}/chat/history?user_id=${userId}&limit=30`, {
-          headers: authHeaders(), signal: ctrl1.signal,
-        })
-        clearTimeout(timer1)
+        const _ctrl = new AbortController(); setTimeout(() => _ctrl.abort(), 8000)
+        const r = await fetch(`${API_BASE}/chat/history?user_id=${userId}&limit=30`, { headers: authHeaders(), signal: _ctrl.signal })
         const d = await r.json()
         if (d.success && d.history?.length > 0) {
           const converted = []
@@ -703,29 +670,36 @@ function InlineAIChat({ userId }) {
           if (converted.length > 0) {
             setMessages(converted)
             setExpanded(true)
-            return
+            return  // Đã có lịch sử → không inject market summary
           }
         }
-      } catch { clearTimeout(timer1) }
+      } catch {}
 
-      // Fetch market risk — cũng có timeout riêng
-      const ctrl2  = new AbortController()
-      const timer2 = setTimeout(() => ctrl2.abort(), 5000)
+      // 2. Chưa có lịch sử → fetch market risk và tạo tin nhắn chào
       try {
-        const mr = await fetch(`${VIP_API}/api/market-risk`, { signal: ctrl2.signal })
-        clearTimeout(timer2)
+        const mr = await fetch(`${VIP_API}/api/market-risk`)
         const md = await mr.json()
         if (md.success && md.data) {
-          const m          = md.data
+          const m = md.data
           const mode       = m.market_mode || '—'
           const risk       = m.risk_score ?? '—'
           const allocation = m.allocation ?? '—'
           const date       = m.date ? new Date(m.date).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit' }) : ''
-          const riskEmoji  = risk <= 40 ? '🟢' : risk <= 65 ? '🟡' : '🔴'
-          const summary    = `Xin chào! Đây là tóm tắt thị trường hôm nay (${date}):\n\n${riskEmoji} Chế độ thị trường: ${mode}\n📊 Điểm rủi ro: ${risk}/100\n💼 Tỷ trọng khuyến nghị: ${allocation}%\n\nBạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục hiện tại không?`
+
+          // Màu theo risk score
+          const riskEmoji = risk <= 40 ? '🟢' : risk <= 65 ? '🟡' : '🔴'
+
+          const summary = `Xin chào! Đây là tóm tắt thị trường hôm nay (${date}):
+
+${riskEmoji} Chế độ thị trường: ${mode}
+📊 Điểm rủi ro: ${risk}/100
+💼 Tỷ trọng khuyến nghị: ${allocation}%
+
+Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục hiện tại không?`
+
           setMessages([{ role: 'assistant', content: summary }])
         }
-      } catch { clearTimeout(timer2) }
+      } catch {}
     }
     initChat()
   }, [userId])
@@ -960,8 +934,6 @@ export default function VIPDashboard({ user, onSwitchBasic, onOpenIIS }) {
         )}
         {tab === 'portfolio' && <VIPPortfolioTab userId={user.email} />}
       </div>
-
-      {/* AI Analysis Popover — global fixed, dùng chung cho toàn VIP */}
       <VIPAIPopoverRoot />
     </div>
   )
