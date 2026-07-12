@@ -182,124 +182,6 @@ function vipWatchNote(scores) {
 }
 
 // Global popover state — dùng React context pattern đơn giản qua module-level ref
-let _setVIPPopover = null
-let _setVIPPopoverPos = null
-let _setVIPPopoverSignal = null
-
-function VIPAIBtn({ signal }) {
-  const id = String(signal.id || signal.signal_code || signal.ticker || '')
-  return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation()
-        if (!_setVIPPopover) return
-        const rect   = e.currentTarget.getBoundingClientRect()
-        const scrollY = window.scrollY || 0
-        _setVIPPopoverPos({
-          top:  rect.bottom + scrollY + 6,
-          left: Math.max(8, Math.min(rect.left, window.innerWidth - 316)),
-        })
-        _setVIPPopoverSignal(prev => {
-          const prevId = prev ? String(prev.id || prev.signal_code || prev.ticker || '') : null
-          return prevId === id ? null : signal
-        })
-        _setVIPPopover(prev => prev === id ? null : id)
-      }}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: '5px',
-        padding: '5px 12px', borderRadius: '8px', cursor: 'pointer',
-        fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
-        background: 'rgba(168,85,247,0.12)',
-        border: '1px solid rgba(168,85,247,0.35)',
-        color: '#a855f7', marginTop: '10px',
-      }}
-    >
-      🤖 Phân tích AI
-    </button>
-  )
-}
-
-function VIPAIPopoverRoot() {
-  const [openId,  setOpenId]  = useState(null)
-  const [pos,     setPos]     = useState({ top: 0, left: 0 })
-  const [signal,  setSignal]  = useState(null)
-  const ref = useRef(null)
-
-  // Đăng ký setters vào module-level vars để VIPAIBtn dùng được
-  useEffect(() => {
-    _setVIPPopover       = setOpenId
-    _setVIPPopoverPos    = setPos
-    _setVIPPopoverSignal = setSignal
-    return () => { _setVIPPopover = null; _setVIPPopoverPos = null; _setVIPPopoverSignal = null }
-  }, [])
-
-  useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpenId(null) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  if (!openId || !signal) return null
-  const scores = computeVIPScores(signal)
-
-  return (
-    <div ref={ref} style={{
-      position: 'fixed', top: pos.top, left: pos.left,
-      zIndex: 99999, width: '300px',
-      background: '#080e1a', border: '1px solid #3b1f6b',
-      borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.8)',
-      padding: '14px 16px',
-    }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <div>
-          <span style={{ fontSize: '13px', fontWeight: 700, color: '#e2d9f3' }}>🤖 AI phân tích</span>
-          <span style={{ marginLeft: '8px', fontSize: '13px', fontWeight: 700, color: '#a855f7' }}>
-            {signal.ticker || signal.code}
-          </span>
-        </div>
-        <button onClick={() => setOpenId(null)}
-          style={{ background: 'none', border: 'none', color: '#7c6fa0', cursor: 'pointer', fontSize: '20px', lineHeight: 1 }}>×</button>
-      </div>
-
-      <div style={{ fontSize: '10px', color: '#7c6fa0', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '10px' }}>
-        AI đánh giá dựa trên:
-      </div>
-
-      {/* Feature bars */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
-        {VIP_FEATURES.map(({ key, label, weight, icon }) => {
-          const score  = scores[key]
-          const status = vipStatusOf(score)
-          return (
-            <div key={key}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                <span style={{ fontSize: '12px', color: '#9d8ec0', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  {icon} {label}
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '10px', color: status.color, fontWeight: 600 }}>{status.label}</span>
-                  <span style={{ fontSize: '10px', color: '#2d2550', minWidth: '26px', textAlign: 'right' }}>{weight}%</span>
-                </div>
-              </div>
-              <div style={{ height: '4px', background: '#1a1230', borderRadius: '2px', overflow: 'hidden' }}>
-                <div style={{ height: '100%', borderRadius: '2px', width: `${score}%`, background: status.color, opacity: 0.85, transition: 'width .4s ease' }} />
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Watch note */}
-      <div style={{ borderTop: '1px solid #2d2550', paddingTop: '10px' }}>
-        <div style={{ fontSize: '10px', color: '#a855f7', fontWeight: 600, marginBottom: '4px' }}>📡 AI đang theo dõi</div>
-        <div style={{ fontSize: '11px', color: '#7c6fa0', lineHeight: 1.65 }}>{vipWatchNote(scores)}</div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Signal Card ─────────────────────────────────────────────
 function SignalCard({ signal }) {
   const isBuy  = (signal.action || 'BUY') === 'BUY'
   const ticker = (signal.ticker || signal.code || '').toUpperCase()
@@ -357,7 +239,6 @@ function SignalCard({ signal }) {
               {signal.position_pct != null && <span>📊 Tỷ trọng: <b style={{ color: C.purpleLight }}>{signal.position_pct}%</b></span>}
             </div>
           )}
-          <VIPAIBtn signal={signal} />
         </>
       ) : (
         // ── SELL signal fields ─────────────────────────────────
@@ -391,7 +272,6 @@ function SignalCard({ signal }) {
               <span>📊 Bán: <b style={{ color: C.purpleLight }}>{signal.exit_quantity_pct}%</b></span>
             )}
           </div>
-          <VIPAIBtn signal={signal} />
         </>
       )}
     </div>
@@ -962,7 +842,6 @@ export default function VIPDashboard({ user, onSwitchBasic, onOpenIIS }) {
       </div>
 
       {/* AI Analysis Popover — global fixed, dùng chung cho toàn VIP */}
-      <VIPAIPopoverRoot />
     </div>
   )
 }
