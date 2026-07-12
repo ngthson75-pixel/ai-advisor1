@@ -19,7 +19,7 @@ const VN30_TICKERS = new Set([
 // Nhận props từ App.jsx — dùng chung data, không tự fetch riêng (tránh URL sai)
 
 function AIBtn({ signal, openPopover, handleAIBtn }) {
-  const id     = sigId(signal)
+  const id     = String(signal.id || signal.signal_code || signal.ticker || '')
   const isOpen = openPopover === id
   return (
     <button
