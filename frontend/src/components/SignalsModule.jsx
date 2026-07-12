@@ -109,13 +109,8 @@ const getExitReason = (signal) => {
   };
   // ================================================
 
-  // ================================================
-
   // ════════════════════════════════════════════════════════════════════════
-  // SIGNAL REASONING — Bloomberg-style feature bars
-  // Weights: cố định (public) — thể hiện cấu trúc mô hình
-  // Scores:  tính từ rsi, strength, risk_reward, stock_type — khác nhau mỗi CP
-  // Strategy: KHÔNG dùng — đã loại khỏi API response
+  // SIGNAL REASONING — Bloomberg-style feature bars (Popover)
   // ════════════════════════════════════════════════════════════════════════
 
   const FEATURES = [
@@ -154,14 +149,17 @@ const getExitReason = (signal) => {
 
   const watchNote = (scores) => {
     const weak = FEATURES.filter(f => scores[f.key] < 50).map(f => f.label.toLowerCase())
-    if (!weak.length)
-      return 'Tất cả tiêu chí đều đạt ngưỡng tích cực. AI sẽ cảnh báo nếu bất kỳ điều kiện nào suy yếu.'
+    if (!weak.length) return 'Tất cả tiêu chí đều đạt ngưỡng tích cực. AI sẽ cảnh báo nếu bất kỳ điều kiện nào suy yếu.'
     return `AI đang theo dõi ${weak.join(', ')}. Tín hiệu sẽ được đánh giá lại nếu các chỉ số này tiếp tục suy yếu.`
   }
 
-  // Popover state — chỉ 1 signal mở tại 1 thời điểm
-  const [openPopover,  setOpenPopover]  = useState(null)
-  const [popoverPos,   setPopoverPos]   = useState({ top: 0, left: 0 })
+  // id luôn là string để so sánh nhất quán
+  const sigId = (s) => String(s.id || s.signal_code || s.ticker || '')
+
+  // Popover state
+  const [openPopover, setOpenPopover] = useState(null)
+  const [popoverPos,  setPopoverPos]  = useState({ top: 0, left: 0 })
+  const [popoverSignal, setPopoverSignal] = useState(null)  // lưu signal object trực tiếp
   const popoverRef = React.useRef(null)
 
   useEffect(() => {
@@ -175,19 +173,20 @@ const getExitReason = (signal) => {
 
   const handleAIBtn = (e, signal) => {
     e.stopPropagation()
-    const id = signal.id || signal.signal_code || signal.ticker
-    if (openPopover === id) { setOpenPopover(null); return }
-    const rect  = e.currentTarget.getBoundingClientRect()
+    const id = sigId(signal)
+    if (openPopover === id) { setOpenPopover(null); setPopoverSignal(null); return }
+    const rect   = e.currentTarget.getBoundingClientRect()
     const scrollY = window.scrollY || document.documentElement.scrollTop
     setPopoverPos({
       top:  rect.bottom + scrollY + 6,
-      left: Math.min(rect.left, window.innerWidth - 316),
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - 316)),
     })
     setOpenPopover(id)
+    setPopoverSignal(signal)  // lưu trực tiếp — tránh stale closure
   }
 
   const AIBtn = ({ signal }) => {
-    const id     = signal.id || signal.signal_code || signal.ticker
+    const id     = sigId(signal)
     const isOpen = openPopover === id
     return (
       <button
@@ -195,10 +194,10 @@ const getExitReason = (signal) => {
         style={{
           display: 'inline-flex', alignItems: 'center', gap: '5px',
           padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
-          fontSize: '11px', fontWeight: 600,
-          background: isOpen ? 'rgba(59,130,246,0.18)' : 'rgba(59,130,246,0.08)',
+          fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
+          background: isOpen ? 'rgba(59,130,246,0.2)' : 'rgba(59,130,246,0.08)',
           border: `1px solid ${isOpen ? '#3b82f6' : 'rgba(59,130,246,0.3)'}`,
-          color: '#3b82f6', transition: 'all .15s', whiteSpace: 'nowrap',
+          color: '#3b82f6', transition: 'all .15s',
         }}
       >
         🤖 Phân tích AI
@@ -207,19 +206,16 @@ const getExitReason = (signal) => {
   }
 
   const AIPopover = () => {
-    if (!openPopover) return null
-    const allSigs = [...(displaySignals || [])]
-    const signal  = allSigs.find(s => (s.id || s.signal_code || s.ticker) === openPopover)
-    if (!signal) return null
-    const scores = computeScores(signal)
+    if (!openPopover || !popoverSignal) return null
+    const scores = computeScores(popoverSignal)
     return (
       <div
         ref={popoverRef}
         style={{
           position: 'fixed', top: popoverPos.top, left: popoverPos.left,
-          zIndex: 9999, width: '300px',
+          zIndex: 99999, width: '300px',
           background: '#080e1a', border: '1px solid #1e3a5f',
-          borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+          borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
           padding: '14px 16px',
         }}
       >
@@ -227,14 +223,14 @@ const getExitReason = (signal) => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
           <div>
             <span style={{ fontSize: '13px', fontWeight: 700, color: '#e2e8f0' }}>🤖 AI phân tích</span>
-            <span style={{ marginLeft: '8px', fontSize: '12px', fontWeight: 700, color: '#3b82f6' }}>
-              {signal.ticker || signal.code}
+            <span style={{ marginLeft: '8px', fontSize: '13px', fontWeight: 700, color: '#3b82f6' }}>
+              {popoverSignal.ticker || popoverSignal.code}
             </span>
           </div>
-          <button
-            onClick={() => setOpenPopover(null)}
-            style={{ background: 'none', border: 'none', color: '#475569', cursor: 'pointer', fontSize: '18px', lineHeight: 1 }}
-          >×</button>
+          <button onClick={() => setOpenPopover(null)}
+            style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: '0 2px' }}>
+            ×
+          </button>
         </div>
 
         <div style={{ fontSize: '10px', color: '#475569', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '10px' }}>
@@ -258,7 +254,7 @@ const getExitReason = (signal) => {
                   </div>
                 </div>
                 <div style={{ height: '4px', background: '#1a2535', borderRadius: '2px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', borderRadius: '2px', width: `${score}%`, background: status.color, opacity: 0.8, transition: 'width .4s ease' }} />
+                  <div style={{ height: '100%', borderRadius: '2px', width: `${score}%`, background: status.color, opacity: 0.85, transition: 'width .4s ease' }} />
                 </div>
               </div>
             )
@@ -631,7 +627,7 @@ const getExitReason = (signal) => {
                     </span>
                   </div>
 
-                  {/* ── AI Analysis button ── */}
+                  {/* ── AI Analysis ── */}
                   <div style={{ marginTop: '10px' }}><AIBtn signal={signal} /></div>
                 </div>
               );
@@ -935,7 +931,7 @@ const getExitReason = (signal) => {
         }
       `}</style>
 
-      {/* AI Analysis Popover — global fixed */}
+      {/* AI Analysis Popover — global fixed position */}
       <AIPopover />
     </div>
   );
