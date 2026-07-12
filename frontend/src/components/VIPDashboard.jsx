@@ -137,51 +137,7 @@ function TelegramBadge() {
   )
 }
 
-// ─── AI Analysis Popover (Bloomberg-style) ───────────────────
-const VIP_FEATURES = [
-  { key: 'trend',      label: 'Xu hướng',    weight: 30, icon: '📈' },
-  { key: 'momentum',   label: 'Động lượng',  weight: 22, icon: '⚡' },
-  { key: 'market',     label: 'Thị trường',  weight: 18, icon: '🏛️' },
-  { key: 'moneyflow',  label: 'Dòng tiền',   weight: 15, icon: '💰' },
-  { key: 'liquidity',  label: 'Thanh khoản', weight: 10, icon: '🔄' },
-  { key: 'volatility', label: 'Biến động',   weight:  5, icon: '📊' },
-]
-
-function computeVIPScores(signal) {
-  const s  = signal.strength || signal.confidence || 0
-  const r  = signal.rsi || 50
-  const rr = (() => {
-    if (signal.rr_ratio)    return parseFloat(signal.rr_ratio)
-    if (signal.risk_reward) return parseFloat(signal.risk_reward)
-    if (signal.entry_price && signal.stop_loss && signal.take_profit)
-      return (signal.take_profit - signal.entry_price) / (signal.entry_price - signal.stop_loss)
-    return 2
-  })()
-  const isVN30 = VN30_TICKERS.has((signal.ticker || '').toUpperCase())
-  return {
-    trend:      Math.min(100, Math.round(s * 1.05)),
-    momentum:   r <= 30 ? 95 : r <= 40 ? 85 : r <= 50 ? 70 : r <= 60 ? 52 : 32,
-    market:     s >= 80 ? 88 : s >= 65 ? 70 : s >= 50 ? 52 : 38,
-    moneyflow:  Math.min(100, Math.round((s * 0.6) + (Math.max(0, 70 - r) * 0.8))),
-    liquidity:  isVN30 ? 97 : signal.stock_type === 'Blue Chip' ? 90 : signal.stock_type === 'Mid Cap' ? 72 : 45,
-    volatility: rr >= 3 ? 88 : rr >= 2 ? 68 : rr >= 1.5 ? 48 : 30,
-  }
-}
-
-function vipStatusOf(score) {
-  return score >= 80 ? { label: 'Tích cực',     color: '#22c55e' }
-       : score >= 60 ? { label: 'Khá tốt',      color: '#a855f7' }
-       : score >= 40 ? { label: 'Trung bình',   color: '#f59e0b' }
-       :               { label: 'Cần theo dõi', color: '#f87171' }
-}
-
-function vipWatchNote(scores) {
-  const weak = VIP_FEATURES.filter(f => scores[f.key] < 50).map(f => f.label.toLowerCase())
-  if (!weak.length) return 'Tất cả tiêu chí đều đạt ngưỡng tích cực. AI sẽ cảnh báo nếu bất kỳ điều kiện nào suy yếu.'
-  return `AI đang theo dõi ${weak.join(', ')}. Tín hiệu sẽ được đánh giá lại nếu các chỉ số này tiếp tục suy yếu.`
-}
-
-// Global popover state — dùng React context pattern đơn giản qua module-level ref
+// ─── Signal Card ─────────────────────────────────────────────
 function SignalCard({ signal }) {
   const isBuy  = (signal.action || 'BUY') === 'BUY'
   const ticker = (signal.ticker || signal.code || '').toUpperCase()
@@ -565,14 +521,11 @@ function InlineAIChat({ userId }) {
   // ─── Load chat history + inject market summary nếu chưa có lịch sử ───
   useEffect(() => {
     async function initChat() {
-      // AbortController + timeout để tránh treo cứng khi Render cold start (50s+)
-      const ctrl1  = new AbortController()
-      const timer1 = setTimeout(() => ctrl1.abort(), 8000)
+      // 1. Thử load lịch sử chat
+      // BUG7 FIX: backend trả về d.history (không phải d.messages)
+      // BUG7 FIX: convert format {message, response} → [{role:'user'}, {role:'assistant'}]
       try {
-        const r = await fetch(`${API_BASE}/chat/history?user_id=${userId}&limit=30`, {
-          headers: authHeaders(), signal: ctrl1.signal,
-        })
-        clearTimeout(timer1)
+        const r = await fetch(`${API_BASE}/chat/history?user_id=${userId}&limit=30`, { headers: authHeaders() })
         const d = await r.json()
         if (d.success && d.history?.length > 0) {
           const converted = []
@@ -583,29 +536,36 @@ function InlineAIChat({ userId }) {
           if (converted.length > 0) {
             setMessages(converted)
             setExpanded(true)
-            return
+            return  // Đã có lịch sử → không inject market summary
           }
         }
-      } catch { clearTimeout(timer1) }
+      } catch {}
 
-      // Fetch market risk — cũng có timeout riêng
-      const ctrl2  = new AbortController()
-      const timer2 = setTimeout(() => ctrl2.abort(), 5000)
+      // 2. Chưa có lịch sử → fetch market risk và tạo tin nhắn chào
       try {
-        const mr = await fetch(`${VIP_API}/api/market-risk`, { signal: ctrl2.signal })
-        clearTimeout(timer2)
+        const mr = await fetch(`${VIP_API}/api/market-risk`)
         const md = await mr.json()
         if (md.success && md.data) {
-          const m          = md.data
+          const m = md.data
           const mode       = m.market_mode || '—'
           const risk       = m.risk_score ?? '—'
           const allocation = m.allocation ?? '—'
           const date       = m.date ? new Date(m.date).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit' }) : ''
-          const riskEmoji  = risk <= 40 ? '🟢' : risk <= 65 ? '🟡' : '🔴'
-          const summary    = `Xin chào! Đây là tóm tắt thị trường hôm nay (${date}):\n\n${riskEmoji} Chế độ thị trường: ${mode}\n📊 Điểm rủi ro: ${risk}/100\n💼 Tỷ trọng khuyến nghị: ${allocation}%\n\nBạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục hiện tại không?`
+
+          // Màu theo risk score
+          const riskEmoji = risk <= 40 ? '🟢' : risk <= 65 ? '🟡' : '🔴'
+
+          const summary = `Xin chào! Đây là tóm tắt thị trường hôm nay (${date}):
+
+${riskEmoji} Chế độ thị trường: ${mode}
+📊 Điểm rủi ro: ${risk}/100
+💼 Tỷ trọng khuyến nghị: ${allocation}%
+
+Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục hiện tại không?`
+
           setMessages([{ role: 'assistant', content: summary }])
         }
-      } catch { clearTimeout(timer2) }
+      } catch {}
     }
     initChat()
   }, [userId])
@@ -840,8 +800,6 @@ export default function VIPDashboard({ user, onSwitchBasic, onOpenIIS }) {
         )}
         {tab === 'portfolio' && <VIPPortfolioTab userId={user.email} />}
       </div>
-
-      {/* AI Analysis Popover — global fixed, dùng chung cho toàn VIP */}
     </div>
   )
 }
