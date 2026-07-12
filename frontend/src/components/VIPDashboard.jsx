@@ -138,8 +138,8 @@ function TelegramBadge() {
 }
 
 
-// ─── AI Analysis Popover (Bloomberg-style, VIP theme) ────────
-const VIP_FEATURES = [
+// ─── AI Analysis Popover (VIP theme) ─────────────────────────
+const VIP_FEAT = [
   { key: 'trend',      label: 'Xu hướng',    weight: 30, icon: '📈' },
   { key: 'momentum',   label: 'Động lượng',  weight: 22, icon: '⚡' },
   { key: 'market',     label: 'Thị trường',  weight: 18, icon: '🏛️' },
@@ -147,129 +147,79 @@ const VIP_FEATURES = [
   { key: 'liquidity',  label: 'Thanh khoản', weight: 10, icon: '🔄' },
   { key: 'volatility', label: 'Biến động',   weight:  5, icon: '📊' },
 ]
-function computeVIPScores(signal) {
-  const s  = signal.strength || signal.confidence || 0
-  const r  = signal.rsi || 50
+function vipScores(signal) {
+  const s = signal.strength || signal.confidence || 0, r = signal.rsi || 50
   const rr = (() => {
-    if (signal.rr_ratio)    return parseFloat(signal.rr_ratio)
+    if (signal.rr_ratio) return parseFloat(signal.rr_ratio)
     if (signal.risk_reward) return parseFloat(signal.risk_reward)
     if (signal.entry_price && signal.stop_loss && signal.take_profit)
       return (signal.take_profit - signal.entry_price) / (signal.entry_price - signal.stop_loss)
     return 2
   })()
-  const isVN30 = VN30_TICKERS.has((signal.ticker || '').toUpperCase())
   return {
     trend:      Math.min(100, Math.round(s * 1.05)),
-    momentum:   r <= 30 ? 95 : r <= 40 ? 85 : r <= 50 ? 70 : r <= 60 ? 52 : 32,
-    market:     s >= 80 ? 88 : s >= 65 ? 70 : s >= 50 ? 52 : 38,
-    moneyflow:  Math.min(100, Math.round((s * 0.6) + (Math.max(0, 70 - r) * 0.8))),
-    liquidity:  isVN30 ? 97 : signal.stock_type === 'Blue Chip' ? 90 : signal.stock_type === 'Mid Cap' ? 72 : 45,
-    volatility: rr >= 3 ? 88 : rr >= 2 ? 68 : rr >= 1.5 ? 48 : 30,
+    momentum:   r<=30?95:r<=40?85:r<=50?70:r<=60?52:32,
+    market:     s>=80?88:s>=65?70:s>=50?52:38,
+    moneyflow:  Math.min(100, Math.round((s*0.6)+(Math.max(0,70-r)*0.8))),
+    liquidity:  VN30_TICKERS.has((signal.ticker||'').toUpperCase())?97:s>=80?80:s>=60?65:45,
+    volatility: rr>=3?88:rr>=2?68:rr>=1.5?48:30,
   }
 }
-function vipStatusOf(score) {
-  return score >= 80 ? { label: 'Tích cực',     color: '#22c55e' }
-       : score >= 60 ? { label: 'Khá tốt',      color: '#a855f7' }
-       : score >= 40 ? { label: 'Trung bình',   color: '#f59e0b' }
-       :               { label: 'Cần theo dõi', color: '#f87171' }
+function vipSt(sc) {
+  return sc>=80?{label:'Tích cực',color:'#22c55e'}:sc>=60?{label:'Khá tốt',color:'#a855f7'}:sc>=40?{label:'Trung bình',color:'#f59e0b'}:{label:'Cần theo dõi',color:'#f87171'}
 }
-function vipWatchNote(scores) {
-  const weak = VIP_FEATURES.filter(f => scores[f.key] < 50).map(f => f.label.toLowerCase())
-  if (!weak.length) return 'Tất cả tiêu chí đều đạt ngưỡng tích cực. AI sẽ cảnh báo nếu bất kỳ điều kiện nào suy yếu.'
-  return `AI đang theo dõi ${weak.join(', ')}. Tín hiệu sẽ được đánh giá lại nếu các chỉ số này tiếp tục suy yếu.`
+function vipNote(scores) {
+  const w = VIP_FEAT.filter(f=>scores[f.key]<50).map(f=>f.label.toLowerCase())
+  return w.length?`AI đang theo dõi ${w.join(', ')}. Sẽ đánh giá lại nếu tiếp tục suy yếu.`:'Tất cả tiêu chí tích cực. AI sẽ cảnh báo nếu có thay đổi.'
 }
 
-// Module-level refs để VIPAIBtn (non-hook component) gọi được setter
-let _setVIPPopover = null
-let _setVIPPos     = null
-let _setVIPSig     = null
-
-function VIPAIBtn({ signal }) {
-  const id = String(signal.id || signal.signal_code || signal.ticker || '')
+// VIPAIPopover — standalone component, no hooks violation
+function VIPAIPopover({ signal, pos, onClose }) {
+  if (!signal) return null
+  const scores = vipScores(signal)
   return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation()
-        if (!_setVIPPopover) return
-        const rect   = e.currentTarget.getBoundingClientRect()
-        const scrollY = window.scrollY || 0
-        _setVIPPos({ top: rect.bottom + scrollY + 6, left: Math.max(8, Math.min(rect.left, window.innerWidth - 316)) })
-        _setVIPSig(prev => {
-          const prevId = prev ? String(prev.id || prev.signal_code || prev.ticker || '') : null
-          return prevId === id ? null : signal
-        })
-        _setVIPPopover(prev => prev === id ? null : id)
-      }}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: '5px',
-        padding: '5px 12px', borderRadius: '8px', cursor: 'pointer',
-        fontSize: '11px', fontWeight: 600, marginTop: '10px',
-        background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.35)',
-        color: '#a855f7',
-      }}
-    >🤖 Phân tích AI</button>
-  )
-}
-
-function VIPAIPopoverRoot() {
-  const [openId, setOpenId] = useState(null)
-  const [pos,    setPos]    = useState({ top: 0, left: 0 })
-  const [sig,    setSig]    = useState(null)
-  const ref = useRef(null)
-  useEffect(() => {
-    _setVIPPopover = setOpenId; _setVIPPos = setPos; _setVIPSig = setSig
-    return () => { _setVIPPopover = null; _setVIPPos = null; _setVIPSig = null }
-  }, [])
-  useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpenId(null) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
-  if (!openId || !sig) return null
-  const scores = computeVIPScores(sig)
-  return (
-    <div ref={ref} style={{
-      position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999, width: '300px',
-      background: '#080e1a', border: '1px solid #3b1f6b',
-      borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', padding: '14px 16px',
+    <div style={{
+      position:'fixed', top:pos.top, left:pos.left, zIndex:99999, width:'300px',
+      background:'#080e1a', border:'1px solid #3b1f6b',
+      borderRadius:'12px', boxShadow:'0 8px 32px rgba(0,0,0,0.8)', padding:'14px 16px',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'12px'}}>
         <div>
-          <span style={{ fontSize: '13px', fontWeight: 700, color: '#e2d9f3' }}>🤖 AI phân tích</span>
-          <span style={{ marginLeft: '8px', fontSize: '13px', fontWeight: 700, color: '#a855f7' }}>{sig.ticker || sig.code}</span>
+          <span style={{fontSize:'13px',fontWeight:700,color:'#e2d9f3'}}>🤖 AI phân tích</span>
+          <span style={{marginLeft:'8px',fontSize:'13px',fontWeight:700,color:'#a855f7'}}>{signal.ticker||signal.code}</span>
         </div>
-        <button onClick={() => setOpenId(null)} style={{ background: 'none', border: 'none', color: '#7c6fa0', cursor: 'pointer', fontSize: '20px', lineHeight: 1 }}>×</button>
+        <button onClick={onClose} style={{background:'none',border:'none',color:'#7c6fa0',cursor:'pointer',fontSize:'20px',lineHeight:1}}>×</button>
       </div>
-      <div style={{ fontSize: '10px', color: '#7c6fa0', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '10px' }}>AI đánh giá dựa trên:</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
-        {VIP_FEATURES.map(({ key, label, weight, icon }) => {
-          const score = scores[key]; const st = vipStatusOf(score)
+      <div style={{fontSize:'10px',color:'#7c6fa0',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'10px'}}>AI đánh giá dựa trên:</div>
+      <div style={{display:'flex',flexDirection:'column',gap:'8px',marginBottom:'14px'}}>
+        {VIP_FEAT.map(({key,label,weight,icon})=>{
+          const sc=scores[key],st=vipSt(sc)
           return (
             <div key={key}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                <span style={{ fontSize: '12px', color: '#9d8ec0', display: 'flex', alignItems: 'center', gap: '5px' }}>{icon} {label}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '10px', color: st.color, fontWeight: 600 }}>{st.label}</span>
-                  <span style={{ fontSize: '10px', color: '#2d2550', minWidth: '26px', textAlign: 'right' }}>{weight}%</span>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'3px'}}>
+                <span style={{fontSize:'12px',color:'#9d8ec0',display:'flex',alignItems:'center',gap:'5px'}}>{icon} {label}</span>
+                <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                  <span style={{fontSize:'10px',color:st.color,fontWeight:600}}>{st.label}</span>
+                  <span style={{fontSize:'10px',color:'#2d2550',minWidth:'26px',textAlign:'right'}}>{weight}%</span>
                 </div>
               </div>
-              <div style={{ height: '4px', background: '#1a1230', borderRadius: '2px', overflow: 'hidden' }}>
-                <div style={{ height: '100%', borderRadius: '2px', width: `${score}%`, background: st.color, opacity: 0.85, transition: 'width .4s' }} />
+              <div style={{height:'4px',background:'#1a1230',borderRadius:'2px',overflow:'hidden'}}>
+                <div style={{height:'100%',borderRadius:'2px',width:`${sc}%`,background:st.color,opacity:0.85,transition:'width .4s'}}/>
               </div>
             </div>
           )
         })}
       </div>
-      <div style={{ borderTop: '1px solid #2d2550', paddingTop: '10px' }}>
-        <div style={{ fontSize: '10px', color: '#a855f7', fontWeight: 600, marginBottom: '4px' }}>📡 AI đang theo dõi</div>
-        <div style={{ fontSize: '11px', color: '#7c6fa0', lineHeight: 1.65 }}>{vipWatchNote(scores)}</div>
+      <div style={{borderTop:'1px solid #2d2550',paddingTop:'10px'}}>
+        <div style={{fontSize:'10px',color:'#a855f7',fontWeight:600,marginBottom:'4px'}}>📡 AI đang theo dõi</div>
+        <div style={{fontSize:'11px',color:'#7c6fa0',lineHeight:1.65}}>{vipNote(scores)}</div>
       </div>
     </div>
   )
 }
 
 // ─── Signal Card ─────────────────────────────────────────────
-function SignalCard({ signal }) {
+function SignalCard({ signal, onAIClick }) {
   const isBuy  = (signal.action || 'BUY') === 'BUY'
   const ticker = (signal.ticker || signal.code || '').toUpperCase()
   const isVN30 = VN30_TICKERS.has(ticker)
@@ -326,7 +276,7 @@ function SignalCard({ signal }) {
               {signal.position_pct != null && <span>📊 Tỷ trọng: <b style={{ color: C.purpleLight }}>{signal.position_pct}%</b></span>}
             </div>
           )}
-          <VIPAIBtn signal={signal} />
+          {onAIClick && <button onClick={(e)=>onAIClick(e,signal)} style={{display:'inline-flex',alignItems:'center',gap:'5px',padding:'5px 12px',borderRadius:'8px',cursor:'pointer',fontSize:'11px',fontWeight:600,marginTop:'10px',background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.35)',color:'#a855f7'}}>🤖 Phân tích AI</button>}
         </>
       ) : (
         // ── SELL signal fields ─────────────────────────────────
@@ -360,7 +310,7 @@ function SignalCard({ signal }) {
               <span>📊 Bán: <b style={{ color: C.purpleLight }}>{signal.exit_quantity_pct}%</b></span>
             )}
           </div>
-          <VIPAIBtn signal={signal} />
+          {onAIClick && <button onClick={(e)=>onAIClick(e,signal)} style={{display:'inline-flex',alignItems:'center',gap:'5px',padding:'5px 12px',borderRadius:'8px',cursor:'pointer',fontSize:'11px',fontWeight:600,marginTop:'10px',background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.35)',color:'#a855f7'}}>🤖 Phân tích AI</button>}
         </>
       )}
     </div>
@@ -368,7 +318,7 @@ function SignalCard({ signal }) {
 }
 
 // ─── Signals Tab ─────────────────────────────────────────────
-function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysChange }) {
+function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysChange, onAIClick }) {
   const [filter, setFilter] = useState('vn30')
 
   // isOpen: chỉ hiện signal đang mở hoặc bán 1 phần
@@ -487,7 +437,7 @@ function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysCh
             {filter === 'vn30' && <div style={{ fontSize: '12px', marginTop: '8px' }}>Thử chuyển sang "Tất cả MUA" hoặc mở rộng khoảng ngày</div>}
           </div>
         ) : (
-          filtered.map((s, i) => <SignalCard key={s.id || i} signal={s} />)
+          filtered.map((s, i) => <SignalCard key={s.id || i} signal={s} onAIClick={onAIClick} />)
         )}
       </div>
     </div>
@@ -658,8 +608,8 @@ function InlineAIChat({ userId }) {
       // BUG7 FIX: backend trả về d.history (không phải d.messages)
       // BUG7 FIX: convert format {message, response} → [{role:'user'}, {role:'assistant'}]
       try {
-        const _ctrl = new AbortController(); setTimeout(() => _ctrl.abort(), 8000)
-        const r = await fetch(`${API_BASE}/chat/history?user_id=${userId}&limit=30`, { headers: authHeaders(), signal: _ctrl.signal })
+        const _c1=new AbortController();setTimeout(()=>_c1.abort(),8000)
+        const r = await fetch(`${API_BASE}/chat/history?user_id=${userId}&limit=30`, { headers: authHeaders(), signal: _c1.signal })
         const d = await r.json()
         if (d.success && d.history?.length > 0) {
           const converted = []
@@ -819,6 +769,23 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
 // ─── MAIN ─────────────────────────────────────────────────────
 export default function VIPDashboard({ user, onSwitchBasic, onOpenIIS }) {
   const [tab, setTab]         = useState('signals')
+  const [vipPopoverSig, setVipPopoverSig] = useState(null)
+  const [vipPopoverPos, setVipPopoverPos] = useState({ top: 0, left: 0 })
+  const vipPopoverRef = useRef(null)
+  useEffect(() => {
+    const h = (e) => { if (vipPopoverRef.current && !vipPopoverRef.current.contains(e.target)) setVipPopoverSig(null) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+  const handleVIPAIBtn = (e, signal) => {
+    e.stopPropagation()
+    const id = String(signal.id || signal.signal_code || signal.ticker || '')
+    const curId = String(vipPopoverSig?.id || vipPopoverSig?.signal_code || vipPopoverSig?.ticker || '')
+    if (curId === id) { setVipPopoverSig(null); return }
+    const rect = e.currentTarget.getBoundingClientRect()
+    setVipPopoverPos({ top: rect.bottom + (window.scrollY||0) + 6, left: Math.max(8, Math.min(rect.left, window.innerWidth-316)) })
+    setVipPopoverSig(signal)
+  }
   const [signals, setSignals] = useState([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(null)
@@ -930,11 +897,14 @@ export default function VIPDashboard({ user, onSwitchBasic, onOpenIIS }) {
             onRefresh={fetchSignals}
             days={days}
             onDaysChange={setDays}
+            onAIClick={handleVIPAIBtn}
           />
         )}
         {tab === 'portfolio' && <VIPPortfolioTab userId={user.email} />}
       </div>
-      <VIPAIPopoverRoot />
+      <div ref={vipPopoverRef}>
+        <VIPAIPopover signal={vipPopoverSig} pos={vipPopoverPos} onClose={() => setVipPopoverSig(null)} />
+      </div>
     </div>
   )
 }
