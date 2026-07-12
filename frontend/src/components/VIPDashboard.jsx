@@ -137,168 +137,6 @@ function TelegramBadge() {
   )
 }
 
-// ─── AI Analysis Popover (Bloomberg-style) ───────────────────
-const VIP_FEATURES = [
-  { key: 'trend',      label: 'Xu hướng',    weight: 30, icon: '📈' },
-  { key: 'momentum',   label: 'Động lượng',  weight: 22, icon: '⚡' },
-  { key: 'market',     label: 'Thị trường',  weight: 18, icon: '🏛️' },
-  { key: 'moneyflow',  label: 'Dòng tiền',   weight: 15, icon: '💰' },
-  { key: 'liquidity',  label: 'Thanh khoản', weight: 10, icon: '🔄' },
-  { key: 'volatility', label: 'Biến động',   weight:  5, icon: '📊' },
-]
-
-function computeVIPScores(signal) {
-  const s  = signal.strength || signal.confidence || 0
-  const r  = signal.rsi || 50
-  const rr = (() => {
-    if (signal.rr_ratio)    return parseFloat(signal.rr_ratio)
-    if (signal.risk_reward) return parseFloat(signal.risk_reward)
-    if (signal.entry_price && signal.stop_loss && signal.take_profit)
-      return (signal.take_profit - signal.entry_price) / (signal.entry_price - signal.stop_loss)
-    return 2
-  })()
-  const isVN30 = VN30_TICKERS.has((signal.ticker || '').toUpperCase())
-  return {
-    trend:      Math.min(100, Math.round(s * 1.05)),
-    momentum:   r <= 30 ? 95 : r <= 40 ? 85 : r <= 50 ? 70 : r <= 60 ? 52 : 32,
-    market:     s >= 80 ? 88 : s >= 65 ? 70 : s >= 50 ? 52 : 38,
-    moneyflow:  Math.min(100, Math.round((s * 0.6) + (Math.max(0, 70 - r) * 0.8))),
-    liquidity:  isVN30 ? 97 : signal.stock_type === 'Blue Chip' ? 90 : signal.stock_type === 'Mid Cap' ? 72 : 45,
-    volatility: rr >= 3 ? 88 : rr >= 2 ? 68 : rr >= 1.5 ? 48 : 30,
-  }
-}
-
-function vipStatusOf(score) {
-  return score >= 80 ? { label: 'Tích cực',     color: '#22c55e' }
-       : score >= 60 ? { label: 'Khá tốt',      color: '#a855f7' }
-       : score >= 40 ? { label: 'Trung bình',   color: '#f59e0b' }
-       :               { label: 'Cần theo dõi', color: '#f87171' }
-}
-
-function vipWatchNote(scores) {
-  const weak = VIP_FEATURES.filter(f => scores[f.key] < 50).map(f => f.label.toLowerCase())
-  if (!weak.length) return 'Tất cả tiêu chí đều đạt ngưỡng tích cực. AI sẽ cảnh báo nếu bất kỳ điều kiện nào suy yếu.'
-  return `AI đang theo dõi ${weak.join(', ')}. Tín hiệu sẽ được đánh giá lại nếu các chỉ số này tiếp tục suy yếu.`
-}
-
-// Global popover state — dùng React context pattern đơn giản qua module-level ref
-let _setVIPPopover = null
-let _setVIPPopoverPos = null
-let _setVIPPopoverSignal = null
-
-function VIPAIBtn({ signal }) {
-  const id = String(signal.id || signal.signal_code || signal.ticker || '')
-  return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation()
-        if (!_setVIPPopover) return
-        const rect   = e.currentTarget.getBoundingClientRect()
-        const scrollY = window.scrollY || 0
-        _setVIPPopoverPos({
-          top:  rect.bottom + scrollY + 6,
-          left: Math.max(8, Math.min(rect.left, window.innerWidth - 316)),
-        })
-        _setVIPPopoverSignal(prev => {
-          const prevId = prev ? String(prev.id || prev.signal_code || prev.ticker || '') : null
-          return prevId === id ? null : signal
-        })
-        _setVIPPopover(prev => prev === id ? null : id)
-      }}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: '5px',
-        padding: '5px 12px', borderRadius: '8px', cursor: 'pointer',
-        fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
-        background: 'rgba(168,85,247,0.12)',
-        border: '1px solid rgba(168,85,247,0.35)',
-        color: '#a855f7', marginTop: '10px',
-      }}
-    >
-      🤖 Phân tích AI
-    </button>
-  )
-}
-
-function VIPAIPopoverRoot() {
-  const [openId,  setOpenId]  = useState(null)
-  const [pos,     setPos]     = useState({ top: 0, left: 0 })
-  const [signal,  setSignal]  = useState(null)
-  const ref = useRef(null)
-
-  // Đăng ký setters vào module-level vars để VIPAIBtn dùng được
-  useEffect(() => {
-    _setVIPPopover       = setOpenId
-    _setVIPPopoverPos    = setPos
-    _setVIPPopoverSignal = setSignal
-    return () => { _setVIPPopover = null; _setVIPPopoverPos = null; _setVIPPopoverSignal = null }
-  }, [])
-
-  useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpenId(null) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  if (!openId || !signal) return null
-  const scores = computeVIPScores(signal)
-
-  return (
-    <div ref={ref} style={{
-      position: 'fixed', top: pos.top, left: pos.left,
-      zIndex: 99999, width: '300px',
-      background: '#080e1a', border: '1px solid #3b1f6b',
-      borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.8)',
-      padding: '14px 16px',
-    }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <div>
-          <span style={{ fontSize: '13px', fontWeight: 700, color: '#e2d9f3' }}>🤖 AI phân tích</span>
-          <span style={{ marginLeft: '8px', fontSize: '13px', fontWeight: 700, color: '#a855f7' }}>
-            {signal.ticker || signal.code}
-          </span>
-        </div>
-        <button onClick={() => setOpenId(null)}
-          style={{ background: 'none', border: 'none', color: '#7c6fa0', cursor: 'pointer', fontSize: '20px', lineHeight: 1 }}>×</button>
-      </div>
-
-      <div style={{ fontSize: '10px', color: '#7c6fa0', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '10px' }}>
-        AI đánh giá dựa trên:
-      </div>
-
-      {/* Feature bars */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
-        {VIP_FEATURES.map(({ key, label, weight, icon }) => {
-          const score  = scores[key]
-          const status = vipStatusOf(score)
-          return (
-            <div key={key}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                <span style={{ fontSize: '12px', color: '#9d8ec0', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  {icon} {label}
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '10px', color: status.color, fontWeight: 600 }}>{status.label}</span>
-                  <span style={{ fontSize: '10px', color: '#2d2550', minWidth: '26px', textAlign: 'right' }}>{weight}%</span>
-                </div>
-              </div>
-              <div style={{ height: '4px', background: '#1a1230', borderRadius: '2px', overflow: 'hidden' }}>
-                <div style={{ height: '100%', borderRadius: '2px', width: `${score}%`, background: status.color, opacity: 0.85, transition: 'width .4s ease' }} />
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Watch note */}
-      <div style={{ borderTop: '1px solid #2d2550', paddingTop: '10px' }}>
-        <div style={{ fontSize: '10px', color: '#a855f7', fontWeight: 600, marginBottom: '4px' }}>📡 AI đang theo dõi</div>
-        <div style={{ fontSize: '11px', color: '#7c6fa0', lineHeight: 1.65 }}>{vipWatchNote(scores)}</div>
-      </div>
-    </div>
-  )
-}
-
 // ─── Signal Card ─────────────────────────────────────────────
 function SignalCard({ signal }) {
   const isBuy  = (signal.action || 'BUY') === 'BUY'
@@ -357,7 +195,6 @@ function SignalCard({ signal }) {
               {signal.position_pct != null && <span>📊 Tỷ trọng: <b style={{ color: C.purpleLight }}>{signal.position_pct}%</b></span>}
             </div>
           )}
-          <VIPAIBtn signal={signal} />
         </>
       ) : (
         // ── SELL signal fields ─────────────────────────────────
@@ -391,7 +228,6 @@ function SignalCard({ signal }) {
               <span>📊 Bán: <b style={{ color: C.purpleLight }}>{signal.exit_quantity_pct}%</b></span>
             )}
           </div>
-          <VIPAIBtn signal={signal} />
         </>
       )}
     </div>
@@ -685,14 +521,11 @@ function InlineAIChat({ userId }) {
   // ─── Load chat history + inject market summary nếu chưa có lịch sử ───
   useEffect(() => {
     async function initChat() {
-      // AbortController + timeout để tránh treo cứng khi Render cold start (50s+)
-      const ctrl1  = new AbortController()
-      const timer1 = setTimeout(() => ctrl1.abort(), 8000)
+      // 1. Thử load lịch sử chat
+      // BUG7 FIX: backend trả về d.history (không phải d.messages)
+      // BUG7 FIX: convert format {message, response} → [{role:'user'}, {role:'assistant'}]
       try {
-        const r = await fetch(`${API_BASE}/chat/history?user_id=${userId}&limit=30`, {
-          headers: authHeaders(), signal: ctrl1.signal,
-        })
-        clearTimeout(timer1)
+        const r = await fetch(`${API_BASE}/chat/history?user_id=${userId}&limit=30`, { headers: authHeaders() })
         const d = await r.json()
         if (d.success && d.history?.length > 0) {
           const converted = []
@@ -703,29 +536,36 @@ function InlineAIChat({ userId }) {
           if (converted.length > 0) {
             setMessages(converted)
             setExpanded(true)
-            return
+            return  // Đã có lịch sử → không inject market summary
           }
         }
-      } catch { clearTimeout(timer1) }
+      } catch {}
 
-      // Fetch market risk — cũng có timeout riêng
-      const ctrl2  = new AbortController()
-      const timer2 = setTimeout(() => ctrl2.abort(), 5000)
+      // 2. Chưa có lịch sử → fetch market risk và tạo tin nhắn chào
       try {
-        const mr = await fetch(`${VIP_API}/api/market-risk`, { signal: ctrl2.signal })
-        clearTimeout(timer2)
+        const mr = await fetch(`${VIP_API}/api/market-risk`)
         const md = await mr.json()
         if (md.success && md.data) {
-          const m          = md.data
+          const m = md.data
           const mode       = m.market_mode || '—'
           const risk       = m.risk_score ?? '—'
           const allocation = m.allocation ?? '—'
           const date       = m.date ? new Date(m.date).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit' }) : ''
-          const riskEmoji  = risk <= 40 ? '🟢' : risk <= 65 ? '🟡' : '🔴'
-          const summary    = `Xin chào! Đây là tóm tắt thị trường hôm nay (${date}):\n\n${riskEmoji} Chế độ thị trường: ${mode}\n📊 Điểm rủi ro: ${risk}/100\n💼 Tỷ trọng khuyến nghị: ${allocation}%\n\nBạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục hiện tại không?`
+
+          // Màu theo risk score
+          const riskEmoji = risk <= 40 ? '🟢' : risk <= 65 ? '🟡' : '🔴'
+
+          const summary = `Xin chào! Đây là tóm tắt thị trường hôm nay (${date}):
+
+${riskEmoji} Chế độ thị trường: ${mode}
+📊 Điểm rủi ro: ${risk}/100
+💼 Tỷ trọng khuyến nghị: ${allocation}%
+
+Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục hiện tại không?`
+
           setMessages([{ role: 'assistant', content: summary }])
         }
-      } catch { clearTimeout(timer2) }
+      } catch {}
     }
     initChat()
   }, [userId])
@@ -960,9 +800,6 @@ export default function VIPDashboard({ user, onSwitchBasic, onOpenIIS }) {
         )}
         {tab === 'portfolio' && <VIPPortfolioTab userId={user.email} />}
       </div>
-
-      {/* AI Analysis Popover — global fixed, dùng chung cho toàn VIP */}
-      <VIPAIPopoverRoot />
     </div>
   )
 }

@@ -11,9 +11,6 @@ export default function LandingPage({ onLogin }) {
   const [loginToken, setLoginToken] = useState('')
   const [loginUserData, setLoginUserData] = useState(null)
   const [isLogin, setIsLogin] = useState(true)
-  const [showForgotPwd, setShowForgotPwd] = useState(false)
-  const [forgotEmail, setForgotEmail] = useState('')
-  const [forgotStatus, setForgotStatus] = useState('')  // '' | 'loading' | 'sent' | 'error'
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -867,17 +864,6 @@ export default function LandingPage({ onLogin }) {
                 />
               </div>
 
-              {isLogin && (
-                <div style={{textAlign:'right',marginBottom:'8px',marginTop:'-4px'}}>
-                  <button
-                    type="button"
-                    onClick={() => { setShowAuth(false); setShowForgotPwd(true); }}
-                    style={{background:'none',border:'none',color:'#3b82f6',fontSize:'12px',cursor:'pointer',padding:0}}
-                  >
-                    Quên mật khẩu?
-                  </button>
-                </div>
-              )}
               <button type="submit" className="btn-submit">
                 {isLogin ? 'Đăng nhập' : 'Tạo tài khoản'}
               </button>
@@ -1347,13 +1333,6 @@ export default function LandingPage({ onLogin }) {
       `}</style>
 
       {/* ── CHANGE PASSWORD MODAL (first login) ── */}
-      {showForgotPwd && (
-        <ForgotPwdModal
-          onClose={() => { setShowForgotPwd(false); setForgotStatus(''); setForgotEmail(''); }}
-          onBackToLogin={() => { setShowForgotPwd(false); setShowAuth(true); }}
-        />
-      )}
-
       {showChangePwd && (
         <ChangePwdModal
           token={loginToken}
@@ -1759,108 +1738,6 @@ function ChangePwdModal({ token, userData, onSuccess }) {
           </button>
           <div style={S.hint}>Sau khi đổi mật khẩu thành công bạn sẽ vào trang chính ngay lập tức</div>
         </div>
-      </div>
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────
-// FORGOT PASSWORD MODAL
-// ─────────────────────────────────────────────────────────────
-function ForgotPwdModal({ onClose, onBackToLogin }) {
-  const API_URL = window.location.hostname.includes('staging')
-    ? 'https://ai-advisor1-staging.onrender.com'
-    : 'https://ai-advisor1-backend.onrender.com'
-
-  const [email, setEmail] = useState('')
-  const [status, setStatus] = useState('') // '' | 'loading' | 'sent' | 'error'
-  const [errMsg, setErrMsg] = useState('')
-
-  const handleSubmit = async () => {
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setErrMsg('Vui lòng nhập email hợp lệ'); return
-    }
-    setStatus('loading'); setErrMsg('')
-    try {
-      const res  = await fetch(`${API_URL}/api/auth/forgot-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      })
-      const data = await res.json()
-      if (data.success) setStatus('sent')
-      else { setErrMsg(data.error || 'Lỗi không xác định'); setStatus('error') }
-    } catch { setErrMsg('Không thể kết nối server. Thử lại sau.'); setStatus('error') }
-  }
-
-  const S = {
-    backdrop: { position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:16, zIndex:9999, fontFamily:'inherit' },
-    card: { background:'#fff', borderRadius:12, padding:'32px 28px', width:'100%', maxWidth:400, boxShadow:'0 20px 60px rgba(0,0,0,0.15)', position:'relative' },
-    closeBtn: { position:'absolute', top:16, right:16, background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:20 },
-    logo: { textAlign:'center', marginBottom:20 },
-    title: { fontSize:22, fontWeight:700, color:'#1e293b', textAlign:'center', margin:'0 0 6px' },
-    sub: { fontSize:13, color:'#64748b', textAlign:'center', lineHeight:1.6, margin:'0 0 24px' },
-    label: { display:'block', fontSize:13, fontWeight:600, color:'#475569', marginBottom:6 },
-    input: { width:'100%', border:'1.5px solid #e2e8f0', borderRadius:8, padding:'11px 14px', fontSize:14, color:'#1e293b', outline:'none', boxSizing:'border-box', fontFamily:'inherit' },
-    btn: { width:'100%', padding:'13px', background:'linear-gradient(135deg,#3b82f6,#8b5cf6)', color:'#fff', border:'none', borderRadius:8, fontSize:14, fontWeight:700, cursor:'pointer', marginTop:16 },
-    err: { background:'#fef2f2', border:'1px solid #fecaca', borderRadius:6, padding:'10px 12px', fontSize:12, color:'#dc2626', marginTop:10 },
-    backLink: { textAlign:'center', marginTop:16, fontSize:13, color:'#64748b' },
-    successBox: { textAlign:'center', padding:'8px 0' },
-    successIcon: { fontSize:48, marginBottom:12 },
-  }
-
-  return (
-    <div style={S.backdrop} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={S.card}>
-        <button style={S.closeBtn} onClick={onClose}>✕</button>
-        <div style={S.logo}>
-          <span style={{fontWeight:700,fontSize:'18px',background:'linear-gradient(135deg,#3b82f6,#8b5cf6)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>AI Advisor</span>
-        </div>
-
-        {status !== 'sent' ? (<>
-          <h2 style={S.title}>Quên mật khẩu?</h2>
-          <p style={S.sub}>Nhập email của bạn, chúng tôi sẽ gửi link đặt lại mật khẩu ngay.</p>
-
-          <label style={S.label}>Email</label>
-          <input
-            style={S.input}
-            type="email"
-            placeholder="email@example.com"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-          />
-
-          {errMsg && <div style={S.err}>⚠ {errMsg}</div>}
-
-          <button
-            style={{...S.btn, opacity: status === 'loading' ? 0.7 : 1}}
-            onClick={handleSubmit}
-            disabled={status === 'loading'}
-          >
-            {status === 'loading' ? 'Đang gửi...' : '📧 GỬI LINK ĐẶT LẠI MẬT KHẨU'}
-          </button>
-
-          <div style={S.backLink}>
-            <button onClick={onBackToLogin} style={{background:'none',border:'none',color:'#3b82f6',cursor:'pointer',fontSize:13}}>
-              ← Quay lại đăng nhập
-            </button>
-          </div>
-        </>) : (
-          <div style={S.successBox}>
-            <div style={S.successIcon}>📬</div>
-            <h2 style={S.title}>Kiểm tra email!</h2>
-            <p style={S.sub}>
-              Chúng tôi đã gửi link đặt lại mật khẩu đến<br/>
-              <strong style={{color:'#1e293b'}}>{email}</strong><br/><br/>
-              Link có hiệu lực trong <strong>1 giờ</strong>.<br/>
-              Kiểm tra cả hòm thư <strong>Spam</strong> nếu không thấy.
-            </p>
-            <button onClick={onBackToLogin} style={{...S.btn, background:'linear-gradient(135deg,#3b82f6,#8b5cf6)'}}>
-              Quay lại đăng nhập
-            </button>
-          </div>
-        )}
       </div>
     </div>
   )
