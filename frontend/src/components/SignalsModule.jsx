@@ -17,6 +17,91 @@ const VN30_TICKERS = new Set([
 ]);
 
 // Nhận props từ App.jsx — dùng chung data, không tự fetch riêng (tránh URL sai)
+
+function AIBtn({ signal, openPopover, handleAIBtn }) {
+  const id     = sigId(signal)
+  const isOpen = openPopover === id
+  return (
+    <button
+      onClick={(e) => handleAIBtn(e, signal)}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: '5px',
+        padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
+        fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
+        background: isOpen ? 'rgba(59,130,246,0.2)' : 'rgba(59,130,246,0.08)',
+        border: `1px solid ${isOpen ? '#3b82f6' : 'rgba(59,130,246,0.3)'}`,
+        color: '#3b82f6', transition: 'all .15s',
+      }}
+    >
+      🤖 Phân tích AI
+    </button>
+  )
+}
+
+function AIPopover({ openPopover, popoverSignal, popoverRef, popoverPos, setOpenPopover, computeScores, FEATURES, statusOf, watchNote }) {
+  if (!openPopover || !popoverSignal) return null
+  const scores = computeScores(popoverSignal)
+  return (
+    <div
+      ref={popoverRef}
+      style={{
+        position: 'fixed', top: popoverPos.top, left: popoverPos.left,
+        zIndex: 99999, width: '300px',
+        background: '#080e1a', border: '1px solid #1e3a5f',
+        borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+        padding: '14px 16px',
+      }}
+    >
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <div>
+          <span style={{ fontSize: '13px', fontWeight: 700, color: '#e2e8f0' }}>🤖 AI phân tích</span>
+          <span style={{ marginLeft: '8px', fontSize: '13px', fontWeight: 700, color: '#3b82f6' }}>
+            {popoverSignal.ticker || popoverSignal.code}
+          </span>
+        </div>
+        <button onClick={() => setOpenPopover(null)}
+          style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: '0 2px' }}>
+          ×
+        </button>
+      </div>
+
+      <div style={{ fontSize: '10px', color: '#475569', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '10px' }}>
+        AI đánh giá dựa trên:
+      </div>
+
+      {/* Feature bars */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+        {FEATURES.map(({ key, label, weight, icon }) => {
+          const score  = scores[key]
+          const status = statusOf(score)
+          return (
+            <div key={key}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                <span style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  {icon} {label}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '10px', color: status.color, fontWeight: 600 }}>{status.label}</span>
+                  <span style={{ fontSize: '10px', color: '#2d3f55', minWidth: '26px', textAlign: 'right' }}>{weight}%</span>
+                </div>
+              </div>
+              <div style={{ height: '4px', background: '#1a2535', borderRadius: '2px', overflow: 'hidden' }}>
+                <div style={{ height: '100%', borderRadius: '2px', width: `${score}%`, background: status.color, opacity: 0.85, transition: 'width .4s ease' }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Watch note */}
+      <div style={{ borderTop: '1px solid #1e293b', paddingTop: '10px' }}>
+        <div style={{ fontSize: '10px', color: '#3b82f6', fontWeight: 600, marginBottom: '4px' }}>📡 AI đang theo dõi</div>
+        <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.65 }}>{watchNote(scores)}</div>
+      </div>
+    </div>
+  )
+}
 export default function SignalsModule({ signals: propSignals, loading: propLoading, onRefresh }) {
   const [signals,   setSignals]   = useState(propSignals || []);
   const [loading,   setLoading]   = useState(propLoading ?? true);
@@ -109,9 +194,9 @@ const getExitReason = (signal) => {
   };
   // ================================================
 
-  // ════════════════════════════════════════════════════════
-  // SIGNAL REASONING — Bloomberg popover (no inline components)
-  // ════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════════
+  // SIGNAL REASONING — Bloomberg-style feature bars (Popover)
+  // ════════════════════════════════════════════════════════════════════════
 
   const FEATURES = [
     { key: 'trend',      label: 'Xu hướng',    weight: 30, icon: '📈' },
@@ -141,43 +226,51 @@ const getExitReason = (signal) => {
     }
   }
 
-  const statusOf = (sc) =>
-    sc >= 80 ? { label: 'Tích cực',     color: '#22c55e' }
-  : sc >= 60 ? { label: 'Khá tốt',      color: '#3b82f6' }
-  : sc >= 40 ? { label: 'Trung bình',   color: '#f59e0b' }
-  :            { label: 'Cần theo dõi', color: '#ef4444' }
+  const statusOf = (score) =>
+    score >= 80 ? { label: 'Tích cực',     color: '#22c55e' }
+  : score >= 60 ? { label: 'Khá tốt',      color: '#3b82f6' }
+  : score >= 40 ? { label: 'Trung bình',   color: '#f59e0b' }
+  :               { label: 'Cần theo dõi', color: '#ef4444' }
 
   const watchNote = (scores) => {
     const weak = FEATURES.filter(f => scores[f.key] < 50).map(f => f.label.toLowerCase())
-    return weak.length
-      ? `AI đang theo dõi ${weak.join(', ')}. Tín hiệu sẽ được đánh giá lại nếu suy yếu tiếp.`
-      : 'Tất cả tiêu chí đạt ngưỡng tích cực. AI sẽ cảnh báo nếu có điều kiện thay đổi.'
+    if (!weak.length) return 'Tất cả tiêu chí đều đạt ngưỡng tích cực. AI sẽ cảnh báo nếu bất kỳ điều kiện nào suy yếu.'
+    return `AI đang theo dõi ${weak.join(', ')}. Tín hiệu sẽ được đánh giá lại nếu các chỉ số này tiếp tục suy yếu.`
   }
 
+  // id luôn là string để so sánh nhất quán
   const sigId = (s) => String(s.id || s.signal_code || s.ticker || '')
 
-  // Popover state — lưu signal object trực tiếp tránh stale closure
-  const [openPopover,   setOpenPopover]   = useState(null)
-  const [popoverPos,    setPopoverPos]    = useState({ top: 0, left: 0 })
-  const [popoverSignal, setPopoverSignal] = useState(null)
+  // Popover state
+  const [openPopover, setOpenPopover] = useState(null)
+  const [popoverPos,  setPopoverPos]  = useState({ top: 0, left: 0 })
+  const [popoverSignal, setPopoverSignal] = useState(null)  // lưu signal object trực tiếp
   const popoverRef = React.useRef(null)
 
   useEffect(() => {
-    const h = (e) => { if (popoverRef.current && !popoverRef.current.contains(e.target)) setOpenPopover(null) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
+    const handler = (e) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target))
+        setOpenPopover(null)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
   }, [])
 
   const handleAIBtn = (e, signal) => {
     e.stopPropagation()
     const id = sigId(signal)
     if (openPopover === id) { setOpenPopover(null); setPopoverSignal(null); return }
-    const rect = e.currentTarget.getBoundingClientRect()
-    setPopoverPos({ top: rect.bottom + (window.scrollY || 0) + 6, left: Math.max(8, Math.min(rect.left, window.innerWidth - 316)) })
+    const rect   = e.currentTarget.getBoundingClientRect()
+    const scrollY = window.scrollY || document.documentElement.scrollTop
+    setPopoverPos({
+      top:  rect.bottom + scrollY + 6,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - 316)),
+    })
     setOpenPopover(id)
-    setPopoverSignal(signal)
+    setPopoverSignal(signal)  // lưu trực tiếp — tránh stale closure
   }
-  // ════════════════════════════════════════════════════════
+
+  // ════════════════════════════════════════════════════════════════════════
 
   if (loading) {
     return (
@@ -429,14 +522,7 @@ const getExitReason = (signal) => {
                   </div>
 
                   {/* ── AI Reasoning ── */}
-                  {/* AI Analysis button */}
-                  <button onClick={(e) => handleAIBtn(e, signal)} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '5px',
-                    marginTop: '10px', padding: '4px 10px', borderRadius: '6px',
-                    cursor: 'pointer', fontSize: '11px', fontWeight: 600,
-                    background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.3)',
-                    color: '#3b82f6',
-                  }}>🤖 Phân tích AI</button>
+                  <div style={{ marginTop: '10px' }}><AIBtn signal={signal} openPopover={openPopover} handleAIBtn={handleAIBtn} /></div>
                 </div>
               );
             })}
@@ -542,14 +628,8 @@ const getExitReason = (signal) => {
                     </span>
                   </div>
 
-                  {/* ── AI Reasoning ── */}
-                  <button onClick={(e) => handleAIBtn(e, signal)} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '5px',
-                    marginTop: '10px', padding: '4px 10px', borderRadius: '6px',
-                    cursor: 'pointer', fontSize: '11px', fontWeight: 600,
-                    background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.3)',
-                    color: '#3b82f6',
-                  }}>🤖 Phân tích AI</button>
+                  {/* ── AI Analysis ── */}
+                  <div style={{ marginTop: '10px' }}><AIBtn signal={signal} openPopover={openPopover} handleAIBtn={handleAIBtn} /></div>
                 </div>
               );
             })}
@@ -645,15 +725,7 @@ const getExitReason = (signal) => {
                             </span>
                           </div>
                         </td>
-                        <td>
-                          <button onClick={(e) => handleAIBtn(e, signal)} style={{
-                            display: 'inline-flex', alignItems: 'center', gap: '4px',
-                            padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
-                            fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
-                            background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.3)',
-                            color: '#3b82f6',
-                          }}>🤖 Phân tích AI</button>
-                        </td>
+                        <td><AIBtn signal={signal} openPopover={openPopover} handleAIBtn={handleAIBtn} /></td>
                       </tr>
                     </React.Fragment>
                   );
@@ -860,54 +932,8 @@ const getExitReason = (signal) => {
         }
       `}</style>
 
-      {/* AI Analysis Popover */}
-      {openPopover && popoverSignal && (
-        <div ref={popoverRef} style={{
-          position: 'fixed', top: popoverPos.top, left: popoverPos.left,
-          zIndex: 99999, width: '300px',
-          background: '#080e1a', border: '1px solid #1e3a5f',
-          borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
-          padding: '14px 16px',
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <div>
-              <span style={{ fontSize: '13px', fontWeight: 700, color: '#e2e8f0' }}>🤖 AI phân tích</span>
-              <span style={{ marginLeft: '8px', fontSize: '13px', fontWeight: 700, color: '#3b82f6' }}>
-                {popoverSignal.ticker || popoverSignal.code}
-              </span>
-            </div>
-            <button onClick={() => setOpenPopover(null)}
-              style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '20px', lineHeight: 1 }}>×</button>
-          </div>
-          <div style={{ fontSize: '10px', color: '#475569', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '10px' }}>
-            AI đánh giá dựa trên:
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
-            {FEATURES.map(({ key, label, weight, icon }) => {
-              const sc = computeScores(popoverSignal)[key]
-              const st = statusOf(sc)
-              return (
-                <div key={key}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                    <span style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '5px' }}>{icon} {label}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '10px', color: st.color, fontWeight: 600 }}>{st.label}</span>
-                      <span style={{ fontSize: '10px', color: '#2d3f55', minWidth: '26px', textAlign: 'right' }}>{weight}%</span>
-                    </div>
-                  </div>
-                  <div style={{ height: '4px', background: '#1a2535', borderRadius: '2px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', borderRadius: '2px', width: `${sc}%`, background: st.color, opacity: 0.85, transition: 'width .4s ease' }} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-          <div style={{ borderTop: '1px solid #1e293b', paddingTop: '10px' }}>
-            <div style={{ fontSize: '10px', color: '#3b82f6', fontWeight: 600, marginBottom: '4px' }}>📡 AI đang theo dõi</div>
-            <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.65 }}>{watchNote(computeScores(popoverSignal))}</div>
-          </div>
-        </div>
-      )}
+      {/* AI Analysis Popover — global fixed position */}
+      <AIPopover />
     </div>
   );
 }
