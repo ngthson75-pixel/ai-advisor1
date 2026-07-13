@@ -24,6 +24,18 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
   const [histLoaded, setHistLoaded]     = useState(false)
   const chatEndRef = useRef(null)
 
+  // ── Lắng nghe "Phân tích AI" từ SignalsModule ──────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail) {
+        setExpanded(true)
+        sendMessage(e.detail)
+      }
+    }
+    window.addEventListener('askAI', handler)
+    return () => window.removeEventListener('askAI', handler)
+  }, [])
+
   // Load chat history on mount
   useEffect(() => {
     if (!userId || histLoaded) return
