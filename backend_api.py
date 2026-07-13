@@ -679,14 +679,13 @@ def get_portfolio_context(user_id, user_tier='free'):
         cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
         cash = cash_pos.cash_amount if cash_pos else 0
 
-        # ALL active BUY signals (for Signal list)
-        # Fix: bao gồm TẤT CẢ signals đang mở để AI Chat nhận diện đúng
-        # Không giới hạn VN30 — AI cần biết toàn bộ danh sách tín hiệu
+        # ALL active BUY signals — lấy TẤT CẢ để AI Chat nhận diện đúng
+        # Không filter strength hay VN30 cho signal_tickers
         signals = session.query(Signal).filter(
-            Signal.action == 'BUY', Signal.status == 'open',
-            Signal.strength >= 65
+            Signal.action == 'BUY', Signal.status == 'open'
         ).all()
         signal_tickers = set([s.ticker for s in signals])
+
 
         # MARKET DASHBOARD: Inject latest market risk into context
         market_context = ""
