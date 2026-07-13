@@ -370,7 +370,7 @@ const getExitReason = (signal) => {
 
                   {/* ── AI Reasoning ── */}
                   <div style={{ marginTop: '10px' }}><button
-                    onClick={() => window.dispatchEvent(new CustomEvent('askAI', {detail: `Cổ phiếu ${signal.ticker || signal.code} đang có tín hiệu MUA trong danh sách Buysell Signal với score ${signal.strength||0}%. Giá vào: ${(signal.entry_price||0).toLocaleString('vi-VN')}, Stop loss: ${(signal.stop_loss||0).toLocaleString('vi-VN')}, Take profit: ${(signal.take_profit||0).toLocaleString('vi-VN')}. Bạn hãy phân tích và cho tôi biết có nên mua không?`}))}
+                    onClick={() => window.dispatchEvent(new CustomEvent('askAI', {detail: `[IN BUYSELL SIGNAL] Cổ phiếu ${signal.ticker || signal.code} có tín hiệu MUA với score ${signal.strength||0}%, giá vào ${(signal.entry_price||0).toLocaleString('vi-VN')}, SL ${(signal.stop_loss||0).toLocaleString('vi-VN')}, TP ${(signal.take_profit||0).toLocaleString('vi-VN')}. Phân tích tín hiệu này và cho biết nên hành động thế nào?`}))}
                     style={{ display:'inline-flex', alignItems:'center', gap:'5px', padding:'4px 10px', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:600, whiteSpace:'nowrap', background:'rgba(59,130,246,0.08)', border:'1px solid rgba(59,130,246,0.3)', color:'#3b82f6' }}
                   >🤖 Phân tích AI</button></div>
                 </div>
@@ -480,7 +480,7 @@ const getExitReason = (signal) => {
 
                   {/* ── AI Analysis ── */}
                   <div style={{ marginTop: '10px' }}><button
-                    onClick={() => window.dispatchEvent(new CustomEvent('askAI', {detail: `Cổ phiếu ${signal.ticker || signal.code} đang có tín hiệu MUA trong danh sách Buysell Signal với score ${signal.strength||0}%. Giá vào: ${(signal.entry_price||0).toLocaleString('vi-VN')}, Stop loss: ${(signal.stop_loss||0).toLocaleString('vi-VN')}, Take profit: ${(signal.take_profit||0).toLocaleString('vi-VN')}. Bạn hãy phân tích và cho tôi biết có nên mua không?`}))}
+                    onClick={() => window.dispatchEvent(new CustomEvent('askAI', {detail: `[IN BUYSELL SIGNAL] Cổ phiếu ${signal.ticker || signal.code} có tín hiệu MUA với score ${signal.strength||0}%, giá vào ${(signal.entry_price||0).toLocaleString('vi-VN')}, SL ${(signal.stop_loss||0).toLocaleString('vi-VN')}, TP ${(signal.take_profit||0).toLocaleString('vi-VN')}. Phân tích tín hiệu này và cho biết nên hành động thế nào?`}))}
                     style={{ display:'inline-flex', alignItems:'center', gap:'5px', padding:'4px 10px', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:600, whiteSpace:'nowrap', background:'rgba(59,130,246,0.08)', border:'1px solid rgba(59,130,246,0.3)', color:'#3b82f6' }}
                   >🤖 Phân tích AI</button></div>
                 </div>
@@ -579,7 +579,7 @@ const getExitReason = (signal) => {
                           </div>
                         </td>
                         <td><button
-                    onClick={() => window.dispatchEvent(new CustomEvent('askAI', {detail: `Cổ phiếu ${signal.ticker || signal.code} đang có tín hiệu MUA trong danh sách Buysell Signal với score ${signal.strength||0}%. Giá vào: ${(signal.entry_price||0).toLocaleString('vi-VN')}, Stop loss: ${(signal.stop_loss||0).toLocaleString('vi-VN')}, Take profit: ${(signal.take_profit||0).toLocaleString('vi-VN')}. Bạn hãy phân tích và cho tôi biết có nên mua không?`}))}
+                    onClick={() => window.dispatchEvent(new CustomEvent('askAI', {detail: `[IN BUYSELL SIGNAL] Cổ phiếu ${signal.ticker || signal.code} có tín hiệu MUA với score ${signal.strength||0}%, giá vào ${(signal.entry_price||0).toLocaleString('vi-VN')}, SL ${(signal.stop_loss||0).toLocaleString('vi-VN')}, TP ${(signal.take_profit||0).toLocaleString('vi-VN')}. Phân tích tín hiệu này và cho biết nên hành động thế nào?`}))}
                     style={{ display:'inline-flex', alignItems:'center', gap:'5px', padding:'4px 10px', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:600, whiteSpace:'nowrap', background:'rgba(59,130,246,0.08)', border:'1px solid rgba(59,130,246,0.3)', color:'#3b82f6' }}
                   >🤖 Phân tích AI</button></td>
                       </tr>
