@@ -195,6 +195,11 @@ function SignalCard({ signal }) {
               {signal.position_pct != null && <span>📊 Tỷ trọng: <b style={{ color: C.purpleLight }}>{signal.position_pct}%</b></span>}
             </div>
           )}
+
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('askAI', {detail: `[IN BUYSELL SIGNAL] Co phieu ${signal.ticker} tin hieu MUA score ${signal.strength||signal.confidence||0}%, gia vao ${(signal.entry_price||0).toLocaleString('vi-VN')}, SL ${(signal.stop_loss||0).toLocaleString('vi-VN')}, TP ${(signal.take_profit||0).toLocaleString('vi-VN')}. Phan tich va cho biet nen hanh dong the nao?`}))}
+            style={{ display:'inline-flex', alignItems:'center', gap:'5px', marginTop:'10px', padding:'5px 12px', borderRadius:'8px', cursor:'pointer', fontSize:'11px', fontWeight:600, background:'rgba(168,85,247,0.12)', border:'1px solid rgba(168,85,247,0.35)', color:'#a855f7' }}
+          >🤖 Phân tích AI</button>
         </>
       ) : (
         // ── SELL signal fields ─────────────────────────────────
@@ -228,10 +233,14 @@ function SignalCard({ signal }) {
               <span>📊 Bán: <b style={{ color: C.purpleLight }}>{signal.exit_quantity_pct}%</b></span>
             )}
           </div>
+
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('askAI', {detail: `[IN BUYSELL SIGNAL] Co phieu ${signal.ticker} tin hieu BAN. Ly do: ${signal.exit_reason||'He thong'}. Gia vao ${(signal.entry_price||0).toLocaleString('vi-VN')}, gia ra ${(signal.exit_price||0).toLocaleString('vi-VN')}. Phan tich va cho biet nen ban khong?`}))}
+            style={{ display:'inline-flex', alignItems:'center', gap:'5px', marginTop:'10px', padding:'5px 12px', borderRadius:'8px', cursor:'pointer', fontSize:'11px', fontWeight:600, background:'rgba(168,85,247,0.12)', border:'1px solid rgba(168,85,247,0.35)', color:'#a855f7' }}
+          >🤖 Phân tích AI</button>
         </>
       )}
-    </div>
-  )
+    </div> )
 }
 
 // ─── Signals Tab ─────────────────────────────────────────────
@@ -516,6 +525,17 @@ function InlineAIChat({ userId }) {
   const chatEndRef = useRef(null)
   const inputRef   = useRef(null)
 
+  // Langhe Phan tich AI
+  useEffect(() => {
+    const h = (e) => {
+      if (e.detail) { setExpanded(true); sendMsg(e.detail)
+        setTimeout(() => { const el = document.getElementById('vip-ai-chat'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}) }, 150)
+      }
+    }
+    window.addEventListener('askAI', h)
+    return () => window.removeEventListener('askAI', h)
+  }, [])
+
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   // ─── Load chat history + inject market summary nếu chưa có lịch sử ───
@@ -599,7 +619,7 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
   const latestMessages = expanded ? messages : messages.slice(-3)
 
   return (
-    <div style={{ maxWidth: '760px', margin: '0 auto 16px', padding: '0 16px' }}>
+    <div id="vip-ai-chat" style=={{ maxWidth: '760px', margin: '0 auto 16px', padding: '0 16px' }}>
       <div style={{ background: C.bgCard, border: `1px solid ${C.purpleLight}55`, borderRadius: '16px', overflow: 'hidden', boxShadow: `0 4px 24px rgba(124,58,237,0.15)` }}>
         <div style={{ padding: '12px 16px', background: `linear-gradient(135deg, ${C.purple}33, ${C.purpleLight}22)`, borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
