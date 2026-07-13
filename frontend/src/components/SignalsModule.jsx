@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, AlertCircle, RefreshCw } from 'lucide-react';
-import { track } from '../analytics';
 
 // FIX: hostname detection — VITE_API_URL không set trên Cloudflare Pages
 const _h = typeof window !== 'undefined' ? window.location.hostname : ''
@@ -18,7 +17,7 @@ const VN30_TICKERS = new Set([
 ]);
 
 // Nhận props từ App.jsx — dùng chung data, không tự fetch riêng (tránh URL sai)
-export default function SignalsModule({ signals: propSignals, loading: propLoading, onRefresh, userTier = 'free' }) {
+export default function SignalsModule({ signals: propSignals, loading: propLoading, onRefresh }) {
   const [signals,   setSignals]   = useState(propSignals || []);
   const [loading,   setLoading]   = useState(propLoading ?? true);
   const [error,     setError]     = useState(null);
@@ -46,10 +45,7 @@ export default function SignalsModule({ signals: propSignals, loading: propLoadi
     if (propSignals === undefined) fetchSignalsFallback();
   }, []);
 
-  const handleRefresh = () => {
-    track('signals_refresh', { user_tier: userTier, trigger: 'manual' })
-    onRefresh ? onRefresh() : fetchSignalsFallback()
-  };
+  const handleRefresh = () => { onRefresh ? onRefresh() : fetchSignalsFallback(); };
 
   const triggerScan = async () => {
     try {
@@ -80,17 +76,7 @@ export default function SignalsModule({ signals: propSignals, loading: propLoadi
       return db - da;
     });
   const sellSignals = signals
-    .filter(s => {
-      if (s.action !== 'SELL') return false;
-      const ticker = (s.ticker || s.code || '').toUpperCase();
-      if (userTier === 'vip') {
-        // VIP: chỉ show VN30 SELL signals
-        return VN30_TICKERS.has(ticker);
-      } else {
-        // Basic/Free: ẩn VN30 SELL (những lệnh đó thuộc VIP dashboard)
-        return !VN30_TICKERS.has(ticker);
-      }
-    })
+    .filter(s => s.action === 'SELL')
     .sort((a, b) => {
       const da = a.date ? new Date(a.date).getTime() : 0;
       const db = b.date ? new Date(b.date).getTime() : 0;
@@ -122,6 +108,168 @@ const getExitReason = (signal) => {
     return { text: 'Thủ công', icon: '⚪', color: '#94a3b8', bg: '#1e293b' };
   };
   // ================================================
+
+  // ════════════════════════════════════════════════════════════════════════
+  // SIGNAL REASONING — Bloomberg-style feature bars (Popover)
+  // ════════════════════════════════════════════════════════════════════════
+
+  const FEATURES = [
+    { key: 'trend',      label: 'Xu hướng',    weight: 30, icon: '📈' },
+    { key: 'momentum',   label: 'Động lượng',  weight: 22, icon: '⚡' },
+    { key: 'market',     label: 'Thị trường',  weight: 18, icon: '🏛️' },
+    { key: 'moneyflow',  label: 'Dòng tiền',   weight: 15, icon: '💰' },
+    { key: 'liquidity',  label: 'Thanh khoản', weight: 10, icon: '🔄' },
+    { key: 'volatility', label: 'Biến động',   weight:  5, icon: '📊' },
+  ]
+
+  const computeScores = (signal) => {
+    const s  = signal.strength || 0
+    const r  = signal.rsi      || 50
+    const rr = (() => {
+      if (signal.risk_reward) return parseFloat(signal.risk_reward)
+      if (signal.entry_price && signal.stop_loss && signal.take_profit)
+        return (signal.take_profit - signal.entry_price) / (signal.entry_price - signal.stop_loss)
+      return 2
+    })()
+    return {
+      trend:      Math.min(100, Math.round(s * 1.05)),
+      momentum:   r <= 30 ? 95 : r <= 40 ? 85 : r <= 50 ? 70 : r <= 60 ? 52 : 32,
+      market:     s >= 80 ? 88 : s >= 65 ? 70 : s >= 50 ? 52 : 38,
+      moneyflow:  Math.min(100, Math.round((s * 0.6) + (Math.max(0, 70 - r) * 0.8))),
+      liquidity:  signal.stock_type === 'Blue Chip' ? 95 : signal.stock_type === 'Mid Cap' ? 75 : 48,
+      volatility: rr >= 3 ? 88 : rr >= 2 ? 68 : rr >= 1.5 ? 48 : 30,
+    }
+  }
+
+  const statusOf = (score) =>
+    score >= 80 ? { label: 'Tích cực',     color: '#22c55e' }
+  : score >= 60 ? { label: 'Khá tốt',      color: '#3b82f6' }
+  : score >= 40 ? { label: 'Trung bình',   color: '#f59e0b' }
+  :               { label: 'Cần theo dõi', color: '#ef4444' }
+
+  const watchNote = (scores) => {
+    const weak = FEATURES.filter(f => scores[f.key] < 50).map(f => f.label.toLowerCase())
+    if (!weak.length) return 'Tất cả tiêu chí đều đạt ngưỡng tích cực. AI sẽ cảnh báo nếu bất kỳ điều kiện nào suy yếu.'
+    return `AI đang theo dõi ${weak.join(', ')}. Tín hiệu sẽ được đánh giá lại nếu các chỉ số này tiếp tục suy yếu.`
+  }
+
+  // id luôn là string để so sánh nhất quán
+  const sigId = (s) => String(s.id || s.signal_code || s.ticker || '')
+
+  // Popover state
+  const [openPopover, setOpenPopover] = useState(null)
+  const [popoverPos,  setPopoverPos]  = useState({ top: 0, left: 0 })
+  const [popoverSignal, setPopoverSignal] = useState(null)  // lưu signal object trực tiếp
+  const popoverRef = React.useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target))
+        setOpenPopover(null)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleAIBtn = (e, signal) => {
+    e.stopPropagation()
+    const id = sigId(signal)
+    if (openPopover === id) { setOpenPopover(null); setPopoverSignal(null); return }
+    const rect   = e.currentTarget.getBoundingClientRect()
+    const scrollY = window.scrollY || document.documentElement.scrollTop
+    setPopoverPos({
+      top:  rect.bottom + scrollY + 6,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - 316)),
+    })
+    setOpenPopover(id)
+    setPopoverSignal(signal)  // lưu trực tiếp — tránh stale closure
+  }
+
+  const AIBtn = ({ signal }) => {
+    const id     = sigId(signal)
+    const isOpen = openPopover === id
+    return (
+      <button
+        onClick={(e) => handleAIBtn(e, signal)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: '5px',
+          padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
+          fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
+          background: isOpen ? 'rgba(59,130,246,0.2)' : 'rgba(59,130,246,0.08)',
+          border: `1px solid ${isOpen ? '#3b82f6' : 'rgba(59,130,246,0.3)'}`,
+          color: '#3b82f6', transition: 'all .15s',
+        }}
+      >
+        🤖 Phân tích AI
+      </button>
+    )
+  }
+
+  const AIPopover = () => {
+    if (!openPopover || !popoverSignal) return null
+    const scores = computeScores(popoverSignal)
+    return (
+      <div
+        ref={popoverRef}
+        style={{
+          position: 'fixed', top: popoverPos.top, left: popoverPos.left,
+          zIndex: 99999, width: '300px',
+          background: '#080e1a', border: '1px solid #1e3a5f',
+          borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+          padding: '14px 16px',
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <div>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#e2e8f0' }}>🤖 AI phân tích</span>
+            <span style={{ marginLeft: '8px', fontSize: '13px', fontWeight: 700, color: '#3b82f6' }}>
+              {popoverSignal.ticker || popoverSignal.code}
+            </span>
+          </div>
+          <button onClick={() => setOpenPopover(null)}
+            style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: '0 2px' }}>
+            ×
+          </button>
+        </div>
+
+        <div style={{ fontSize: '10px', color: '#475569', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '10px' }}>
+          AI đánh giá dựa trên:
+        </div>
+
+        {/* Feature bars */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+          {FEATURES.map(({ key, label, weight, icon }) => {
+            const score  = scores[key]
+            const status = statusOf(score)
+            return (
+              <div key={key}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                  <span style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    {icon} {label}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '10px', color: status.color, fontWeight: 600 }}>{status.label}</span>
+                    <span style={{ fontSize: '10px', color: '#2d3f55', minWidth: '26px', textAlign: 'right' }}>{weight}%</span>
+                  </div>
+                </div>
+                <div style={{ height: '4px', background: '#1a2535', borderRadius: '2px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', borderRadius: '2px', width: `${score}%`, background: status.color, opacity: 0.85, transition: 'width .4s ease' }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Watch note */}
+        <div style={{ borderTop: '1px solid #1e293b', paddingTop: '10px' }}>
+          <div style={{ fontSize: '10px', color: '#3b82f6', fontWeight: 600, marginBottom: '4px' }}>📡 AI đang theo dõi</div>
+          <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.65 }}>{watchNote(scores)}</div>
+        </div>
+      </div>
+    )
+  }
+  // ════════════════════════════════════════════════════════════════════════
 
   if (loading) {
     return (
@@ -169,7 +317,7 @@ const getExitReason = (signal) => {
       {/* NEW: Tabs */}
       <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         <button
-          onClick={() => { setActiveTab('buy'); track('signals_tab_view', { tab: 'buy', signal_count: buySignals.length, user_tier: userTier }) }}
+          onClick={() => setActiveTab('buy')}
           style={{
             padding: '12px 24px',
             backgroundColor: activeTab === 'buy' ? '#10b981' : '#334155',
@@ -189,7 +337,7 @@ const getExitReason = (signal) => {
         </button>
         
         <button
-          onClick={() => { setActiveTab('sell'); track('signals_tab_view', { tab: 'sell', signal_count: sellSignals.length, user_tier: userTier }) }}
+          onClick={() => setActiveTab('sell')}
           style={{
             padding: '12px 24px',
             backgroundColor: activeTab === 'sell' ? '#ef4444' : '#334155',
@@ -371,6 +519,9 @@ const getExitReason = (signal) => {
                       📅 {signal.date ? new Date(signal.date).toLocaleDateString('vi-VN') : 'N/A'}
                     </span>
                   </div>
+
+                  {/* ── AI Reasoning ── */}
+                  <div style={{ marginTop: '10px' }}><AIBtn signal={signal} /></div>
                 </div>
               );
             })}
@@ -475,6 +626,9 @@ const getExitReason = (signal) => {
                       {signal.stock_type || 'N/A'}
                     </span>
                   </div>
+
+                  {/* ── AI Analysis ── */}
+                  <div style={{ marginTop: '10px' }}><AIBtn signal={signal} /></div>
                 </div>
               );
             })}
@@ -497,6 +651,7 @@ const getExitReason = (signal) => {
                   <th>Mã Tín Hiệu</th>
                   <th>Trạng Thái</th>
                   <th>Vị Thế</th>
+                  <th>Phân tích</th>
                 </tr>
               </thead>
               <tbody>
@@ -504,71 +659,74 @@ const getExitReason = (signal) => {
                   const statusDisplay = getStatusDisplay(signal);
                   const positionPct = getPositionPct(signal);
                   const barColor = positionPct === 100 ? '#10b981' : positionPct === 0 ? '#6b7280' : '#f59e0b';
+                  const sigId = signal.id || signal.signal_code || signal.ticker
                   return (
-                    <tr key={signal.id || idx}>
-                      <td>
-                        <strong style={{ color: '#3b82f6', fontSize: '16px' }}>
-                          {signal.ticker || signal.code}
-                        </strong>
-                      </td>
-                      <td>{signal.entry_price?.toLocaleString()}</td>
-                      <td style={{ color: '#ef4444' }}>{signal.stop_loss?.toLocaleString()}</td>
-                      <td style={{ color: '#10b981' }}>{signal.take_profit?.toLocaleString()}</td>
-                      <td>
-                        <span style={{
-                          padding: '4px 12px',
-                          background: (signal.strength || 0) >= 70 ? '#10b981' :
-                                     (signal.strength || 0) >= 50 ? '#3b82f6' :
-                                     (signal.strength || 0) > 0 ? '#f59e0b' : '#6b7280',
-                          color: 'white', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold'
-                        }}>
-                          {(signal.strength || 0) > 0 ? `${(signal.strength || 0).toFixed(0)}%` : 'N/A'}
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{
-                          padding: '4px 8px',
-                          background: signal.stock_type === 'Blue Chip' ? '#3b82f6' :
-                                     signal.stock_type === 'Mid Cap' ? '#8b5cf6' : '#6b7280',
-                          borderRadius: '6px', fontSize: '11px', color: 'white', fontWeight: '500'
-                        }}>
-                          {signal.stock_type || 'N/A'}
-                        </span>
-                      </td>
-                      <td style={{ color: '#94a3b8', fontSize: '13px' }}>
-                        {signal.date ? new Date(signal.date).toLocaleDateString('vi-VN') : 'N/A'}
-                      </td>
-                      {/* === 3 CỘT MỚI === */}
-                      <td>
-                        <span style={{
-                          fontFamily: 'monospace', fontSize: '12px', padding: '4px 8px',
-                          backgroundColor: '#0f172a', color: '#60a5fa',
-                          borderRadius: '6px', border: '1px solid #1e40af', fontWeight: '600'
-                        }}>
-                          {signal.signal_code || `#${signal.id}`}
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', gap: '4px',
-                          padding: '4px 10px', borderRadius: '12px',
-                          backgroundColor: statusDisplay.bg, color: statusDisplay.color,
-                          fontSize: '12px', fontWeight: '600'
-                        }}>
-                          {statusDisplay.icon} {statusDisplay.text}
-                        </span>
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <div style={{ width: '64px', height: '6px', backgroundColor: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
-                            <div style={{ width: `${positionPct}%`, height: '100%', backgroundColor: barColor, borderRadius: '3px', transition: 'width 0.3s' }} />
-                          </div>
-                          <span style={{ fontSize: '12px', color: barColor, fontWeight: '600', minWidth: '32px' }}>
-                            {positionPct}%
+                    <React.Fragment key={sigId || idx}>
+                      <tr>
+                        <td>
+                          <strong style={{ color: '#3b82f6', fontSize: '16px' }}>
+                            {signal.ticker || signal.code}
+                          </strong>
+                        </td>
+                        <td>{signal.entry_price?.toLocaleString()}</td>
+                        <td style={{ color: '#ef4444' }}>{signal.stop_loss?.toLocaleString()}</td>
+                        <td style={{ color: '#10b981' }}>{signal.take_profit?.toLocaleString()}</td>
+                        <td>
+                          <span style={{
+                            padding: '4px 12px',
+                            background: (signal.strength || 0) >= 70 ? '#10b981' :
+                                       (signal.strength || 0) >= 50 ? '#3b82f6' :
+                                       (signal.strength || 0) > 0 ? '#f59e0b' : '#6b7280',
+                            color: 'white', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold'
+                          }}>
+                            {(signal.strength || 0) > 0 ? `${(signal.strength || 0).toFixed(0)}%` : 'N/A'}
                           </span>
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                        <td>
+                          <span style={{
+                            padding: '4px 8px',
+                            background: signal.stock_type === 'Blue Chip' ? '#3b82f6' :
+                                       signal.stock_type === 'Mid Cap' ? '#8b5cf6' : '#6b7280',
+                            borderRadius: '6px', fontSize: '11px', color: 'white', fontWeight: '500'
+                          }}>
+                            {signal.stock_type || 'N/A'}
+                          </span>
+                        </td>
+                        <td style={{ color: '#94a3b8', fontSize: '13px' }}>
+                          {signal.date ? new Date(signal.date).toLocaleDateString('vi-VN') : 'N/A'}
+                        </td>
+                        <td>
+                          <span style={{
+                            fontFamily: 'monospace', fontSize: '12px', padding: '4px 8px',
+                            backgroundColor: '#0f172a', color: '#60a5fa',
+                            borderRadius: '6px', border: '1px solid #1e40af', fontWeight: '600'
+                          }}>
+                            {signal.signal_code || `#${signal.id}`}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                            padding: '4px 10px', borderRadius: '12px',
+                            backgroundColor: statusDisplay.bg, color: statusDisplay.color,
+                            fontSize: '12px', fontWeight: '600'
+                          }}>
+                            {statusDisplay.icon} {statusDisplay.text}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: '64px', height: '6px', backgroundColor: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
+                              <div style={{ width: `${positionPct}%`, height: '100%', backgroundColor: barColor, borderRadius: '3px', transition: 'width 0.3s' }} />
+                            </div>
+                            <span style={{ fontSize: '12px', color: barColor, fontWeight: '600', minWidth: '32px' }}>
+                              {positionPct}%
+                            </span>
+                          </div>
+                        </td>
+                        <td><AIBtn signal={signal} /></td>
+                      </tr>
+                    </React.Fragment>
                   );
                 })}
               </tbody>
@@ -772,6 +930,9 @@ const getExitReason = (signal) => {
           }
         }
       `}</style>
+
+      {/* AI Analysis Popover — global fixed position */}
+      <AIPopover />
     </div>
   );
 }
