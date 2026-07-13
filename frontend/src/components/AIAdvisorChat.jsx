@@ -30,6 +30,11 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
       if (e.detail) {
         setExpanded(true)
         sendMessage(e.detail)
+        // Scroll lên ô chat
+        setTimeout(() => {
+          const chatEl = document.getElementById('ai-advisor-chat')
+          if (chatEl) chatEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
       }
     }
     window.addEventListener('askAI', handler)
@@ -93,7 +98,7 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
     : { label: 'FREE', bg: '#334155' }
 
   return (
-    <div style={{
+    <div id="ai-advisor-chat" style={{
       background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)',
       border: '1px solid #1e3a5f',
       borderRadius: '16px',
