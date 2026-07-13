@@ -680,19 +680,12 @@ def get_portfolio_context(user_id, user_tier='free'):
         cash = cash_pos.cash_amount if cash_pos else 0
 
         # ALL active BUY signals (for Signal list)
-        # VIP users: chỉ show VN30 signals (đồng bộ với VIP dashboard)
-        if user_tier == 'vip':
-            signals = session.query(Signal).filter(
-                Signal.action == 'BUY', Signal.status == 'open',
-                Signal.strength >= 65, Signal.ticker.in_(VN30_TICKERS)
-            ).all()
-        else:
-            _all_sigs = session.query(Signal).filter(
-                Signal.action == 'BUY', Signal.status == 'open',
-                Signal.strength >= 65
-            ).all()
-            _vn30_set = set(VN30_TICKERS)
-            signals = [s for s in _all_sigs if s.ticker not in _vn30_set]
+        # Fix: bao gồm TẤT CẢ signals đang mở để AI Chat nhận diện đúng
+        # Không giới hạn VN30 — AI cần biết toàn bộ danh sách tín hiệu
+        signals = session.query(Signal).filter(
+            Signal.action == 'BUY', Signal.status == 'open',
+            Signal.strength >= 65
+        ).all()
         signal_tickers = set([s.ticker for s in signals])
 
         # MARKET DASHBOARD: Inject latest market risk into context
