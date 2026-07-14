@@ -530,11 +530,12 @@ function InlineAIChat({ userId }) {
     const h = (e) => {
       if (!e.detail) return
       setExpanded(true)
-      handleSend(e.detail)
+      setInput(e.detail)
       setTimeout(() => {
+        handleSend({ preventDefault: () => {} })
         const el = document.getElementById('vip-ai-chat')
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 150)
+      }, 80)
     }
     window.addEventListener('askAI', h)
     return () => window.removeEventListener('askAI', h)
