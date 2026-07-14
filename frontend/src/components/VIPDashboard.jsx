@@ -530,12 +530,11 @@ function InlineAIChat({ userId }) {
     const h = (e) => {
       if (!e.detail) return
       setExpanded(true)
-      setInput(e.detail)
+      handleSend({ preventDefault: () => {} }, e.detail)
       setTimeout(() => {
-        handleSend({ preventDefault: () => {} })
         const el = document.getElementById('vip-ai-chat')
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 80)
+      }, 500)
     }
     window.addEventListener('askAI', h)
     return () => window.removeEventListener('askAI', h)
@@ -595,9 +594,9 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
     initChat()
   }, [userId])
 
-  async function handleSend(e) {
+  async function handleSend(e, directMsg) {
     e.preventDefault()
-    const msg = input.trim()
+    const msg = directMsg || input.trim()
     if (!msg || loading) return
     setInput(''); setExpanded(true)
     setMessages(prev => [...prev, { role: 'user', content: msg }])
