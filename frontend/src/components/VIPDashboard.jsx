@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AI ADVISOR - VIP DASHBOARD v2.3
  * ================================
  * FIXES (2026-03-22):
@@ -644,7 +644,7 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
   const latestMessages = expanded ? messages : messages.slice(-3)
 
   return (
-    <div id="vip-ai-chat" style=={{ maxWidth: '760px', margin: '0 auto 16px', padding: '0 16px' }}>
+    <div id="vip-ai-chat" style={{ maxWidth: '760px', margin: '0 auto 16px', padding: '0 16px' }}>
       <div id="vip-ai-chat" style={{ background: C.bgCard, border: `1px solid ${C.purpleLight}55`, borderRadius: '16px', overflow: 'hidden', boxShadow: `0 4px 24px rgba(124,58,237,0.15)` }}>
         <div style={{ padding: '12px 16px', background: `linear-gradient(135deg, ${C.purple}33, ${C.purpleLight}22)`, borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
