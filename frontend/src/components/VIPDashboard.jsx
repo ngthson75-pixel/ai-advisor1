@@ -530,7 +530,7 @@ function InlineAIChat({ userId }) {
     const h = (e) => {
       if (!e.detail) return
       setExpanded(true)
-      sendMsg(e.detail)
+      handleSend(e.detail)
       setTimeout(() => {
         const el = document.getElementById('vip-ai-chat')
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
