@@ -127,6 +127,7 @@ def update_eod_prices():
             if price:
                 record = session.query(EodPrice).filter_by(ticker=ticker).first()
                 if record:
+                    record.prev_price = record.price  # giá hôm qua
                     record.price = price
                     record.trade_date = trade_date
                     record.updated_at = datetime.now()

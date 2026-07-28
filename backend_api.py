@@ -647,8 +647,57 @@ class EodPrice(Base):
     id = Column(Integer, primary_key=True)
     ticker = Column(String(10), nullable=False, unique=True)
     price = Column(Float, nullable=False)
+    prev_price = Column(Float, nullable=True)   # Giá đóng cửa hôm qua — dùng tính % change
     trade_date = Column(String(20))
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+# ── Sector mapping cho 172 mã watchlist ─────────────────────────────────────
+SECTOR_MAP = {
+    # Ngân hàng
+    'VCB':'Ngân hàng','BID':'Ngân hàng','CTG':'Ngân hàng','TCB':'Ngân hàng',
+    'VPB':'Ngân hàng','MBB':'Ngân hàng','STB':'Ngân hàng','HDB':'Ngân hàng',
+    'ACB':'Ngân hàng','VIB':'Ngân hàng','EIB':'Ngân hàng','SHB':'Ngân hàng',
+    'LPB':'Ngân hàng','TPB':'Ngân hàng','OCB':'Ngân hàng','MSB':'Ngân hàng',
+    'SSB':'Ngân hàng','BAB':'Ngân hàng','NVB':'Ngân hàng','PGB':'Ngân hàng',
+    # Chứng khoán
+    'SSI':'Chứng khoán','VCI':'Chứng khoán','HCM':'Chứng khoán','VND':'Chứng khoán',
+    'BSI':'Chứng khoán','MBS':'Chứng khoán','SHS':'Chứng khoán','PSI':'Chứng khoán',
+    'EVS':'Chứng khoán','TVS':'Chứng khoán','APS':'Chứng khoán','BVS':'Chứng khoán',
+    # Bất động sản
+    'VHM':'BĐS','VIC':'BĐS','VRE':'BĐS','NVL':'BĐS','KDH':'BĐS',
+    'DIG':'BĐS','DXG':'BĐS','PDR':'BĐS','NLG':'BĐS','CII':'BĐS',
+    'NBB':'BĐS','SJS':'BĐS','NHA':'BĐS','QCG':'BĐS',
+    # Công nghiệp / Thép
+    'HPG':'Công nghiệp','HSG':'Công nghiệp','GEX':'Công nghiệp','REE':'Công nghiệp',
+    'PC1':'Công nghiệp','CTD':'Công nghiệp','HBC':'Công nghiệp','VCG':'Công nghiệp',
+    'CTR':'Công nghiệp','HT1':'Công nghiệp','DPG':'Công nghiệp','LCG':'Công nghiệp',
+    # Năng lượng / Dầu khí
+    'GAS':'Năng lượng','PLX':'Năng lượng','BSR':'Năng lượng','POW':'Năng lượng',
+    'PVD':'Năng lượng','PVT':'Năng lượng','PVS':'Năng lượng','GEG':'Năng lượng',
+    'DCM':'Năng lượng','DPM':'Năng lượng',
+    # Tiêu dùng / Bán lẻ
+    'MWG':'Tiêu dùng','VNM':'Tiêu dùng','SAB':'Tiêu dùng','MSN':'Tiêu dùng',
+    'PNJ':'Tiêu dùng','FRT':'Tiêu dùng','DGW':'Tiêu dùng','MCH':'Tiêu dùng',
+    'BAF':'Tiêu dùng','ANV':'Tiêu dùng','VHC':'Tiêu dùng','FMC':'Tiêu dùng',
+    # Công nghệ
+    'FPT':'Công nghệ','CMG':'Công nghệ','ELC':'Công nghệ','VTP':'Công nghệ',
+    'DGC':'Công nghệ','VCS':'Công nghệ',
+    # Vận tải / Logistics
+    'HVN':'Vận tải','VJC':'Vận tải','GMD':'Vận tải','VSC':'Vận tải',
+    'HAH':'Vận tải','SCS':'Vận tải','TCH':'Vận tải','PLC':'Vận tải',
+    'VFS':'Vận tải','HUT':'Vận tải',
+    # Nông nghiệp / Thủy sản
+    'IDI':'Nông nghiệp','PAN':'Nông nghiệp','HAG':'Nông nghiệp','GVR':'Nông nghiệp',
+    'SBT':'Nông nghiệp','NAF':'Nông nghiệp','DBC':'Nông nghiệp','TNG':'Nông nghiệp',
+    # Bảo hiểm / Đa ngành
+    'BVH':'Đa ngành','BCM':'Đa ngành','BMI':'Đa ngành','MIG':'Đa ngành',
+    'PVI':'Đa ngành','NRC':'Đa ngành',
+}
+
+SECTOR_ORDER = ['Ngân hàng','Chứng khoán','BĐS','Công nghiệp',
+                'Năng lượng','Tiêu dùng','Công nghệ','Vận tải',
+                'Nông nghiệp','Đa ngành']
 
 
 # ========================================================================
@@ -2145,6 +2194,85 @@ def migrate():
 # ========================================================================
 # ADMIN: Update signal status/position
 # ========================================================================
+
+@app.route('/api/sector-pulse', methods=['GET'])
+def get_sector_pulse():
+    """
+    Tính % thay đổi theo ngành từ EodPrice (prev_price vs price).
+    Trả về top sectors tăng/giảm trong ngày.
+    """
+    session = Session()
+    try:
+        # Lấy tất cả EodPrice có prev_price
+        prices = session.query(EodPrice).filter(
+            EodPrice.prev_price.isnot(None),
+            EodPrice.prev_price > 0
+        ).all()
+
+        if not prices:
+            return jsonify({'success': False, 'message': 'Chưa có dữ liệu prev_price'})
+
+        # Tính % change từng mã
+        ticker_changes = {}
+        for p in prices:
+            if p.ticker in SECTOR_MAP:
+                pct = (p.price - p.prev_price) / p.prev_price * 100
+                ticker_changes[p.ticker] = {
+                    'pct': round(pct, 2),
+                    'price': p.price,
+                    'prev': p.prev_price,
+                    'sector': SECTOR_MAP[p.ticker],
+                }
+
+        # Aggregate theo ngành
+        sector_data = {}
+        for ticker, data in ticker_changes.items():
+            s = data['sector']
+            if s not in sector_data:
+                sector_data[s] = {'changes': [], 'tickers': []}
+            sector_data[s]['changes'].append(data['pct'])
+            sector_data[s]['tickers'].append({
+                'ticker': ticker,
+                'pct': data['pct'],
+            })
+
+        # Tính avg % change mỗi ngành + top/bottom movers
+        results = []
+        for sector in SECTOR_ORDER:
+            if sector not in sector_data:
+                continue
+            changes = sector_data[sector]['changes']
+            avg_pct = round(sum(changes) / len(changes), 2)
+            advancing = sum(1 for c in changes if c > 0)
+            declining = sum(1 for c in changes if c < 0)
+            # Top mover trong ngành
+            tickers = sorted(sector_data[sector]['tickers'], key=lambda x: abs(x['pct']), reverse=True)
+            results.append({
+                'sector':    sector,
+                'avg_pct':   avg_pct,
+                'advancing': advancing,
+                'declining': declining,
+                'count':     len(changes),
+                'top_movers': tickers[:3],
+            })
+
+        # Sort: ngành tăng nhiều nhất → giảm nhiều nhất
+        results.sort(key=lambda x: x['avg_pct'], reverse=True)
+
+        # Lấy trade_date từ record đầu tiên
+        trade_date = prices[0].trade_date if prices else None
+
+        return jsonify({
+            'success':    True,
+            'trade_date': trade_date,
+            'sectors':    results,
+            'total_tickers': len(ticker_changes),
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        session.close()
+
 
 @app.route('/api/admin/fix-signal', methods=['POST'])
 def admin_fix_signal():
