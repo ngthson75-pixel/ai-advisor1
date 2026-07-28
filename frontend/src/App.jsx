@@ -10,7 +10,6 @@ import Blog from './components/Blog'
 import IISTest from './components/IISTest'
 import IISScoreWidget from './components/IISScoreWidget'
 import AIAdvisorChat from './components/AIAdvisorChat'
-import MarketWatchWidget from './components/MarketWatchWidget'
 
 // API Configuration
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
@@ -384,7 +383,6 @@ function App() {
 
           {activeTab === 'signals' && (
             <>
-              <MarketWatchWidget userTier={resolvedTier} signals={signals} />
               <AIAdvisorChat userId={user.email} userTier={resolvedTier} onOpenIIS={() => setShowIISModal(true)} />
               <SignalHistory />
               <SignalsModule signals={signals} loading={loading} onRefresh={fetchSignals} userTier={resolvedTier} />
@@ -404,7 +402,6 @@ function App() {
 
           {activeTab === 'basic' && isVip && (
             <>
-              <MarketWatchWidget userTier={resolvedTier} signals={signals} />
               <SignalHistory />
               <SignalsModule signals={signals} loading={loading} onRefresh={fetchSignals} userTier="basic" />
             </>

@@ -22,6 +22,7 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
   const [chatLoading, setChatLoading]   = useState(false)
   const [expanded, setExpanded]         = useState(true)
   const [histLoaded, setHistLoaded]     = useState(false)
+  const [marketBar, setMarketBar]       = useState(null)
   const chatEndRef = useRef(null)
 
   // ── Lắng nghe "Phân tích AI" từ SignalsModule ──────────────
@@ -41,34 +42,17 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
     return () => window.removeEventListener('askAI', handler)
   }, [])
 
-  // Load chat history on mount, inject market greeting nếu chưa có history
+  // Load chat history on mount
   useEffect(() => {
     if (!userId || histLoaded) return
-    const todayKey = `mw_greeting_${userId}_${new Date().toDateString()}`
     fetch(`${API_BASE}/chat/history?user_id=${encodeURIComponent(userId)}&limit=20`)
       .then(r => r.json())
-      .then(async d => {
+      .then(d => {
         if (d.history?.length > 0) {
-          // Có history — load lại, không inject greeting
           setMessages(d.history.flatMap(h => ([
             { role: 'user', content: h.message,  meta: null, faded: true },
             { role: 'ai',   content: h.response, meta: null, faded: true },
           ])))
-          setHistLoaded(true)
-          return
-        }
-        // Chưa có history — fetch market greeting từ GPT
-        if (!sessionStorage.getItem(todayKey)) {
-          try {
-            const ctrl = new AbortController()
-            setTimeout(() => ctrl.abort(), 12000)
-            const gr = await fetch(`${API_BASE.replace('/api','')}/api/market-greeting`, { signal: ctrl.signal })
-            const gd = await gr.json()
-            if (gd.success && gd.greeting) {
-              setMessages([{ role: 'ai', content: gd.greeting, meta: null, faded: false }])
-              sessionStorage.setItem(todayKey, '1')
-            }
-          } catch {}
         }
         setHistLoaded(true)
       })
@@ -78,6 +62,27 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Fetch market bar data (light - không cần GPT)
+  useEffect(() => {
+    const fetchMarket = async () => {
+      try {
+        const r = await fetch(`${API_BASE.replace('/api','')}/api/market-risk`)
+        const d = await r.json()
+        if (d.success && d.data) {
+          const m = d.data
+          const modeLabel = {BULL:'🟢 Tích cực', SIDEWAYS:'🟡 Thận trọng', BEAR:'🔴 Phòng thủ'}[m.market_mode] || m.market_mode
+          setMarketBar({
+            mode:  modeLabel,
+            risk:  m.risk_score,
+            alloc: m.allocation,
+          })
+        }
+      } catch {}
+    }
+    fetchMarket()
+  }, [])
+
 
   const sendMessage = async (msg) => {
     if (!msg.trim() || chatLoading) return
@@ -115,6 +120,32 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
     : { label: 'FREE', bg: '#334155' }
 
   return (
+    <>
+    {/* ── Market Greeting Bar ── */}
+    {marketBar && (
+      <div
+        onClick={() => sendMessage('Tóm tắt tình hình thị trường hôm nay cho tôi')}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '8px 14px', marginBottom: '8px',
+          background: 'linear-gradient(90deg, #0f172a, #1e293b)',
+          border: '1px solid #1e3a5f', borderRadius: '10px',
+          cursor: 'pointer', userSelect: 'none',
+          fontSize: '12px', gap: '8px',
+        }}
+      >
+        <span style={{ color: '#94a3b8' }}>
+          📺 <strong style={{ color: '#e2e8f0' }}>{marketBar.mode}</strong>
+          {' '}· Risk {marketBar.risk}/100 · CP {marketBar.alloc}%
+        </span>
+        <span style={{
+          color: '#3b82f6', fontWeight: 600, fontSize: '11px',
+          whiteSpace: 'nowrap',
+        }}>
+          Hỏi AI về thị trường →
+        </span>
+      </div>
+    )}
     <div id="ai-advisor-chat" style={{
       background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)',
       border: '1px solid #1e3a5f',
@@ -276,5 +307,7 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
         </>
       )}
     </div>
+    </div>
+    </>
   )
 }
