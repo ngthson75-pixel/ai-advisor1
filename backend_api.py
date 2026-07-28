@@ -647,57 +647,8 @@ class EodPrice(Base):
     id = Column(Integer, primary_key=True)
     ticker = Column(String(10), nullable=False, unique=True)
     price = Column(Float, nullable=False)
-    prev_price = Column(Float, nullable=True)   # Giá đóng cửa hôm qua — dùng tính % change
     trade_date = Column(String(20))
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-
-
-# ── Sector mapping cho 172 mã watchlist ─────────────────────────────────────
-SECTOR_MAP = {
-    # Ngân hàng
-    'VCB':'Ngân hàng','BID':'Ngân hàng','CTG':'Ngân hàng','TCB':'Ngân hàng',
-    'VPB':'Ngân hàng','MBB':'Ngân hàng','STB':'Ngân hàng','HDB':'Ngân hàng',
-    'ACB':'Ngân hàng','VIB':'Ngân hàng','EIB':'Ngân hàng','SHB':'Ngân hàng',
-    'LPB':'Ngân hàng','TPB':'Ngân hàng','OCB':'Ngân hàng','MSB':'Ngân hàng',
-    'SSB':'Ngân hàng','BAB':'Ngân hàng','NVB':'Ngân hàng','PGB':'Ngân hàng',
-    # Chứng khoán
-    'SSI':'Chứng khoán','VCI':'Chứng khoán','HCM':'Chứng khoán','VND':'Chứng khoán',
-    'BSI':'Chứng khoán','MBS':'Chứng khoán','SHS':'Chứng khoán','PSI':'Chứng khoán',
-    'EVS':'Chứng khoán','TVS':'Chứng khoán','APS':'Chứng khoán','BVS':'Chứng khoán',
-    # Bất động sản
-    'VHM':'BĐS','VIC':'BĐS','VRE':'BĐS','NVL':'BĐS','KDH':'BĐS',
-    'DIG':'BĐS','DXG':'BĐS','PDR':'BĐS','NLG':'BĐS','CII':'BĐS',
-    'NBB':'BĐS','SJS':'BĐS','NHA':'BĐS','QCG':'BĐS',
-    # Công nghiệp / Thép
-    'HPG':'Công nghiệp','HSG':'Công nghiệp','GEX':'Công nghiệp','REE':'Công nghiệp',
-    'PC1':'Công nghiệp','CTD':'Công nghiệp','HBC':'Công nghiệp','VCG':'Công nghiệp',
-    'CTR':'Công nghiệp','HT1':'Công nghiệp','DPG':'Công nghiệp','LCG':'Công nghiệp',
-    # Năng lượng / Dầu khí
-    'GAS':'Năng lượng','PLX':'Năng lượng','BSR':'Năng lượng','POW':'Năng lượng',
-    'PVD':'Năng lượng','PVT':'Năng lượng','PVS':'Năng lượng','GEG':'Năng lượng',
-    'DCM':'Năng lượng','DPM':'Năng lượng',
-    # Tiêu dùng / Bán lẻ
-    'MWG':'Tiêu dùng','VNM':'Tiêu dùng','SAB':'Tiêu dùng','MSN':'Tiêu dùng',
-    'PNJ':'Tiêu dùng','FRT':'Tiêu dùng','DGW':'Tiêu dùng','MCH':'Tiêu dùng',
-    'BAF':'Tiêu dùng','ANV':'Tiêu dùng','VHC':'Tiêu dùng','FMC':'Tiêu dùng',
-    # Công nghệ
-    'FPT':'Công nghệ','CMG':'Công nghệ','ELC':'Công nghệ','VTP':'Công nghệ',
-    'DGC':'Công nghệ','VCS':'Công nghệ',
-    # Vận tải / Logistics
-    'HVN':'Vận tải','VJC':'Vận tải','GMD':'Vận tải','VSC':'Vận tải',
-    'HAH':'Vận tải','SCS':'Vận tải','TCH':'Vận tải','PLC':'Vận tải',
-    'VFS':'Vận tải','HUT':'Vận tải',
-    # Nông nghiệp / Thủy sản
-    'IDI':'Nông nghiệp','PAN':'Nông nghiệp','HAG':'Nông nghiệp','GVR':'Nông nghiệp',
-    'SBT':'Nông nghiệp','NAF':'Nông nghiệp','DBC':'Nông nghiệp','TNG':'Nông nghiệp',
-    # Bảo hiểm / Đa ngành
-    'BVH':'Đa ngành','BCM':'Đa ngành','BMI':'Đa ngành','MIG':'Đa ngành',
-    'PVI':'Đa ngành','NRC':'Đa ngành',
-}
-
-SECTOR_ORDER = ['Ngân hàng','Chứng khoán','BĐS','Công nghiệp',
-                'Năng lượng','Tiêu dùng','Công nghệ','Vận tải',
-                'Nông nghiệp','Đa ngành']
 
 
 # ========================================================================
@@ -2195,81 +2146,156 @@ def migrate():
 # ADMIN: Update signal status/position
 # ========================================================================
 
-@app.route('/api/sector-pulse', methods=['GET'])
-def get_sector_pulse():
+@app.route('/api/market-greeting', methods=['GET'])
+def get_market_greeting():
     """
-    Tính % thay đổi theo ngành từ EodPrice (prev_price vs price).
-    Trả về top sectors tăng/giảm trong ngày.
+    Tổng hợp data thị trường từ DB → GPT viết tóm tắt tự nhiên.
+    Dùng cho AI Chat greeting khi user mở app.
+    Cache 30 phút để tránh gọi GPT nhiều lần.
     """
+    import time
+    
+    # ── Simple in-memory cache 30 phút ──────────────────────────
+    cache = getattr(get_market_greeting, '_cache', None)
+    if cache and (time.time() - cache['ts']) < 1800:
+        return jsonify(cache['data'])
+    
     session = Session()
     try:
-        # Lấy tất cả EodPrice có prev_price
-        prices = session.query(EodPrice).filter(
+        from datetime import date
+        today = date.today().strftime('%Y-%m-%d')
+        
+        # ── 1. Market Risk data ──────────────────────────────────
+        latest_risk = session.query(MarketRisk).order_by(
+            MarketRisk.id.desc()
+        ).first()
+        
+        mode       = latest_risk.market_mode if latest_risk else 'SIDEWAYS'
+        risk_score = latest_risk.risk_score  if latest_risk else 50
+        allocation = latest_risk.allocation  if latest_risk else 50
+        vni        = latest_risk.vnindex_value if latest_risk else None
+        
+        mode_label = {'BULL': 'TÍCH CỰC 🟢', 'SIDEWAYS': 'THẬN TRỌNG 🟡', 'BEAR': 'PHÒNG THỦ 🔴'}.get(mode, mode)
+        
+        # ── 2. Signals data ──────────────────────────────────────
+        open_buys = session.query(Signal).filter(
+            Signal.action == 'BUY', Signal.status == 'open'
+        ).order_by(Signal.date.desc()).all()
+        
+        # SELL signals hôm nay
+        today_sells = session.query(Signal).filter(
+            Signal.action == 'SELL',
+            Signal.date == today
+        ).all()
+        
+        strong_buys = [s for s in open_buys if (s.strength or 0) >= 70]
+        top_tickers = [s.ticker for s in open_buys[:5]]
+        
+        # ── 3. Breadth từ EodPrice ───────────────────────────────
+        eod_prices = session.query(EodPrice).filter(
             EodPrice.prev_price.isnot(None),
             EodPrice.prev_price > 0
         ).all()
+        
+        advancing = declining = unchanged = 0
+        top_gainers = []
+        top_losers  = []
+        
+        for p in eod_prices:
+            pct = (p.price - p.prev_price) / p.prev_price * 100
+            if pct > 6.5:
+                top_gainers.append({'ticker': p.ticker, 'pct': round(pct, 1)})
+                advancing += 1
+            elif pct > 0.1:
+                advancing += 1
+            elif pct < -6.5:
+                top_losers.append({'ticker': p.ticker, 'pct': round(pct, 1)})
+                declining += 1
+            elif pct < -0.1:
+                declining += 1
+            else:
+                unchanged += 1
+        
+        top_gainers.sort(key=lambda x: x['pct'], reverse=True)
+        top_losers.sort(key=lambda x: x['pct'])
+        
+        # ── 4. Build context cho GPT ─────────────────────────────
+        from datetime import datetime
+        weekday_vn = ['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ nhật']
+        wd = weekday_vn[datetime.now().weekday()]
+        date_str = datetime.now().strftime(f'{wd}, %d/%m/%Y')
+        
+        breadth_str = ''
+        if advancing + declining > 0:
+            breadth_str = f"Breadth thị trường: {advancing} mã tăng / {declining} mã giảm / {unchanged} mã đứng (trong {advancing+declining+unchanged} mã theo dõi)."
+        
+        ceil_str = ''
+        if top_gainers:
+            ceil_str = f"Đột biến trần: {', '.join([f"{g['ticker']}(+{g['pct']}%)" for g in top_gainers[:5]])}."
+        floor_str = ''
+        if top_losers:
+            floor_str = f"Đột biến sàn: {', '.join([f"{l['ticker']}({l['pct']}%)" for l in top_losers[:5]])}."
+        
+        vni_str = f"VN30 tham chiếu: {vni:,.0f} điểm." if vni else ""
+        sells_str = f"{len(today_sells)} tín hiệu BÁN mới kích hoạt hôm nay." if today_sells else ""
+        
+        context = f"""Hôm nay là {date_str}.
+Chế độ thị trường: {mode_label}. Risk Score: {risk_score}/100. Tỷ trọng cổ phiếu khuyến nghị: {allocation}%. {vni_str}
+{breadth_str}
+{ceil_str}
+{floor_str}
+Tín hiệu MUA đang mở: {len(open_buys)} mã, trong đó {len(strong_buys)} mã score >70%. Top tín hiệu mới nhất: {', '.join(top_tickers)}.
+{sells_str}"""
 
-        if not prices:
-            return jsonify({'success': False, 'message': 'Chưa có dữ liệu prev_price'})
+        # ── 5. Gọi GPT viết greeting tự nhiên ───────────────────
+        import openai
+        openai_client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        
+        prompt = f"""Bạn là AI Advisor — trợ lý đầu tư chứng khoán Việt Nam.
+Viết tin nhắn chào ngắn gọn (150-200 từ) tóm tắt thị trường hôm nay dựa trên data sau:
 
-        # Tính % change từng mã
-        ticker_changes = {}
-        for p in prices:
-            if p.ticker in SECTOR_MAP:
-                pct = (p.price - p.prev_price) / p.prev_price * 100
-                ticker_changes[p.ticker] = {
-                    'pct': round(pct, 2),
-                    'price': p.price,
-                    'prev': p.prev_price,
-                    'sector': SECTOR_MAP[p.ticker],
-                }
+{context}
 
-        # Aggregate theo ngành
-        sector_data = {}
-        for ticker, data in ticker_changes.items():
-            s = data['sector']
-            if s not in sector_data:
-                sector_data[s] = {'changes': [], 'tickers': []}
-            sector_data[s]['changes'].append(data['pct'])
-            sector_data[s]['tickers'].append({
-                'ticker': ticker,
-                'pct': data['pct'],
-            })
+Yêu cầu:
+- Giọng văn chuyên nghiệp nhưng thân thiện, như một chuyên gia tóm tắt cho nhà đầu tư
+- Nêu rõ tình trạng thị trường, điểm nổi bật về breadth, cổ phiếu đột biến (nếu có)
+- Kết thúc bằng 1 câu hỏi gợi mở để user tương tác
+- Không dùng markdown, viết thuần text
+- Không bịa số liệu ngoài data được cung cấp"""
 
-        # Tính avg % change mỗi ngành + top/bottom movers
-        results = []
-        for sector in SECTOR_ORDER:
-            if sector not in sector_data:
-                continue
-            changes = sector_data[sector]['changes']
-            avg_pct = round(sum(changes) / len(changes), 2)
-            advancing = sum(1 for c in changes if c > 0)
-            declining = sum(1 for c in changes if c < 0)
-            # Top mover trong ngành
-            tickers = sorted(sector_data[sector]['tickers'], key=lambda x: abs(x['pct']), reverse=True)
-            results.append({
-                'sector':    sector,
-                'avg_pct':   avg_pct,
-                'advancing': advancing,
-                'declining': declining,
-                'count':     len(changes),
-                'top_movers': tickers[:3],
-            })
-
-        # Sort: ngành tăng nhiều nhất → giảm nhiều nhất
-        results.sort(key=lambda x: x['avg_pct'], reverse=True)
-
-        # Lấy trade_date từ record đầu tiên
-        trade_date = prices[0].trade_date if prices else None
-
-        return jsonify({
-            'success':    True,
-            'trade_date': trade_date,
-            'sectors':    results,
-            'total_tickers': len(ticker_changes),
-        })
+        resp = openai_client.chat.completions.create(
+            model='gpt-4o',
+            messages=[{'role': 'user', 'content': prompt}],
+            max_tokens=300,
+            temperature=0.7,
+        )
+        greeting_text = resp.choices[0].message.content.strip()
+        
+        result = {
+            'success':  True,
+            'greeting': greeting_text,
+            'context': {
+                'mode': mode, 'risk_score': risk_score,
+                'allocation': allocation, 'vni': vni,
+                'open_buys': len(open_buys),
+                'strong_buys': len(strong_buys),
+                'advancing': advancing, 'declining': declining,
+                'ceil_count': len(top_gainers),
+                'floor_count': len(top_losers),
+            }
+        }
+        
+        # Cache kết quả
+        get_market_greeting._cache = {'ts': time.time(), 'data': result}
+        
+        return jsonify(result)
+        
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'greeting': None
+        }), 500
     finally:
         session.close()
 

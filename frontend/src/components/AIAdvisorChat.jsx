@@ -41,17 +41,34 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
     return () => window.removeEventListener('askAI', handler)
   }, [])
 
-  // Load chat history on mount
+  // Load chat history on mount, inject market greeting nếu chưa có history
   useEffect(() => {
     if (!userId || histLoaded) return
+    const todayKey = `mw_greeting_${userId}_${new Date().toDateString()}`
     fetch(`${API_BASE}/chat/history?user_id=${encodeURIComponent(userId)}&limit=20`)
       .then(r => r.json())
-      .then(d => {
+      .then(async d => {
         if (d.history?.length > 0) {
+          // Có history — load lại, không inject greeting
           setMessages(d.history.flatMap(h => ([
             { role: 'user', content: h.message,  meta: null, faded: true },
             { role: 'ai',   content: h.response, meta: null, faded: true },
           ])))
+          setHistLoaded(true)
+          return
+        }
+        // Chưa có history — fetch market greeting từ GPT
+        if (!sessionStorage.getItem(todayKey)) {
+          try {
+            const ctrl = new AbortController()
+            setTimeout(() => ctrl.abort(), 12000)
+            const gr = await fetch(`${API_BASE.replace('/api','')}/api/market-greeting`, { signal: ctrl.signal })
+            const gd = await gr.json()
+            if (gd.success && gd.greeting) {
+              setMessages([{ role: 'ai', content: gd.greeting, meta: null, faded: false }])
+              sessionStorage.setItem(todayKey, '1')
+            }
+          } catch {}
         }
         setHistLoaded(true)
       })
