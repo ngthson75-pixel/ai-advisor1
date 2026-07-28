@@ -344,8 +344,9 @@ export default function MarketWatchWidget({ userTier = 'free', signals = [] }) {
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     {factors.slice(0, 6).map((f, i) => {
-                      const isUp   = f.toLowerCase().includes('tăng') || f.toLowerCase().includes('tích') || f.toLowerCase().includes('bull') || f.toLowerCase().includes('phục')
-                      const isDown = f.toLowerCase().includes('giảm') || f.toLowerCase().includes('rủi') || f.toLowerCase().includes('bear') || f.toLowerCase().includes('cảnh')
+                      const fStr   = typeof f === 'string' ? f : String(f || '')
+                      const isUp   = fStr.toLowerCase().includes('tăng') || fStr.toLowerCase().includes('tích') || fStr.toLowerCase().includes('bull') || fStr.toLowerCase().includes('phục')
+                      const isDown = fStr.toLowerCase().includes('giảm') || fStr.toLowerCase().includes('rủi') || fStr.toLowerCase().includes('bear') || fStr.toLowerCase().includes('cảnh')
                       const fColor = isUp ? '#22c55e' : isDown ? '#ef4444' : '#64748b'
                       return (
                         <span key={i} style={{
@@ -355,7 +356,7 @@ export default function MarketWatchWidget({ userTier = 'free', signals = [] }) {
                           borderRadius: '6px', padding: '3px 8px',
                           lineHeight: 1.4,
                         }}>
-                          {f}
+                          {fStr || f}
                         </span>
                       )
                     })}
