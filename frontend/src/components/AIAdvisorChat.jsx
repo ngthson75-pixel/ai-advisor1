@@ -22,7 +22,7 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
   const [chatLoading, setChatLoading]   = useState(false)
   const [expanded, setExpanded]         = useState(true)
   const [histLoaded, setHistLoaded]     = useState(false)
-  const [marketBar, setMarketBar]       = useState({ mode: '🟡 Đang tải...', risk: null, alloc: null })
+  const [marketBar, setMarketBar]       = useState(null)
   const chatEndRef = useRef(null)
 
   // ── Lắng nghe "Phân tích AI" từ SignalsModule ──────────────
@@ -63,23 +63,22 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Fetch market bar data — retry nếu backend cold start
+  // Fetch market bar data (light - không cần GPT)
   useEffect(() => {
-    const fetchMarket = async (attempt = 1) => {
+    const fetchMarket = async () => {
       try {
-        const ctrl = new AbortController()
-        setTimeout(() => ctrl.abort(), 8000)
-        const r = await fetch(`${API_BASE.replace('/api','')}/api/market-risk`, { signal: ctrl.signal })
+        const r = await fetch(`${API_BASE.replace('/api','')}/api/market-risk`)
         const d = await r.json()
         if (d.success && d.data) {
           const m = d.data
           const modeLabel = {BULL:'🟢 Tích cực', SIDEWAYS:'🟡 Thận trọng', BEAR:'🔴 Phòng thủ'}[m.market_mode] || m.market_mode
-          setMarketBar({ mode: modeLabel, risk: m.risk_score, alloc: m.allocation })
+          setMarketBar({
+            mode:  modeLabel,
+            risk:  m.risk_score,
+            alloc: m.allocation,
+          })
         }
-      } catch {
-        // Retry sau 10s nếu backend đang wake up
-        if (attempt < 3) setTimeout(() => fetchMarket(attempt + 1), 10000)
-      }
+      } catch {}
     }
     fetchMarket()
   }, [])
@@ -137,7 +136,7 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
       >
         <span style={{ color: '#94a3b8' }}>
           📺 <strong style={{ color: '#e2e8f0' }}>{marketBar.mode}</strong>
-          {marketBar.risk != null && <>{' '}· Risk <strong style={{color:'#f59e0b'}}>{marketBar.risk}</strong>/100 · CP {marketBar.alloc}%</>}
+          {' '}· Risk {marketBar.risk}/100 · CP {marketBar.alloc}%
         </span>
         <span style={{
           color: '#3b82f6', fontWeight: 600, fontSize: '11px',
@@ -307,7 +306,6 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
           </form>
         </>
       )}
-    </div>
     </div>
     </>
   )
