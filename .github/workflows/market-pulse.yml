@@ -1,0 +1,36 @@
+name: Market Pulse Scanner (Hourly)
+
+on:
+  schedule:
+    # Chạy mỗi giờ: 9:30, 10:30, 11:30, 13:30, 14:30 VN time (UTC+7)
+    # = 2:30, 3:30, 4:30, 6:30, 7:30 UTC — T2-T6
+    - cron: '30 2,3,4,6,7 * * 1-5'
+  workflow_dispatch:  # Manual trigger để test
+
+jobs:
+  scan-market-pulse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install vnstock psycopg2-binary python-dotenv pandas numpy
+
+      - name: Run Market Pulse Scanner
+        env:
+          DB_HOST:     ${{ secrets.DB_HOST }}
+          DB_NAME:     ${{ secrets.DB_NAME }}
+          DB_USER:     ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_PORT:     ${{ secrets.DB_PORT }}
+        run: python market_pulse_scanner.py

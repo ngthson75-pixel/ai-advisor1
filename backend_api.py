@@ -2146,6 +2146,44 @@ def migrate():
 # ADMIN: Update signal status/position
 # ========================================================================
 
+@app.route('/api/market-pulse', methods=['GET'])
+def get_market_pulse():
+    """Lấy market pulse scan mới nhất từ DB"""
+    session = Session()
+    try:
+        from sqlalchemy import text
+        result = session.execute(text("""
+            SELECT scan_time, advancing, declining, unchanged, total_scanned,
+                   top_gainers, top_losers, ceil_stocks, floor_stocks,
+                   sector_data, summary_text
+            FROM market_pulse
+            ORDER BY scan_time DESC
+            LIMIT 1
+        """)).fetchone()
+        
+        if not result:
+            return jsonify({'success': False, 'message': 'Chưa có dữ liệu market pulse'})
+        
+        return jsonify({
+            'success': True,
+            'scan_time': str(result[0]),
+            'advancing': result[1],
+            'declining': result[2],
+            'unchanged': result[3],
+            'total_scanned': result[4],
+            'top_gainers': result[5] if result[5] else [],
+            'top_losers':  result[6] if result[6] else [],
+            'ceil_stocks': result[7] if result[7] else [],
+            'floor_stocks':result[8] if result[8] else [],
+            'sector_data': result[9] if result[9] else [],
+            'summary_text':result[10],
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 @app.route('/api/market-greeting', methods=['GET'])
 def get_market_greeting():
     """
@@ -2177,6 +2215,21 @@ def get_market_greeting():
         
         mode_label = {'BULL': 'TÍCH CỰC 🟢', 'SIDEWAYS': 'THẬN TRỌNG 🟡', 'BEAR': 'PHÒNG THỦ 🔴'}.get(mode, mode)
         
+        # ── 1b. Market Pulse data (nếu có) ──────────────────────
+        pulse_summary = None
+        try:
+            pulse_result = session.execute(text("""
+                SELECT summary_text, scan_time, advancing, declining,
+                       ceil_stocks, floor_stocks, sector_data
+                FROM market_pulse
+                ORDER BY scan_time DESC LIMIT 1
+            """)).fetchone()
+            if pulse_result and pulse_result[0]:
+                pulse_summary = pulse_result[0]
+                pulse_time = pulse_result[1]
+        except:
+            pass
+
         # ── 2. Signals data ──────────────────────────────────────
         open_buys = session.query(Signal).filter(
             Signal.action == 'BUY', Signal.status == 'open'
@@ -2239,7 +2292,16 @@ def get_market_greeting():
         vni_str = f"VN30 tham chiếu: {vni:,.0f} điểm." if vni else ""
         sells_str = f"{len(today_sells)} tín hiệu BÁN mới kích hoạt hôm nay." if today_sells else ""
         
-        context = f"""Hôm nay là {date_str}.
+        # Dùng market pulse nếu có, không thì dùng data tĩnh
+        if pulse_summary:
+            context = f"""{pulse_summary}
+
+Thông tin bổ sung:
+Chế độ thị trường: {mode_label}. Risk Score: {risk_score}/100. Tỷ trọng khuyến nghị: {allocation}%. {vni_str}
+Tín hiệu MUA đang mở: {len(open_buys)} mã ({len(strong_buys)} mã score >70%). Top: {', '.join(top_tickers)}.
+{sells_str}"""
+        else:
+            context = f"""Hôm nay là {date_str}.
 Chế độ thị trường: {mode_label}. Risk Score: {risk_score}/100. Tỷ trọng cổ phiếu khuyến nghị: {allocation}%. {vni_str}
 {breadth_str}
 {ceil_str}
