@@ -230,11 +230,33 @@ def main():
     for env_name, api_url in backends:
         print(f"🔄 Pushing to {env_name}...")
         print("-" * 80)
-        
+
+        # ── Lấy danh sách tickers đang open trên server ──────────────
+        open_tickers = set()
+        try:
+            r = requests.get(f"{api_url}/signals", timeout=30)
+            if r.status_code == 200:
+                all_sigs = r.json().get('signals', r.json().get('data', []))
+                open_tickers = {
+                    s['ticker'] for s in all_sigs
+                    if s.get('action') == 'BUY'
+                    and s.get('status') in ('open', 'partial', None, '')
+                }
+                print(f"  ℹ️  {len(open_tickers)} tickers đang open trên {env_name} → sẽ bỏ qua nếu trùng")
+        except Exception as e:
+            print(f"  ⚠️  Không lấy được danh sách open signals: {e}")
+
         success_count = 0
         fail_count = 0
-        
+        skip_dup_count = 0
+
         for i, signal in enumerate(signals, 1):
+            # Skip nếu ticker đã có open BUY signal trên server
+            if signal['ticker'] in open_tickers:
+                print(f"  {i:3d}/{len(signals)} ⏭ {signal['ticker']:<6} — đã có open signal, bỏ qua")
+                skip_dup_count += 1
+                continue
+
             ticker = signal['ticker']
             strategy = signal['strategy']
             strength = signal['strength']
@@ -251,6 +273,7 @@ def main():
         print()
         print(f"Results for {env_name}:")
         print(f"  ✓ Success: {success_count}")
+        print(f"  ⏭ Skipped: {skip_dup_count} (đã open)")
         print(f"  ✗ Failed: {fail_count}")
         print()
         
