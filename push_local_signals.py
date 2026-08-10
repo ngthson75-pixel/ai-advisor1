@@ -90,7 +90,7 @@ def push_signal_to_backend(signal, backend_url):
         response = requests.post(
             f"{backend_url}/signals",
             json=data,
-            timeout=15
+            timeout=30
         )
         
         if response.status_code in [200, 201]:
@@ -104,7 +104,7 @@ def push_signal_to_backend(signal, backend_url):
 def verify_backend(backend_url):
     """Verify signals count on backend"""
     try:
-        response = requests.get(f"{backend_url}/signals", timeout=10)
+        response = requests.get(f"{backend_url}/signals", timeout=30)
         if response.status_code == 200:
             data = response.json()
             return data.get('count', 0)
