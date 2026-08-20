@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 ADMIN_SECRET = os.getenv('ADMIN_SECRET', 'ai-advisor-admin-2026')
 JWT_SECRET   = os.getenv('JWT_SECRET',   'ai-advisor-jwt-secret-2026')
-JWT_EXPIRY_DAYS = 30
+JWT_EXPIRY_DAYS = 90  # 3 tháng
 
 # ============================================================
 # DATABASE MODEL
