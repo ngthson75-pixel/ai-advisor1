@@ -159,34 +159,7 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
         onRequestUpdate={onOpenIIS || (() => {})}
       />
 
-      {/* ── MARKET MODE BADGE ── */}
-      {marketMode && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '10px',
-          padding: '10px 16px',
-          background: 'rgba(255,255,255,0.04)',
-          borderRadius: '10px',
-          border: `1px solid ${modeColor}33`,
-          fontSize: '13px',
-        }}>
-          <span style={{
-            width: 8, height: 8, borderRadius: '50%',
-            background: modeColor, boxShadow: `0 0 8px ${modeColor}`,
-            display: 'inline-block', flexShrink: 0,
-          }}/>
-          <span style={{ color: modeColor, fontWeight: 700 }}>
-            {marketMode.market_mode}
-          </span>
-          <span style={{ color: '#94a3b8' }}>·</span>
-          <span style={{ color: '#94a3b8' }}>
-            Risk Score <strong style={{ color: '#e2e8f0' }}>{marketMode.risk_score}/100</strong>
-          </span>
-          <span style={{ color: '#94a3b8' }}>·</span>
-          <span style={{ color: '#94a3b8' }}>
-            Khuyến nghị tỷ trọng CP: <strong style={{ color: modeColor }}>{marketMode.allocation}%</strong>
-          </span>
-        </div>
-      )}
+
 
       {/* ══════════════════════════════════════════════
           PHẦN 2: DANH MỤC (bên dưới)
