@@ -10,7 +10,6 @@ import Blog from './components/Blog'
 import IISTest from './components/IISTest'
 import IISScoreWidget from './components/IISScoreWidget'
 import AIAdvisorChat from './components/AIAdvisorChat'
-import PortfolioRescue from './components/PortfolioRescue'
 
 // API Configuration
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
@@ -335,12 +334,6 @@ function App() {
                 </button>
 
                 <button
-                  className={`tab ${activeTab === 'rescue' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('rescue')}
-                >
-                  🚑 Giải Phóng Danh Mục
-                </button>
-                <button
                   className={`tab ${activeTab === 'portfolio' ? 'active' : ''}`}
                   onClick={() => handleTabChange('portfolio')}
                 >
@@ -390,19 +383,15 @@ function App() {
 
           {activeTab === 'signals' && (
             <>
-              <AIAdvisorChat userId={user.email} userTier={resolvedTier} onOpenIIS={() => setShowIISModal(true)} />
+              <AIAdvisorChat userId={user.email} userTier={resolvedTier} onOpenIIS={() => setShowIISModal(true)} activeTab={activeTab} />
               <SignalHistory />
               <SignalsModule signals={signals} loading={loading} onRefresh={fetchSignals} userTier={resolvedTier} />
             </>
           )}
 
-          {activeTab === 'rescue' && (
-            <PortfolioRescue userId={user.email} userTier={resolvedTier} />
-          )}
-
           {activeTab === 'portfolio' && (
             <>
-              <AIAdvisorChat userId={user.email} userTier={resolvedTier} onOpenIIS={() => setShowIISModal(true)} />
+              <AIAdvisorChat userId={user.email} userTier={resolvedTier} onOpenIIS={() => setShowIISModal(true)} activeTab={activeTab} />
               <AIPortfolioManager userId={user.email} userTier={resolvedTier} onOpenIIS={() => setShowIISModal(true)} />
             </>
           )}

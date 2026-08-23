@@ -2,6 +2,17 @@ import { useState, useEffect, useRef } from 'react'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 
+// ── Quick prompts theo tab ────────────────────────────────────────
+const QUICK_SIGNALS   = ['Thị trường hôm nay thế nào?', 'Cổ phiếu VN30 nào đang có tín hiệu tốt?', 'Market risk hiện tại là bao nhiêu?']
+const QUICK_PORTFOLIO = ['Danh mục của tôi có ổn không?', 'Tôi nên tăng hay giảm tỷ trọng?', 'Cổ phiếu nào nên xem xét bán?']
+
+// ── Rescue triage questions ───────────────────────────────────────
+const RESCUE_QUESTIONS = [
+  'Tại sao bạn mua cổ phiếu này? (1-2 câu ngắn gọn)',
+  'Lý do đó có còn đúng ở thời điểm hiện tại không?',
+  'Nếu bạn không có cổ phiếu này, bạn có mua nó ngay hôm nay không?',
+]
+
 // ─── Markdown → HTML converter (strip dấu * từ GPT response) ──
 function renderMarkdown(text) {
   if (!text) return ''
@@ -16,7 +27,7 @@ function renderMarkdown(text) {
   return html
 }
 
-export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) {
+export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS, activeTab = 'signals' }) {
   const [messages, setMessages]         = useState([])
   const [input, setInput]               = useState('')
   const [chatLoading, setChatLoading]   = useState(false)
@@ -24,6 +35,11 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
   const [histLoaded, setHistLoaded]     = useState(false)
   const [marketBar, setMarketBar]       = useState(null)
   const chatEndRef = useRef(null)
+  // ── Rescue flow state ──────────────────────────────────────────
+  const [rescueMode,    setRescueMode]   = useState(false)
+  const [rescueStep,    setRescueStep]   = useState(0)
+  const [rescueStocks,  setRescueStocks] = useState([{ ticker: '', lossP: '' }])
+  const [rescueCurrent, setRescueCur]    = useState(0)
 
   // ── Lắng nghe "Phân tích AI" từ SignalsModule ──────────────
   useEffect(() => {
@@ -111,7 +127,90 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
     setChatLoading(false)
   }
 
-  const QUICK = ['Thị trường hôm nay thế nào?', 'Cổ phiếu nào nên xem xét?', 'Danh mục của tôi có ổn không?']
+  const QUICK = activeTab === 'portfolio' ? QUICK_PORTFOLIO : QUICK_SIGNALS
+
+  // ── Start rescue flow ─────────────────────────────────────────
+  const startRescue = () => {
+    setRescueMode(true)
+    setRescueStep(0)
+    setRescueStocks([{ ticker: '', lossP: '' }])
+    setRescueCur(0)
+    setExpanded(true)
+    setMessages(prev => [...prev, {
+      role: 'ai',
+      content: '🩺 **Khám sức khỏe danh mục kẹp**\n\nHãy nhập các cổ phiếu bạn đang bị kẹp lỗ. Tôi sẽ hỏi 3 câu về từng mã để phân tích và đưa ra kế hoạch thoát cụ thể.',
+      meta: null, faded: false, isRescueQ: false,
+    }])
+  }
+
+  // ── Submit stocks → start triage ──────────────────────────────
+  const submitStocks = () => {
+    const valid = rescueStocks.filter(s => s.ticker.trim())
+    if (!valid.length) return
+    setRescueStocks(valid)
+    setRescueStep(1)
+    setRescueCur(0)
+    const names = valid.map(s => `${s.ticker.toUpperCase()}${s.lossP ? ` (-${s.lossP}%)` : ''}`).join(', ')
+    setMessages(prev => [...prev,
+      { role: 'user', content: `Danh mục kẹp: ${names}`, meta: null, faded: false },
+      { role: 'ai',
+        content: `Được rồi. Tôi sẽ hỏi 3 câu về từng mã.\n\n**Bắt đầu với ${valid[0].ticker.toUpperCase()}${valid[0].lossP ? ` (đang lỗ ${valid[0].lossP}%)` : ''}:**\n\n${RESCUE_QUESTIONS[0]}`,
+        meta: null, faded: false, isRescueQ: true, qIdx: 0 }
+    ])
+  }
+
+  // ── Handle rescue answer ──────────────────────────────────────
+  const handleRescueAnswer = async (answer) => {
+    if (!answer.trim()) return
+    const stocks = rescueStocks.filter(s => s.ticker.trim())
+    const stock  = stocks[rescueCurrent]
+    const qIdx   = (rescueStep - 1) % 3
+
+    setMessages(prev => [...prev, { role: 'user', content: answer, meta: null, faded: false }])
+    setInput('')
+
+    if (qIdx < 2) {
+      setRescueStep(s => s + 1)
+      setTimeout(() => setMessages(prev => [...prev, {
+        role: 'ai', content: RESCUE_QUESTIONS[qIdx + 1],
+        meta: null, faded: false, isRescueQ: true, qIdx: qIdx + 1,
+      }]), 300)
+    } else {
+      // All 3 answered → get AI verdict
+      setRescueStep(s => s + 1)
+      setChatLoading(true)
+      const prompt = `Portfolio Rescue — Phân tích vị thế kẹp:\nCổ phiếu: ${stock.ticker.toUpperCase()}${stock.lossP ? ` | Lỗ: -${stock.lossP}%` : ''}\n\nUser trả lời 3 câu:\n1. Tại sao mua: (câu trả lời trước đó)\n2. Thesis còn đúng không: (câu trả lời trước đó)\n3. Có mua lại ngay hôm nay không: "${answer}"\n\nĐưa ra: 1) PHÁN QUYẾT (CẮT NGAY / CẮT MỘT PHẦN / GIỮ CÓ ĐIỀU KIỆN) 2) Lý do 2-3 câu 3) Bước hành động cụ thể tuần này`
+      try {
+        const r = await fetch(`${API_BASE}/chat`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId, message: prompt, user_tier: userTier }),
+        })
+        const d = await r.json()
+        setMessages(prev => [...prev, { role: 'ai', content: d.response || '...', meta: null, faded: false }])
+      } catch {
+        setMessages(prev => [...prev, { role: 'ai', content: 'Không thể phân tích lúc này.', meta: null, faded: false }])
+      }
+      setChatLoading(false)
+
+      if (rescueCurrent < stocks.length - 1) {
+        const next = stocks[rescueCurrent + 1]
+        setRescueCur(c => c + 1)
+        setRescueStep(1)
+        setTimeout(() => setMessages(prev => [...prev, {
+          role: 'ai',
+          content: `**Tiếp theo: ${next.ticker.toUpperCase()}${next.lossP ? ` (lỗ ${next.lossP}%)` : ''}**\n\n${RESCUE_QUESTIONS[0]}`,
+          meta: null, faded: false, isRescueQ: true, qIdx: 0,
+        }]), 500)
+      } else {
+        setRescueMode(false)
+        setTimeout(() => setMessages(prev => [...prev, {
+          role: 'ai',
+          content: '✅ **Khám xong toàn bộ danh mục.**\n\nBạn đã có phán quyết cho từng mã. Hãy thực hiện cam kết trong tuần này. Bạn muốn tôi giúp thêm điều gì?',
+          meta: null, faded: false,
+        }]), 600)
+      }
+    }
+  }
 
   const tierBadge = userTier === 'vip'
     ? { label: '💎 VIP', bg: '#7c3aed' }
@@ -196,7 +295,7 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
                     background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: '13px', flexShrink: 0, marginRight: '8px', marginTop: '2px',
-                  }}>🤖</div>
+                  }}>{m.isRescueQ ? '🩺' : '🤖'}</div>
                 )}
                 <div style={{ maxWidth: '78%' }}>
                   {/* FOMO badge */}
@@ -239,7 +338,8 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
                       padding: '10px 14px',
                       borderRadius: '4px 16px 16px 16px',
                       opacity: m.faded ? 0.5 : 1,
-                      background: 'rgba(255,255,255,0.06)',
+                      background: m.isRescueQ ? 'rgba(220,38,38,0.08)' : 'rgba(255,255,255,0.06)',
+                      border: m.isRescueQ ? '1px solid rgba(220,38,38,0.25)' : 'none',
                       fontSize: '13px', lineHeight: '1.6', color: '#e2e8f0',
                       wordBreak: 'break-word',
                     }} dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }} />
@@ -286,13 +386,73 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS }) 
             </div>
           )}
 
+          {/* Rescue: nhập danh sách cổ phiếu */}
+          {rescueMode && rescueStep === 0 && (
+            <div style={{ padding: '12px 20px', borderTop: '1px solid #1e293b', background: 'rgba(220,38,38,0.04)' }}>
+              <div style={{ fontSize: '13px', color: '#fca5a5', marginBottom: '10px', fontWeight: 600 }}>
+                🩺 Nhập cổ phiếu đang kẹp lỗ:
+              </div>
+              {rescueStocks.map((s, i) => (
+                <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  <input placeholder="Mã CP (VD: VHM)"
+                    value={s.ticker}
+                    onChange={e => setRescueStocks(prev => prev.map((r,j) => j===i ? {...r, ticker: e.target.value.toUpperCase()} : r))}
+                    style={{ flex: 2, background: 'rgba(255,255,255,0.05)', border: '1px solid #1e3a5f', borderRadius: '8px', padding: '8px 12px', color: '#e2e8f0', fontSize: '13px', outline: 'none' }} />
+                  <input placeholder="% lỗ (VD: 35)"
+                    value={s.lossP}
+                    onChange={e => setRescueStocks(prev => prev.map((r,j) => j===i ? {...r, lossP: e.target.value} : r))}
+                    style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid #1e3a5f', borderRadius: '8px', padding: '8px 12px', color: '#e2e8f0', fontSize: '13px', outline: 'none' }} />
+                  {rescueStocks.length > 1 && (
+                    <button onClick={() => setRescueStocks(prev => prev.filter((_,j) => j!==i))}
+                      style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '18px' }}>×</button>
+                  )}
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <button onClick={() => setRescueStocks(p => [...p, { ticker: '', lossP: '' }])}
+                  style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #1e3a5f', background: 'transparent', color: '#64748b', fontSize: '12px', cursor: 'pointer' }}>
+                  + Thêm mã
+                </button>
+                <button onClick={submitStocks} disabled={!rescueStocks.some(s => s.ticker.trim())}
+                  style={{ padding: '6px 16px', borderRadius: '8px', border: 'none', background: '#dc2626', color: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                  Bắt đầu khám →
+                </button>
+                <button onClick={() => { setRescueMode(false); setRescueStep(0) }}
+                  style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #1e3a5f', background: 'transparent', color: '#64748b', fontSize: '12px', cursor: 'pointer' }}>
+                  Hủy
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Khám sức khỏe button — chỉ hiện trong portfolio tab */}
+          {activeTab === 'portfolio' && !rescueMode && (
+            <div style={{ padding: '0 20px 12px' }}>
+              <button onClick={startRescue} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                padding: '8px 16px', borderRadius: '10px', width: '100%',
+                border: '1px solid rgba(220,38,38,0.4)', background: 'rgba(220,38,38,0.08)',
+                color: '#fca5a5', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+              }}>
+                🩺 Khám sức khỏe danh mục kẹp
+                <span style={{ fontSize: '11px', fontWeight: 400, color: '#ef4444' }}>
+                  — AI phân tích từng vị thế lỗ, đưa kế hoạch thoát
+                </span>
+              </button>
+            </div>
+          )}
+
           {/* Input */}
-          <form onSubmit={e => { e.preventDefault(); sendMessage(input) }}
+          <form onSubmit={e => {
+              e.preventDefault()
+              if (rescueMode && rescueStep > 0) { handleRescueAnswer(input) }
+              else { sendMessage(input) }
+            }}
             style={{ padding: '12px 20px', borderTop: '1px solid #1e293b', display: 'flex', gap: '10px' }}>
             <input
               value={input}
               onChange={e => setInput(e.target.value)}
-              placeholder="Hỏi về cổ phiếu, xu hướng thị trường..."
+              placeholder={rescueMode && rescueStep > 0 ? "Nhập câu trả lời của bạn..." : "Hỏi về cổ phiếu, xu hướng thị trường..."}
               style={{
                 flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid #1e3a5f',
                 borderRadius: '10px', padding: '10px 14px', color: '#e2e8f0', fontSize: '13px', outline: 'none',
