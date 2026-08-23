@@ -681,9 +681,15 @@ def get_portfolio_context(user_id, user_tier='free'):
 
         # ALL active BUY signals — lấy TẤT CẢ để AI Chat nhận diện đúng
         # Không filter strength hay VN30 cho signal_tickers
-        signals = session.query(Signal).filter(
-            Signal.action == 'BUY', Signal.status == 'open'
-        ).all()
+        # VIP: chỉ VN30 | Others: all signals strength >= 65
+        if user_tier == 'vip':
+            signals = [s for s in session.query(Signal).filter(
+                Signal.action == 'BUY', Signal.status == 'open'
+            ).all() if s.ticker in VN30_TICKERS and (s.strength or 0) >= 65]
+        else:
+            signals = [s for s in session.query(Signal).filter(
+                Signal.action == 'BUY', Signal.status == 'open'
+            ).all() if (s.strength or 0) >= 65]
         signal_tickers = set([s.ticker for s in signals])
 
 
@@ -2810,6 +2816,53 @@ def telegram_webhook():
     except Exception as e:
         print(f'[Telegram] webhook error: {e}')
         return jsonify({'ok': True}), 200
+
+
+# ── Portfolio Rescue commit endpoint ────────────────────────────────
+@app.route('/api/portfolio-rescue/commit', methods=['POST'])
+def rescue_commit():
+    """Lưu cam kết cắt lỗ của user"""
+    try:
+        data      = request.get_json() or {}
+        user_id   = data.get('user_id', 'anonymous')
+        positions = data.get('positions', [])
+        session   = Session()
+        try:
+            session.execute(text("""
+                CREATE TABLE IF NOT EXISTS rescue_commits (
+                    id SERIAL PRIMARY KEY,
+                    user_id VARCHAR(255),
+                    ticker VARCHAR(10),
+                    loss_pct FLOAT,
+                    loss_amt FLOAT,
+                    verdict VARCHAR(50),
+                    commit_type VARCHAR(20),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            session.commit()
+        except Exception:
+            session.rollback()
+        for pos in positions:
+            try:
+                session.execute(text("""
+                    INSERT INTO rescue_commits
+                      (user_id, ticker, loss_pct, loss_amt, verdict, commit_type, created_at)
+                    VALUES (:uid, :ticker, :lp, :la, :vd, :ct, NOW())
+                """), {
+                    'uid': user_id, 'ticker': pos.get('ticker',''),
+                    'lp':  float(pos.get('loss_pct', 0)),
+                    'la':  float(pos.get('loss_amt', 0)),
+                    'vd':  pos.get('verdict',''), 'ct': pos.get('commit',''),
+                })
+            except Exception:
+                session.rollback()
+        session.commit()
+        session.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f'[Rescue] commit error: {e}')
+        return jsonify({'success': True})
 
 
 if __name__ == '__main__':
