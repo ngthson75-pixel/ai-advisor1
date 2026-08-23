@@ -34,7 +34,8 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS, ac
   const [expanded, setExpanded]         = useState(true)
   const [histLoaded, setHistLoaded]     = useState(false)
   const [marketBar, setMarketBar]       = useState(null)
-  const chatEndRef = useRef(null)
+  const chatEndRef   = useRef(null)
+  const containerRef  = useRef(null)
   // ── Rescue flow state ──────────────────────────────────────────
   const [rescueMode,    setRescueMode]   = useState(false)
   const [rescueStep,    setRescueStep]   = useState(0)
@@ -76,7 +77,9 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS, ac
   }, [userId])
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight
+    }
   }, [messages])
 
   // Fetch market bar data (light - không cần GPT)
@@ -280,7 +283,7 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS, ac
             height: '380px', overflowY: 'auto', padding: '16px 20px',
             display: 'flex', flexDirection: 'column', gap: '12px',
             scrollbarWidth: 'thin', scrollbarColor: '#1e3a5f transparent',
-          }}>
+          }} ref={containerRef}>
             {messages.length === 0 && !chatLoading && (
               <div style={{ textAlign: 'center', color: '#475569', fontSize: '13px', marginTop: '60px' }}>
                 <div style={{ fontSize: '32px', marginBottom: '12px' }}>🤖</div>

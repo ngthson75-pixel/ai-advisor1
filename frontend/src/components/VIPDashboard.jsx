@@ -528,8 +528,9 @@ function InlineAIChat({ userId }) {
   const [input, setInput]       = useState('')
   const [loading, setLoading]   = useState(false)
   const [expanded, setExpanded] = useState(false)
-  const chatEndRef = useRef(null)
-  const inputRef   = useRef(null)
+  const chatEndRef   = useRef(null)
+  const inputRef     = useRef(null)
+  const containerRef = useRef(null)
   // ── Rescue flow ─────────────────────────────────────────────
   const [rescueMode,   setRescueMode]   = useState(false)
   const [rescueStep,   setRescueStep]   = useState(0)
@@ -551,7 +552,11 @@ function InlineAIChat({ userId }) {
     return () => window.removeEventListener('askAI', h)
   }, [])
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight
+    }
+  }, [messages])
 
   // ─── Load chat history + inject market summary nếu chưa có lịch sử ───
   useEffect(() => {
@@ -708,7 +713,7 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
             </button>
           )}
         </div>
-        <div style={{ minHeight: '88px', maxHeight: expanded ? '320px' : '96px', overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px', transition: 'max-height 0.3s ease' }}>
+        <div style={{ minHeight: '88px', maxHeight: expanded ? '320px' : '96px', overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px', transition: 'max-height 0.3s ease' }} ref={containerRef}>
           {messages.length === 0 ? (
             <div style={{ color: C.muted, fontSize: '13px', lineHeight: '1.6' }}>
               <div>👋 Xin chào! Tôi có thể giúp bạn:</div>
