@@ -612,7 +612,7 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
   }, [userId])
 
   async function handleSend(e, directMsg) {
-    e.preventDefault()
+    if (e && e.preventDefault) e.preventDefault()   // v2.2: cho phép gọi từ chip (e = null)
     const msg = directMsg || input.trim()
     if (!msg || loading) return
     setInput(''); setExpanded(true)
@@ -838,7 +838,7 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
             }}>
               🩺 Khám sức khỏe danh mục kẹp
               <span style={{ fontSize:'10px', fontWeight:400, color:'#ef4444' }}>
-                — AI phân tích vị thế lỗ, đưa kế hoạch thoát
+                — AI đánh giá mức rủi ro vị thế, nêu các kịch bản
               </span>
             </button>
           </div>

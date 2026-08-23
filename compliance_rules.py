@@ -114,7 +114,14 @@ KHÔNG dùng cấu trúc mệnh lệnh với mã cổ phiếu:
 Khi nói về tỷ trọng, LUÔN dùng "KHUNG" hoặc "NGƯỠNG", KHÔNG dùng "khuyến nghị":
    ĐÚNG: "khung tỷ trọng theo chế độ thị trường"
    ĐÚNG: "ngưỡng rủi ro theo hồ sơ của anh"
+   ĐÚNG: "khung tỷ trọng cổ phiếu tham chiếu là 50%"
    SAI:  "khuyến nghị tỷ trọng"
+   SAI:  "khung tỷ trọng được khuyến nghị là 50%"
+   SAI:  "khung khuyến nghị là 50%"
+
+TỪ "KHUYẾN NGHỊ" BỊ CẤM trong MỌI ngữ cảnh, kể cả khi nói về tỷ trọng danh mục,
+vì đó là thuật ngữ pháp lý của hoạt động tư vấn đầu tư chứng khoán.
+Thay bằng: "khung", "ngưỡng", "tham chiếu", "theo chế độ thị trường".
 
 Mọi con số về quy mô vị thế phải gắn với HỆ QUẢ RỦI RO, không gắn với kỳ vọng lợi nhuận:
    ĐÚNG: "Quy mô này tương ứng -1,5% danh mục nếu chạm ngưỡng dừng lỗ"
@@ -190,6 +197,12 @@ _REPLACEMENTS = [
     (r'b[ắa]t đ[áa]y',         'vào lệnh vùng giá thấp'),
     (r'all[- ]?in',            'dồn toàn bộ vốn'),
     (r'khuy[ếe]n ngh[ịi] t[ỷy] tr[ọo]ng', 'khung tỷ trọng'),
+    # v2.2.1 — bắt các biến thể "khuyến nghị" còn sót (thứ tự: cụ thể → tổng quát)
+    (r'đư[ợo]c khuy[ếe]n ngh[ịi] l[àa]',  'tham chiếu là'),
+    (r'đư[ợo]c khuy[ếe]n ngh[ịi]',        'theo khung tham chiếu'),
+    (r'khung khuy[ếe]n ngh[ịi]',          'khung tỷ trọng'),
+    (r'm[ứu]c khuy[ếe]n ngh[ịi]',         'mức tham chiếu'),
+    (r'khuy[ếe]n ngh[ịi] l[àa]',          'khung tham chiếu là'),
 ]
 
 # Từ khóa dùng để phát hiện response có nhắc mã cổ phiếu

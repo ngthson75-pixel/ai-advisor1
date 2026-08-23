@@ -154,7 +154,7 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS, ac
     setExpanded(true)
     setMessages(prev => [...prev, {
       role: 'ai',
-      content: '🩺 **Khám sức khỏe danh mục kẹp**\n\nHãy nhập các cổ phiếu bạn đang bị kẹp lỗ. Tôi sẽ hỏi 3 câu về từng mã để phân tích và đưa ra kế hoạch thoát cụ thể.',
+      content: '🩺 **Khám sức khỏe danh mục kẹp**\n\nHãy nhập các cổ phiếu bạn đang bị kẹp lỗ. Tôi sẽ hỏi 3 câu về từng mã để đánh giá mức rủi ro và nêu các kịch bản bạn có thể cân nhắc.',
       meta: null, faded: false, isRescueQ: false,
     }])
   }
@@ -466,7 +466,7 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS, ac
               }}>
                 🩺 Khám sức khỏe danh mục kẹp
                 <span style={{ fontSize: '11px', fontWeight: 400, color: '#ef4444' }}>
-                  — AI phân tích từng vị thế lỗ, đưa kế hoạch thoát
+                  — AI đánh giá mức rủi ro từng vị thế, nêu các kịch bản
                 </span>
               </button>
             </div>
