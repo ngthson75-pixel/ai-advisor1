@@ -17,7 +17,7 @@ import json
 import subprocess
 import sqlite3
 from openai import OpenAI
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Date, Text, func, Boolean, and_, or_, not_, exists
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Date, Text, text, func, Boolean, and_, or_, not_, exists
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from vnstock import Vnstock
@@ -67,6 +67,30 @@ try:
 except ImportError as e:
     _has_iis = False
     print(f'\u26a0\ufe0f  IIS Engine not found: {e}')
+
+# === Compliance Rules (v2.2) — graceful import ===
+try:
+    from compliance_rules import COMPLIANCE_PROMPT, sanitize_ai_output
+    _has_compliance = True
+    print("\u2705 Compliance rules module loaded")
+except Exception as e:
+    COMPLIANCE_PROMPT = ""
+    sanitize_ai_output = lambda x: x
+    _has_compliance = False
+    print(f'\u26a0\ufe0f  Compliance rules not found: {e}')
+
+# === Bottleneck Engine (v2.2) — graceful import ===
+try:
+    from bottleneck_engine import (
+        init_bottleneck_routes,
+        diagnose as diagnose_bottleneck,
+        build_bottleneck_section,
+    )
+    _has_bottleneck = True
+    print("\u2705 Bottleneck Engine module loaded")
+except Exception as e:
+    _has_bottleneck = False
+    print(f'\u26a0\ufe0f  Bottleneck Engine not found: {e}')
 
 # ========================================================================
 # FLASK APP INITIALIZATION
@@ -189,6 +213,13 @@ if _has_iis:
         print("\u2705 IIS routes registered: /api/iis/*")
     except Exception as _iis_err:
         print(f"\u26a0\ufe0f  IIS init error: {_iis_err}")
+
+# === Init Bottleneck Routes (v2.2) ===
+if _has_bottleneck:
+    try:
+        init_bottleneck_routes(app, Session)
+    except Exception as _bn_err:
+        print(f"\u26a0\ufe0f  Bottleneck init error: {_bn_err}")
 
 
 # ========================================================================
@@ -852,7 +883,9 @@ def chat_with_gpt(message, portfolio_context, signal_tickers,
         else:
             _signal_rule = "\n\n=== BUYSELL SIGNAL: Hien chua co signal nao dang mo ==="
 
-        system_message = AI_SYSTEM_PROMPT + _signal_rule
+        # v2.2: COMPLIANCE_PROMPT đặt NGAY SAU AI_SYSTEM_PROMPT
+        # → quy tắc pháp lý được đọc trước mọi quy tắc hành vi khác
+        system_message = AI_SYSTEM_PROMPT + COMPLIANCE_PROMPT + _signal_rule
         if iis_section:
             system_message += "\n" + iis_section
         system_message += "\n\n" + portfolio_context
@@ -872,7 +905,8 @@ def chat_with_gpt(message, portfolio_context, signal_tickers,
             max_tokens=900,
             temperature=0.65
         )
-        return response.choices[0].message.content
+        # v2.2: lớp fail-safe — lọc ngôn ngữ khuyến nghị mua/bán trước khi trả về
+        return sanitize_ai_output(response.choices[0].message.content)
     except Exception as e:
         print(f"OpenAI error: {e}")
         return "Xin lỗi, AI không phản hồi được lúc này. Vui lòng thử lại."
@@ -1861,6 +1895,16 @@ def chat():
         coaching_enabled = is_paid or trial_active
         iis_section = build_iis_coaching_section(iis_profile, emotional_state) if coaching_enabled else ""
         tier_locked  = not coaching_enabled
+
+        # === v2.2: chèn ĐIỂM NGHẼN vào system prompt ===
+        # Chỉ MỘT điểm nghẽn mỗi lần — coaching tập trung, không liệt kê 5 thứ
+        _bottleneck = None
+        if _has_bottleneck and coaching_enabled:
+            try:
+                _bottleneck = diagnose_bottleneck(Session, str(user_id))
+                iis_section += build_bottleneck_section(_bottleneck)
+            except Exception as _bn_e:
+                print(f"[bottleneck] inject skipped: {_bn_e}")
         # Load history — resilient: nếu fail (vd: cột mới chưa có) thì dùng []
         try:
             history_rows = session.query(ChatHistory)                .filter_by(user_id=str(user_id))                .order_by(ChatHistory.created_at.desc())                .limit(5).all()
@@ -1898,6 +1942,8 @@ def chat():
                 'iis_level_name': iis_profile.get('level') if iis_profile else None,
                 'tier_locked': tier_locked,
                 'user_tier': user_tier,
+                'bottleneck': (_bottleneck or {}).get('bottleneck'),
+                'bottleneck_name': (_bottleneck or {}).get('bottleneck_name'),
                 'trial_active': trial_active,
                 'trial_days_left': trial_days_left,
             }
@@ -2290,10 +2336,12 @@ def get_market_greeting():
         
         ceil_str = ''
         if top_gainers:
-            ceil_str = f"Đột biến trần: {', '.join([f"{g['ticker']}(+{g['pct']}%)" for g in top_gainers[:5]])}."
+            _g = ', '.join(["{}(+{}%)".format(g['ticker'], g['pct']) for g in top_gainers[:5]])
+            ceil_str = f"Đột biến trần: {_g}."
         floor_str = ''
         if top_losers:
-            floor_str = f"Đột biến sàn: {', '.join([f"{l['ticker']}({l['pct']}%)" for l in top_losers[:5]])}."
+            _l = ', '.join(["{}({}%)".format(l['ticker'], l['pct']) for l in top_losers[:5]])
+            floor_str = f"Đột biến sàn: {_l}."
         
         vni_str = f"VN30 tham chiếu: {vni:,.0f} điểm." if vni else ""
         sells_str = f"{len(today_sells)} tín hiệu BÁN mới kích hoạt hôm nay." if today_sells else ""

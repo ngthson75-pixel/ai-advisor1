@@ -41,7 +41,9 @@ const tag = (color) => ({
   background: `${color}20`, color, border: `1px solid ${color}40`,
 })
 
-export default function IISScoreWidget({ userId, onRequestUpdate }) {
+export default function IISScoreWidget({ userId, onRequestUpdate, userTier = 'free' }) {
+  // v2.2 FIX: khách trả phí không bao giờ thấy banner "hết dùng thử"
+  const isPaid = ['basic', 'basic_trial', 'early_adopter', 'vip'].includes(userTier)
   const [data,    setData]    = useState(null)   // IIS result from backend
   const [loading, setLoading] = useState(true)
   const [canUpdate, setCanUpdate] = useState(false)
@@ -262,6 +264,9 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
           </div>
         )}
 
+        {/* === v2.2: ĐIỂM NGHẼN — mở cho MỌI tier kể cả Free === */}
+        <BottleneckBlock userId={userId} />
+
         {/* Trial countdown hoặc motivating CTA */}
         {(() => {
           // Tính trial days remaining từ data.tested_at
@@ -286,7 +291,7 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
                     }
                   </div>
                 </div>
-              ) : daysLeft === 0 ? (
+              ) : daysLeft === 0 && !isPaid ? (
                 <div style={{ padding: '8px 12px', borderRadius: '8px',
                   background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
                   fontSize: '12px', color: '#a5b4fc' }}>
@@ -315,6 +320,70 @@ export default function IISScoreWidget({ userId, onRequestUpdate }) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// v2.2 — BOTTLENECK BLOCK
+// Hiển thị ĐIỂM NGHẼN DUY NHẤT + VIỆC DUY NHẤT của tháng.
+// Mở cho MỌI tier (kể cả Free) — chẩn đoán miễn phí là đòn bẩy chuyển đổi:
+// biết bệnh nhưng chưa có thuốc.
+// Nguyên tắc: CHỈ MỘT điểm nghẽn. Nói 5 điều cần sửa = user sửa 0 điều.
+// ══════════════════════════════════════════════════════════════════════
+function BottleneckBlock({ userId }) {
+  const [bn, setBn] = useState(null)
+
+  useEffect(() => {
+    if (!userId) return
+    let alive = true
+    fetch(`${API_URL}/bottleneck/${encodeURIComponent(userId)}`)
+      .then(r => r.json())
+      .then(d => { if (alive && d.success && d.bottleneck) setBn(d) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [userId])
+
+  if (!bn) return null
+
+  return (
+    <div style={{
+      marginTop: '12px',
+      padding: '12px 14px',
+      borderRadius: '8px',
+      background: 'rgba(245,158,11,0.08)',
+      border: '1px solid rgba(245,158,11,0.25)',
+    }}>
+      <div style={{
+        fontSize: '11px', color: '#f59e0b', fontWeight: 700,
+        letterSpacing: '0.3px', marginBottom: '6px',
+      }}>
+        🎯 ĐIỂM NGHẼN CỦA BẠN
+      </div>
+
+      <div style={{
+        fontSize: '13px', color: '#e2e8f0',
+        fontWeight: 600, marginBottom: '4px',
+      }}>
+        {bn.title}
+      </div>
+
+      <div style={{
+        fontSize: '12px', color: '#94a3b8',
+        lineHeight: 1.6, marginBottom: '8px',
+      }}>
+        {bn.diagnosis}
+      </div>
+
+      <div style={{ fontSize: '12px', color: '#fcd34d', lineHeight: 1.6 }}>
+        <strong>VIỆC DUY NHẤT:</strong> {bn.action}
+      </div>
+
+      {bn.confidence === 'prior' && (
+        <div style={{ fontSize: '10px', color: '#64748b', marginTop: '6px' }}>
+          Chẩn đoán sơ bộ từ bài đánh giá — sẽ chính xác hơn sau vài lệnh đầu tiên
+        </div>
+      )}
     </div>
   )
 }

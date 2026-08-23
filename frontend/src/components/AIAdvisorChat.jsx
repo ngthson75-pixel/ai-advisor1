@@ -37,6 +37,7 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS, ac
   const chatEndRef   = useRef(null)
   const containerRef  = useRef(null)
   // ── Rescue flow state ──────────────────────────────────────────
+  const [bnChips,       setBnChips]      = useState([])   // v2.2: chip theo điểm nghẽn
   const [rescueMode,    setRescueMode]   = useState(false)
   const [rescueStep,    setRescueStep]   = useState(0)
   const [rescueStocks,  setRescueStocks] = useState([{ ticker: '', lossP: '' }])
@@ -102,6 +103,18 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS, ac
     fetchMarket()
   }, [])
 
+
+  // === v2.2: nạp chip gợi ý theo ĐIỂM NGHẼN của user ===
+  // Chip thay thế menu — mỗi user thấy gợi ý khác nhau, tự đổi theo ngữ cảnh
+  useEffect(() => {
+    if (!userId) return
+    let alive = true
+    fetch(`${API_BASE}/chips/${encodeURIComponent(userId)}`)
+      .then(r => r.json())
+      .then(d => { if (alive && d.success) setBnChips((d.chips || []).slice(0, 2)) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [userId])
 
   const sendMessage = async (msg) => {
     if (!msg.trim() || chatLoading) return
@@ -182,7 +195,7 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS, ac
       // All 3 answered → get AI verdict
       setRescueStep(s => s + 1)
       setChatLoading(true)
-      const prompt = `Portfolio Rescue — Phân tích vị thế kẹp:\nCổ phiếu: ${stock.ticker.toUpperCase()}${stock.lossP ? ` | Lỗ: -${stock.lossP}%` : ''}\n\nUser trả lời 3 câu:\n1. Tại sao mua: (câu trả lời trước đó)\n2. Thesis còn đúng không: (câu trả lời trước đó)\n3. Có mua lại ngay hôm nay không: "${answer}"\n\nĐưa ra: 1) PHÁN QUYẾT (CẮT NGAY / CẮT MỘT PHẦN / GIỮ CÓ ĐIỀU KIỆN) 2) Lý do 2-3 câu 3) Bước hành động cụ thể tuần này`
+      const prompt = `Portfolio Rescue — Phân tích vị thế kẹp:\nCổ phiếu: ${stock.ticker.toUpperCase()}${stock.lossP ? ` | Lỗ: -${stock.lossP}%` : ''}\n\nUser trả lời 3 câu:\n1. Tại sao mua: (câu trả lời trước đó)\n2. Thesis còn đúng không: (câu trả lời trước đó)\n3. Có mua lại ngay hôm nay không: "${answer}"\n\nĐưa ra: 1) ĐÁNH GIÁ RỦI RO của vị thế 2) Lý do 2-3 câu dựa trên dữ liệu 3) Các kịch bản user có thể cân nhắc, kèm hệ quả từng kịch bản. KHÔNG đưa khuyến nghị mua/bán — chỉ đối chiếu với ngưỡng rủi ro user đã đặt.`
       try {
         const r = await fetch(`${API_BASE}/chat`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -208,7 +221,7 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS, ac
         setRescueMode(false)
         setTimeout(() => setMessages(prev => [...prev, {
           role: 'ai',
-          content: '✅ **Khám xong toàn bộ danh mục.**\n\nBạn đã có phán quyết cho từng mã. Hãy thực hiện cam kết trong tuần này. Bạn muốn tôi giúp thêm điều gì?',
+          content: '✅ **Khám xong toàn bộ danh mục.**\n\nBạn đã có đánh giá rủi ro cho từng mã. Quyết định thuộc về bạn. Bạn muốn tôi giúp thêm điều gì?',
           meta: null, faded: false,
         }]), 600)
       }
@@ -375,6 +388,20 @@ export default function AIAdvisorChat({ userId, userTier = 'free', onOpenIIS, ac
             )}
             <div ref={chatEndRef} />
           </div>
+
+          {/* === v2.2: Chip theo điểm nghẽn — TỐI ĐA 2, quy tắc cứng === */}
+          {bnChips.length > 0 && (
+            <div style={{ padding: '0 20px 10px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {bnChips.map((c, i) => (
+                <button key={`bn-${i}`} onClick={() => sendMessage(c)} style={{
+                  padding: '6px 12px', borderRadius: '20px',
+                  border: '1px solid rgba(245,158,11,0.35)',
+                  background: 'rgba(245,158,11,0.10)', color: '#fcd34d',
+                  fontSize: '12px', cursor: 'pointer', fontWeight: 500,
+                }}>{c}</button>
+              ))}
+            </div>
+          )}
 
           {/* Quick prompts */}
           {messages.length === 0 && (

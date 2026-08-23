@@ -525,6 +525,7 @@ function VIPPortfolioTab({ userId }) {
 // ─── Inline AI Chat ───────────────────────────────────────────
 function InlineAIChat({ userId }) {
   const [messages, setMessages] = useState([])
+  const [bnChips, setBnChips]   = useState([])   // v2.2: chip theo điểm nghẽn
   const [input, setInput]       = useState('')
   const [loading, setLoading]   = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -644,7 +645,7 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
     setExpanded(true)
     setMessages(prev => [...prev, {
       role: 'assistant',
-      content: '🩺 **Khám sức khỏe danh mục kẹp**\n\nNhập cổ phiếu đang kẹp lỗ. Tôi sẽ hỏi 3 câu về từng mã để đưa ra phán quyết.',
+      content: '🩺 **Khám sức khỏe danh mục kẹp**\n\nNhập cổ phiếu đang kẹp lỗ. Tôi sẽ hỏi 3 câu về từng mã để đánh giá mức rủi ro.',
     }])
   }
 
@@ -659,6 +660,17 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
     ])
   }
 
+  // === v2.2: nạp chip gợi ý theo ĐIỂM NGHẼN — thay cho menu ===
+  useEffect(() => {
+    if (!userId) return
+    let alive = true
+    fetch(`${API_BASE}/chips/${encodeURIComponent(userId)}`)
+      .then(r => r.json())
+      .then(d => { if (alive && d.success) setBnChips((d.chips || []).slice(0, 2)) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [userId])
+
   const handleRescueAnswer = async (answer) => {
     if (!answer.trim()) return
     const stocks = rescueStocks.filter(s => s.ticker.trim())
@@ -671,7 +683,7 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
       setTimeout(() => setMessages(prev => [...prev, { role: 'assistant', content: RESCUE_QUESTIONS[qIdx + 1] }]), 300)
     } else {
       setLoading(true)
-      const prompt = `Portfolio Rescue:\nCổ phiếu: ${stock.ticker.toUpperCase()}${stock.lossP ? ` | Lỗ: -${stock.lossP}%` : ''}\nCâu 3: "${answer}"\nĐưa ra: 1) PHÁN QUYẾT (CẮT NGAY/CẮT MỘT PHẦN/GIỮ CÓ ĐIỀU KIỆN) 2) Lý do 2-3 câu 3) Bước hành động tuần này`
+      const prompt = `Portfolio Rescue:\nCổ phiếu: ${stock.ticker.toUpperCase()}${stock.lossP ? ` | Lỗ: -${stock.lossP}%` : ''}\nCâu 3: "${answer}"\nĐưa ra: 1) ĐÁNH GIÁ RỦI RO của vị thế 2) Lý do 2-3 câu dựa trên dữ liệu 3) Các kịch bản user có thể cân nhắc, kèm hệ quả từng kịch bản. KHÔNG đưa khuyến nghị mua/bán — chỉ đối chiếu với ngưỡng rủi ro user đã đặt.`
       try {
         const r = await fetch(`${API_BASE}/chat`, {
           method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
@@ -692,7 +704,7 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
         setRescueMode(false)
         setTimeout(() => setMessages(prev => [...prev, {
           role: 'assistant',
-          content: '✅ **Khám xong toàn bộ danh mục.**\n\nBạn đã có phán quyết cho từng mã. Hãy thực hiện cam kết trong tuần này.'
+          content: '✅ **Khám xong toàn bộ danh mục.**\n\nBạn đã có đánh giá rủi ro cho từng mã. Quyết định thuộc về bạn.'
         }]), 600)
       }
     }
@@ -766,6 +778,20 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
           )}
           <div ref={chatEndRef} />
         </div>
+        {/* === v2.2: Chip theo điểm nghẽn — TỐI ĐA 2 === */}
+        {bnChips.length > 0 && !rescueMode && (
+          <div style={{ padding: '0 12px 8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {bnChips.map((c, i) => (
+              <button key={`bn-${i}`} onClick={() => handleSend(null, c)} style={{
+                padding: '5px 11px', borderRadius: '16px',
+                border: '1px solid rgba(245,158,11,0.35)',
+                background: 'rgba(245,158,11,0.10)', color: '#fcd34d',
+                fontSize: '11px', cursor: 'pointer', fontWeight: 500,
+              }}>{c}</button>
+            ))}
+          </div>
+        )}
+
                 {/* Rescue: nhập cổ phiếu kẹp */}
         {rescueMode && rescueStep === 0 && (
           <div style={{ padding: '10px 12px', borderTop: `1px solid ${C.border}`, background: 'rgba(220,38,38,0.04)' }}>
@@ -931,6 +957,7 @@ export default function VIPDashboard({ user, onSwitchBasic, onOpenIIS }) {
       <div style={{ maxWidth: '760px', margin: '0 auto', padding: '20px 16px 0' }}>
         <IISScoreWidget
           userId={user.email}
+          userTier={user.tier || 'vip'}
           onRequestUpdate={onOpenIIS || (() => {})}
         />
       </div>

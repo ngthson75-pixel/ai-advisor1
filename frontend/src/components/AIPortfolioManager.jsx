@@ -156,6 +156,7 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
       {/* ── IIS SCORE WIDGET ── */}
       <IISScoreWidget
         userId={userId}
+        userTier={userTier}
         onRequestUpdate={onOpenIIS || (() => {})}
       />
 

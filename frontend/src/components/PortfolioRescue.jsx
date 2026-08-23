@@ -24,7 +24,7 @@ const TRIAGE_QUESTIONS = [
 ]
 
 // ── Phase indicators ──────────────────────────────────────────────
-const PHASES = ['Nhập danh mục','Thẩm vấn','Phán quyết','Kế hoạch','Cam kết']
+const PHASES = ['Nhập danh mục','Rà soát','Đánh giá rủi ro','Kịch bản','Cam kết']
 
 // ── Main component ────────────────────────────────────────────────
 export default function PortfolioRescue({ userId, userTier = 'free' }) {
@@ -76,10 +76,13 @@ User trả lời 3 câu hỏi:
 3. Có mua lại ngay hôm nay không: "${ans.rebuy || 'Không trả lời'}"
 
 Hãy phân tích và đưa ra:
-1. VERDICT: "CẮT NGAY" | "CẮT MỘT PHẦN" | "GIỮ VỚI ĐIỀU KIỆN"
-2. LÝ DO (2-3 câu ngắn gọn, thẳng thắn)
-3. KẾ HOẠCH CỤ THỂ (1-2 câu hành động)
-4. LỜI NHẮN (câu động viên ngắn, không sáo rỗng)
+1. VERDICT — mức rủi ro của vị thế: "RỦI RO CAO" | "CẦN RÀ SOÁT" | "TRONG NGƯỠNG"
+2. LÝ DO (2-3 câu dựa trên dữ liệu: mức lỗ, % cần để hòa vốn, luận điểm ban đầu còn đúng không)
+3. KỊCH BẢN (1-2 câu nêu các lựa chọn user có thể cân nhắc kèm hệ quả, KHÔNG chọn hộ)
+4. LỜI NHẮN (câu ngắn, không phán xét)
+
+QUAN TRỌNG: KHÔNG đưa ra khuyến nghị mua/bán. Chỉ đối chiếu với ngưỡng rủi ro
+và luận điểm mà chính user đã nêu. Quyết định thuộc về user.
 
 Format JSON: {"verdict":"...","reason":"...","plan":"...","message":"..."}`
 
@@ -95,10 +98,10 @@ Format JSON: {"verdict":"...","reason":"...","plan":"...","message":"..."}`
         if (jsonMatch) {
           results[pos.ticker] = JSON.parse(jsonMatch[0])
         } else {
-          results[pos.ticker] = { verdict:'CẮT MỘT PHẦN', reason: text.slice(0,200), plan:'Cắt 30-50% vị thế trong tuần này.', message:'Quyết định khó nhưng cần thiết.' }
+          results[pos.ticker] = { verdict:'CẦN RÀ SOÁT', reason: text.slice(0,200), plan:'Đối chiếu vị thế này với ngưỡng rủi ro bạn đã đặt.', message:'Quyết định thuộc về bạn.' }
         }
       } catch {
-        results[pos.ticker] = { verdict:'CẮT MỘT PHẦN', reason:'Không thể phân tích tự động.', plan:'Hãy trao đổi với advisor của bạn.', message:'Mọi hành trình bắt đầu từ một bước nhỏ.' }
+        results[pos.ticker] = { verdict:'CẦN RÀ SOÁT', reason:'Không thể phân tích tự động.', plan:'Hãy trao đổi với advisor của bạn.', message:'Mọi hành trình bắt đầu từ một bước nhỏ.' }
       }
     }
     setVerd(results)
@@ -114,7 +117,7 @@ Format JSON: {"verdict":"...","reason":"...","plan":"...","message":"..."}`
     input: { background:'rgba(255,255,255,0.05)', border:`1px solid ${C.border}`, borderRadius:8, padding:'10px 12px', color: C.text, fontSize:14, width:'100%', outline:'none', boxSizing:'border-box' },
     btn:   (col='#1a5fb4',dis=false) => ({ padding:'10px 20px', borderRadius:8, border:'none', background: dis?'#1e293b':col, color: dis?C.muted:'#fff', fontSize:14, fontWeight:600, cursor: dis?'not-allowed':'pointer', opacity: dis?0.6:1 }),
     phase: (active,done) => ({ flex:1, textAlign:'center', padding:'8px 4px', borderBottom:`3px solid ${done?C.green:active?C.blue:C.border}`, color: done?C.green:active?C.text:C.muted, fontSize:12, fontWeight: active?700:400 }),
-    verdict_color: v => v==='CẮT NGAY'?C.red: v==='CẮT MỘT PHẦN'?C.orange: C.green,
+    verdict_color: v => v==='RỦI RO CAO'?C.red: v==='CẦN RÀ SOÁT'?C.orange: C.green,
   }
 
   // ── PHASE 0: Input positions ─────────────────────────────────────
@@ -124,7 +127,7 @@ Format JSON: {"verdict":"...","reason":"...","plan":"...","message":"..."}`
         <div style={{ fontSize:36, marginBottom:8 }}>🚑</div>
         <div style={{ fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>Giải Phóng Danh Mục Kẹp</div>
         <div style={{ fontSize:14, color:C.muted, maxWidth:520, margin:'0 auto' }}>
-          Nhập các cổ phiếu bạn đang kẹp lỗ. AI sẽ phân tích từng mã và đưa ra kế hoạch thoát cụ thể.
+          Nhập các cổ phiếu bạn đang kẹp lỗ. AI sẽ đánh giá mức rủi ro từng mã và nêu các kịch bản để bạn cân nhắc.
         </div>
       </div>
 
@@ -277,7 +280,7 @@ Format JSON: {"verdict":"...","reason":"...","plan":"...","message":"..."}`
     <div style={{ textAlign:'center', padding:'80px 20px' }}>
       <div style={{ fontSize:48, marginBottom:16, animation:'pulse 1.5s infinite' }}>🔍</div>
       <div style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:8 }}>AI đang phân tích từng vị thế...</div>
-      <div style={{ fontSize:14, color:C.muted }}>Đang đánh giá thesis, tính toán cơ hội thay thế và xây kế hoạch thoát</div>
+      <div style={{ fontSize:14, color:C.muted }}>Đang đánh giá luận điểm, tính toán chi phí cơ hội và dựng các kịch bản</div>
     </div>
   )
 
@@ -285,7 +288,7 @@ Format JSON: {"verdict":"...","reason":"...","plan":"...","message":"..."}`
   const Phase3 = () => (
     <div>
       <div style={{ textAlign:'center', marginBottom:24 }}>
-        <div style={{ fontSize:24, fontWeight:800, color:C.text }}>Phán quyết AI</div>
+        <div style={{ fontSize:24, fontWeight:800, color:C.text }}>Đánh giá rủi ro</div>
         <div style={{ fontSize:14, color:C.muted }}>Dựa trên câu trả lời của bạn và dữ liệu thị trường</div>
       </div>
 
@@ -382,13 +385,14 @@ Format JSON: {"verdict":"...","reason":"...","plan":"...","message":"..."}`
       <div>
         <div style={{ textAlign:'center', marginBottom:24 }}>
           <div style={{ fontSize:24, fontWeight:800 }}>Kế hoạch cam kết</div>
-          <div style={{ fontSize:14, color:C.muted }}>Chọn hành động bạn CAM KẾT thực hiện trong tuần này</div>
+          <div style={{ fontSize:14, color:C.muted }}>Chọn kịch bản bạn CAM KẾT thực hiện trong tuần này</div>
         </div>
 
         <div style={{ ...S.card, background:'rgba(245,158,11,0.08)', border:`1px solid rgba(245,158,11,0.3)`, marginBottom:20 }}>
           <div style={{ fontSize:13, color:'#fbbf24', lineHeight:1.8 }}>
             ⚠️ <strong>Lưu ý quan trọng:</strong> Cam kết không có nghĩa là làm một lúc.
-            "Cắt 30-50%" có thể chia thành 2-3 ngày. Quan trọng là bắt đầu hành động.
+            Một kịch bản có thể chia thành nhiều ngày. Quan trọng là tuân thủ đúng
+            điều bạn đã tự đặt ra.
           </div>
         </div>
 
@@ -433,7 +437,7 @@ Format JSON: {"verdict":"...","reason":"...","plan":"...","message":"..."}`
         </div>
 
         <div style={{ display:'flex', justifyContent:'space-between' }}>
-          <button style={S.btn('#334155')} onClick={() => setPhase(3)}>← Xem lại phán quyết</button>
+          <button style={S.btn('#334155')} onClick={() => setPhase(3)}>← Xem lại đánh giá</button>
           <button style={S.btn(C.green, !allCommitted)} disabled={!allCommitted} onClick={commitAndFinish}>
             ✅ Xác nhận cam kết
           </button>
@@ -458,6 +462,17 @@ Format JSON: {"verdict":"...","reason":"...","plan":"...","message":"..."}`
         {phase === 2 && <Phase2 />}
         {phase === 3 && <Phase3 />}
         {phase === 4 && <Phase4 />}
+
+        {/* v2.2 — disclaimer pháp lý bắt buộc */}
+        <div style={{
+          marginTop: 28, paddingTop: 16,
+          borderTop: `1px solid ${C.border}`,
+          fontSize: 11, color: C.muted,
+          lineHeight: 1.7, textAlign: 'center',
+        }}>
+          Công cụ hỗ trợ quyết định — không phải tư vấn đầu tư.
+          Quyết định và trách nhiệm thuộc về nhà đầu tư.
+        </div>
       </div>
     </div>
   )
