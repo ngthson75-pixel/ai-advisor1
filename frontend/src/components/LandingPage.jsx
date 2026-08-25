@@ -1115,6 +1115,41 @@ export default function LandingPage({ onLogin }) {
             <div className="footer-brand">
               <h3>AI Advisor</h3>
               <p>Nền tảng đầu tư chứng khoán thông minh với AI</p>
+              <div className="footer-social">
+                <a
+                  href="https://www.facebook.com/Aiadvisor.vn/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Facebook AI Advisor"
+                  className="footer-social-icon"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.891h-2.33v6.987C18.343 21.128 22 16.991 22 12z"/>
+                  </svg>
+                </a>
+                <a
+                  href="https://www.tiktok.com/@aiadvisorvn"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="TikTok AI Advisor"
+                  className="footer-social-icon"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M16.6 5.82c-1.01-.87-1.6-2.15-1.6-3.57h-3.15v13.68c0 1.65-1.34 2.98-2.98 2.98a2.98 2.98 0 01-2.98-2.98 2.98 2.98 0 012.98-2.98c.28 0 .55.04.8.11V9.9a6.13 6.13 0 00-.8-.05A6.13 6.13 0 003.74 16a6.13 6.13 0 006.13 6.13A6.13 6.13 0 0016 16V9.5a9.13 9.13 0 005.34 1.71V8.06c-1.62 0-3.11-.55-4.29-1.47-.16-.13-.31-.25-.45-.77z"/>
+                  </svg>
+                </a>
+                <a
+                  href="https://www.youtube.com/@aiadvisorvn"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="YouTube AI Advisor"
+                  className="footer-social-icon"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M23.5 6.19a3.02 3.02 0 00-2.12-2.14C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.38.55A3.02 3.02 0 00.5 6.19 31.6 31.6 0 000 12a31.6 31.6 0 00.5 5.81 3.02 3.02 0 002.12 2.14c1.88.55 9.38.55 9.38.55s7.5 0 9.38-.55a3.02 3.02 0 002.12-2.14A31.6 31.6 0 0024 12a31.6 31.6 0 00-.5-5.81zM9.75 15.5v-7l6.5 3.5-6.5 3.5z"/>
+                  </svg>
+                </a>
+              </div>
             </div>
 
             <div className="footer-links">
