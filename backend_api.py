@@ -451,9 +451,15 @@ def detect_trade_intent(message):
     """
     Phát hiện ý định giao dịch và ticker được nhắc đến.
     Returns (topic: str, ticker: str|None)
-    topic: 'buy_intent' | 'sell_intent' | 'analysis' | 'portfolio' | 'general'
+    topic: 'buy_intent' | 'sell_intent' | 'analysis' | 'portfolio' | 'portfolio_rescue' | 'general'
     """
     import re
+
+    # Portfolio Rescue: prompt do frontend tự soạn (nút "🆘 Giải cứu danh mục"),
+    # luôn có prefix cố định — nhận diện trực tiếp, không qua keyword scoring.
+    if message.strip().startswith('[PORTFOLIO RESCUE]'):
+        return ('portfolio_rescue', None)
+
     msg = message.lower()
 
     buy_kw  = ['mua', 'vào lệnh', 'entry', 'mở vị thế', 'giải ngân']
@@ -577,6 +583,145 @@ KHÔNG được khuyến khích mua ngay dù signal có vẻ tốt.
 
     return section
 
+
+# ========================================================================
+# PORTFOLIO RESCUE — chế độ chẩn đoán toàn danh mục (nút "🆘 Giải cứu danh mục")
+# Không phải feature riêng: dùng chung /api/chat, chỉ thêm 1 nhánh xử lý khi
+# topic == 'portfolio_rescue'. Xem PORTFOLIO_RESCUE_FEATURE_SPEC.md mục 8.
+# ========================================================================
+
+def compute_portfolio_risk_snapshot(user_id):
+    """
+    Tính nhanh các chỉ số rủi ro danh mục trực tiếp từ DB (không parse text tin nhắn
+    — đáng tin cậy hơn vì không phụ thuộc format prompt do frontend soạn).
+    Returns dict hoặc None nếu danh mục trống / không có tài sản.
+    """
+    session = Session()
+    try:
+        portfolios = session.query(Portfolio).filter_by(user_id=str(user_id)).all()
+        if not portfolios:
+            return None
+        cash_pos = session.query(CashPosition).filter_by(user_id=str(user_id)).first()
+        cash = cash_pos.cash_amount if cash_pos else 0
+
+        holdings = []
+        total_cost = 0
+        total_value = 0
+        for p in portfolios:
+            cost = p.quantity * p.avg_price
+            current_price = get_current_price(p.ticker) or p.avg_price
+            value = p.quantity * current_price
+            pl_pct = ((value - cost) / cost * 100) if cost > 0 else 0
+            total_cost += cost
+            total_value += value
+            holdings.append({'ticker': p.ticker, 'value': value, 'pl_pct': pl_pct})
+
+        total_assets = total_value + cash
+        if total_assets <= 0:
+            return None
+
+        for h in holdings:
+            h['pct'] = h['value'] / total_assets * 100
+
+        top = max(holdings, key=lambda h: h['pct'])
+        red_count    = sum(1 for h in holdings if h['pl_pct'] <= -20)
+        orange_count = sum(1 for h in holdings if -20 < h['pl_pct'] <= -15)
+        total_pl_pct = ((total_value - total_cost) / total_cost * 100) if total_cost > 0 else 0
+
+        return {
+            'max_concentration': round(top['pct'], 1),
+            'top_ticker': top['ticker'],
+            'red_count': red_count,
+            'orange_count': orange_count,
+            'total_pl_pct': round(total_pl_pct, 1),
+            'holdings_count': len(holdings),
+        }
+    except Exception as e:
+        print(f"[compute_portfolio_risk_snapshot] {e}")
+        return None
+    finally:
+        session.close()
+
+
+def _parse_rescue_snapshot(portfolio_context_text):
+    """Đọc dòng [RESCUE_SNAPSHOT] đã lưu ở lượt Rescue trước (trong ChatHistory.portfolio_context),
+    dùng để so sánh tiến bộ. Không cần bảng DB mới — tái dùng cột text đã có sẵn."""
+    if not portfolio_context_text:
+        return None
+    for line in portfolio_context_text.splitlines():
+        if line.startswith('[RESCUE_SNAPSHOT]'):
+            try:
+                parts = line.replace('[RESCUE_SNAPSHOT]', '').strip().split('|')
+                data = {}
+                for part in parts:
+                    k, v = part.split('=')
+                    data[k] = float(v)
+                return data
+            except Exception:
+                return None
+    return None
+
+
+def build_portfolio_rescue_section(user_id, session):
+    """
+    Section bắt buộc chèn vào system prompt khi topic == 'portfolio_rescue'.
+    Trả về (section_text, snapshot_line).
+    snapshot_line được nhét vào đầu portfolio_context TRƯỚC khi lưu ChatHistory —
+    đây là toàn bộ cơ chế "logging" cho Rescue, không cần bảng/migration mới.
+    """
+    snapshot = compute_portfolio_risk_snapshot(user_id)
+    if not snapshot:
+        return "", None
+
+    snapshot_line = (
+        f"[RESCUE_SNAPSHOT] max_concentration={snapshot['max_concentration']}"
+        f"|red_count={snapshot['red_count']}|total_pl_pct={snapshot['total_pl_pct']}"
+    )
+
+    # So sánh với lần Rescue gần nhất của cùng user (nếu có) để phát hiện tiến bộ
+    progress_note = ""
+    try:
+        prev_row = session.query(ChatHistory).filter_by(
+            user_id=str(user_id), topic='portfolio_rescue'
+        ).order_by(ChatHistory.created_at.desc()).first()
+        prev_snapshot = _parse_rescue_snapshot(prev_row.portfolio_context) if prev_row else None
+        if prev_snapshot:
+            conc_delta = prev_snapshot.get('max_concentration', 0) - snapshot['max_concentration']
+            red_delta  = prev_snapshot.get('red_count', 0) - snapshot['red_count']
+            if conc_delta > 3 or red_delta > 0:
+                progress_note = (
+                    "\nGHI NHẬN TIẾN BỘ: So với lần chẩn đoán trước, tỷ trọng mã lớn nhất đã giảm "
+                    f"{conc_delta:.1f} điểm % và/hoặc số mã RED giảm {red_delta:.0f}. "
+                    "BẮT BUỘC mở đầu câu trả lời bằng 1 câu ghi nhận ngắn gọn việc user đã chủ động "
+                    "cơ cấu lại, trước khi đi vào phân tích — đây là giai đoạn 'Acknowledge' trong khung coaching."
+                )
+    except Exception as e:
+        print(f"[build_portfolio_rescue_section] progress compare error: {e}")
+
+    section = f"""
+=== PORTFOLIO RESCUE MODE ===
+Đây là yêu cầu chẩn đoán TOÀN BỘ danh mục (không phải phân tích 1 mã riêng lẻ).
+Số liệu khách quan đã tính sẵn: mã tỷ trọng lớn nhất {snapshot['top_ticker']} ({snapshot['max_concentration']}%),
+{snapshot['red_count']} mã lỗ >20%, {snapshot['orange_count']} mã lỗ 15-20%, tổng lãi/lỗ danh mục {snapshot['total_pl_pct']:+.1f}%.
+{progress_note}
+
+BẮT BUỘC trả lời theo đúng 4 phần sau, theo thứ tự, KHÔNG bỏ phần nào:
+
+1. TRẠNG THÁI RỦI RO TỔNG THỂ — nêu rõ concentration risk (mã nào, bao nhiêu %, có vượt ngưỡng an toàn
+   ~30-35% không), số mã ở từng mức cảnh báo, so với allocation khuyến nghị từ Market Dashboard.
+
+2. NHẬN DIỆN HÀNH VI — KHÔNG kết luận thay user. Chỉ đặt câu hỏi phản tư, ví dụ dạng:
+   "Luận điểm đầu tư ban đầu của [mã] có còn đúng không, hay đang giữ vì giá vốn?"
+
+3. PHƯƠNG ÁN THEO KỊCH BẢN — trình bày 2-3 kịch bản dạng "nếu... thì cân nhắc...".
+   TUYỆT ĐỐI KHÔNG dùng % phân bổ cụ thể mang tính chỉ thị (vd "bán 30% ngay"), không dùng
+   "CẮT NGAY"/"PHÁN QUYẾT". Đề xuất cơ cấu lại theo từng bước nhỏ, không all-or-nothing.
+
+4. Câu disclaimer ngắn nhắc đây là công cụ hỗ trợ quyết định, không phải tư vấn đầu tư.
+"""
+    return section, snapshot_line
+
+
 # ========================================================================
 # DATABASE MODELS# ========================================================================
 
@@ -642,8 +787,8 @@ class ChatHistory(Base):
     portfolio_context = Column(Text)
     created_at = Column(DateTime, default=datetime.now)
     # IIS Behavioral Tracking — v2.0
-    emotional_state = Column(String(20))   # fomo | panic | avg_down | neutral
-    topic           = Column(String(30))   # buy_intent | sell_intent | analysis | portfolio | general
+    emotional_state = Column(String(20))   # fomo | panic | avg_down | neutral | concentration_risk
+    topic           = Column(String(30))   # buy_intent | sell_intent | analysis | portfolio | portfolio_rescue | general
     iis_level       = Column(Integer)      # snapshot IIS level tại thời điểm chat
 
 class TickerBlacklist(Base):
@@ -1872,6 +2017,10 @@ def chat():
             print(f"[IIS] Using frontend fallback profile for {user_id}: {iis_profile.get('level')}")
         emotional_state, _ = detect_emotional_state(message)
         topic, ticker_mentioned = detect_trade_intent(message)
+        if topic == 'portfolio_rescue':
+            # Portfolio Rescue là Risk Shield, không phải coaching cảm xúc theo từ khóa —
+            # override emotional_state để backend/analytics phân biệt rõ nguồn gốc
+            emotional_state = 'concentration_risk'
 
         # IIS coaching chỉ cho Basic+ và VIP
         user_tier = data.get('user_tier', 'free')
@@ -1896,6 +2045,13 @@ def chat():
         iis_section = build_iis_coaching_section(iis_profile, emotional_state) if coaching_enabled else ""
         tier_locked  = not coaching_enabled
 
+        # Portfolio Rescue: đưa vào MỌI tier (kể cả free) — đây là Risk Shield cơ bản,
+        # không phải coaching cá nhân hóa trả phí. Không bị gate bởi coaching_enabled.
+        rescue_snapshot_line = None
+        if topic == 'portfolio_rescue':
+            rescue_section, rescue_snapshot_line = build_portfolio_rescue_section(user_id, session)
+            iis_section += rescue_section
+
         # === v2.2: chèn ĐIỂM NGHẼN vào system prompt ===
         # Chỉ MỘT điểm nghẽn mỗi lần — coaching tập trung, không liệt kê 5 thứ
         _bottleneck = None
@@ -1915,6 +2071,10 @@ def chat():
             print(f"[/api/chat] history load failed (non-fatal): {_hist_err}")
             history = []
         portfolio_context, signal_tickers = get_portfolio_context(user_id, user_tier=user_tier)
+        if rescue_snapshot_line:
+            # Nhét snapshot vào đầu context — vừa để GPT tham chiếu, vừa để lưu vào
+            # ChatHistory.portfolio_context cho lần Rescue kế tiếp so sánh (mục 8.1 spec)
+            portfolio_context = rescue_snapshot_line + "\n" + portfolio_context
         ai_response = chat_with_gpt(
             message, portfolio_context, signal_tickers,
             iis_section=iis_section, history=history

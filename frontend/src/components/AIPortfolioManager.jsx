@@ -142,6 +142,69 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
     'Cổ phiếu nào nên xem xét bán?',
   ]
 
+  // ── Portfolio Rescue: chẩn đoán toàn danh mục ──────────────────
+  // Xem PORTFOLIO_RESCUE_FEATURE_SPEC.md — không phải feature riêng,
+  // chỉ là 1 nút tự soạn prompt và bắn vào AI Advisor Chat có sẵn (askAI event).
+  const maxConcentration = (totalAssets > 0 && portfolio.length > 0)
+    ? Math.max(...portfolio.map(p => ((p.current_value || 0) / totalAssets) * 100))
+    : 0
+
+  const topConcentrationTicker = (() => {
+    if (portfolio.length === 0 || totalAssets === 0) return null
+    let top = null, topPct = -1
+    portfolio.forEach(p => {
+      const pct = ((p.current_value || 0) / totalAssets) * 100
+      if (pct > topPct) { topPct = pct; top = p }
+    })
+    return top?.ticker || null
+  })()
+
+  const redAlertCount    = portfolio.filter(p => (p.pl_pct || 0) <= -20).length
+  const orangeAlertCount = portfolio.filter(p => (p.pl_pct || 0) <= -15 && (p.pl_pct || 0) > -20).length
+
+  const needsRescue = portfolio.length > 0 && (
+    maxConcentration > 35 ||
+    redAlertCount >= 1 ||
+    (orangeAlertCount + redAlertCount) >= 2
+  )
+
+  // Track badge hiển thị 1 lần khi trạng thái chuyển sang cần rescue (không lặp lại mỗi render)
+  useEffect(() => {
+    if (needsRescue) {
+      track('portfolio_rescue_badge_shown', {
+        user_tier: userTier,
+        max_concentration: Math.round(maxConcentration),
+        red_alert_count: redAlertCount,
+      })
+    }
+  }, [needsRescue])
+
+  function buildRescuePrompt() {
+    const holdingsText = portfolio.map(p => {
+      const pct = totalAssets > 0 ? (((p.current_value || 0) / totalAssets) * 100).toFixed(1) : '0'
+      const plPct = (p.pl_pct || 0).toFixed(1)
+      return `${p.ticker}: ${fmt(p.quantity)} CP, tỷ trọng ${pct}%, lãi/lỗ ${plPct}%`
+    }).join('; ')
+
+    return `[PORTFOLIO RESCUE] Chẩn đoán toàn bộ danh mục của tôi:
+${holdingsText}
+Tiền mặt: ${fmt(cash)} VND (${cashPct.toFixed(1)}% tổng tài sản)
+Mã có tỷ trọng lớn nhất: ${topConcentrationTicker || 'N/A'} (${maxConcentration.toFixed(1)}%)
+Số mã đang lỗ trên 20%: ${redAlertCount}
+Số mã đang lỗ 15-20%: ${orangeAlertCount}
+Hãy đánh giá rủi ro tổng thể của danh mục và đề xuất hướng xử lý theo từng bước.`
+  }
+
+  function handleRescueClick() {
+    track('portfolio_rescue_click', {
+      user_tier: userTier,
+      max_concentration: Math.round(maxConcentration),
+      red_alert_count: redAlertCount,
+      needs_rescue: needsRescue,
+    })
+    window.dispatchEvent(new CustomEvent('askAI', { detail: buildRescuePrompt() }))
+  }
+
   return (
     <div style={{
       display: 'flex',
@@ -175,10 +238,37 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
         <div style={{
           padding: '16px 20px',
           borderBottom: '1px solid #1e293b',
-          display: 'flex', alignItems: 'center', gap: '10px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: '10px', flexWrap: 'wrap',
         }}>
-          <span style={{ fontSize: '18px' }}>📊</span>
-          <div style={{ fontWeight: 700, color: '#e2e8f0', fontSize: '15px' }}>Danh mục đầu tư</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '18px' }}>📊</span>
+            <div style={{ fontWeight: 700, color: '#e2e8f0', fontSize: '15px' }}>Danh mục đầu tư</div>
+          </div>
+
+          {/* ── Nút Portfolio Rescue — KHÁC nút "Xem phân tích AI" của từng tín hiệu ── */}
+          {portfolio.length > 0 && (
+            <button
+              onClick={handleRescueClick}
+              title="Chẩn đoán rủi ro toàn bộ danh mục — trả lời trong AI Advisor Chat"
+              style={{
+                position: 'relative',
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '7px 14px',
+                background: needsRescue ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${needsRescue ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.12)'}`,
+                borderRadius: '20px',
+                color: needsRescue ? '#f87171' : '#94a3b8',
+                fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = needsRescue ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.08)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = needsRescue ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.04)' }}
+            >
+              🆘 Giải cứu danh mục
+              {needsRescue && <span className="rescue-badge-dot" />}
+            </button>
+          )}
         </div>
 
         {/* ── TỔNG QUAN: 4 cards bao gồm tiền mặt ── */}
@@ -466,6 +556,15 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
         @keyframes pulse {
           0%, 100% { opacity: 0.3; transform: scale(0.8); }
           50% { opacity: 1; transform: scale(1); }
+        }
+        .rescue-badge-dot {
+          position: absolute;
+          top: -3px; right: -3px;
+          width: 9px; height: 9px;
+          background: #ef4444;
+          border: 2px solid #0f172a;
+          border-radius: 50%;
+          animation: pulse 2s infinite;
         }
         @media (max-width: 600px) {
           form[style*="grid-template-columns"] {
