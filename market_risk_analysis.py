@@ -10,7 +10,7 @@ Thay đổi so với v3:
   + Thêm MACD histogram crossover detection
   + Thêm BB %B (oversold/overbought theo Bollinger Bands)
   + Thêm Volume capitulation detection
-  + Giữ nguyên v3: smoothing 5-day, confirmation 3 ngày, hysteresis
+  + Smoothing 5-day, direct mode từ score — không hysteresis/confirmation
 
 Các tín hiệu mới phát hiện CHÍNH XÁC:
   - Sideways → Downtrend (như 02/03/2026): price break MA50 + MACD death cross
@@ -45,14 +45,12 @@ WEIGHTS = {
 ALLOCATION_MAP = {'BULL': 80, 'SIDEWAYS': 50, 'BEAR': 20}
 
 # Hysteresis — ngưỡng vào ≠ ra
-BULL_ENTER = 32
-BULL_EXIT  = 38
-BEAR_ENTER = 68
-BEAR_EXIT  = 62
+# Mode thresholds — đơn giản, trực tiếp từ score_5d
+BULL_THRESHOLD = 35   # score_5d ≤ 35 → BULL
+BEAR_THRESHOLD = 62   # score_5d ≥ 62 → BEAR | SIDEWAYS: 36-61 | BULL: ≤35
 
-MIN_CONFIRMATION_DAYS = 3
-SMOOTH_WINDOW         = 5
-HISTORY_KEEP_DAYS     = 14
+SMOOTH_WINDOW     = 5   # Smoothing 5 ngày giữ nguyên
+HISTORY_KEEP_DAYS = 14
 
 # Cap điều chỉnh từ VN30 signals (tránh 1 event đẩy score quá mạnh)
 MAX_RISK_ADJ_UP   = +55   # Tối đa tăng risk score bao nhiêu điểm
@@ -150,8 +148,6 @@ def load_history() -> dict:
         'current_mode':        'SIDEWAYS',
         'mode_confirmed_date': None,
         'days_in_mode':        0,
-        'pending_mode':        None,
-        'pending_days':        0,
         'daily_scores':        [],
     }
     if not os.path.exists(HISTORY_FILE):
@@ -671,15 +667,17 @@ def collect_breadth_data(stock_data_list):
 
 
 # ================================================================
-# MODE DETERMINATION — smoothing + confirmation + hysteresis
+# MODE DETERMINATION — smoothing only, no hysteresis/confirmation
 # ================================================================
 
 def determine_mode_with_confirmation(adjusted_score: int, components: dict) -> tuple:
     """
-    Quyết định Market Mode với 3 lớp bảo vệ:
-      1. Smoothing: trung bình 5 ngày
-      2. Hysteresis: ngưỡng vào/ra khác nhau
-      3. Confirmation: 3 ngày liên tiếp vượt ngưỡng
+    Quyết định Market Mode từ score_5d (trung bình 5 ngày).
+    Không còn hysteresis hay 3-day confirmation — mode phản ánh ngay thực tế.
+
+    BULL:     score_5d ≤ 35
+    SIDEWAYS: score_5d 36-59
+    BEAR:     score_5d ≥ 60
     """
     today   = datetime.now().strftime('%Y-%m-%d')
     history = load_history()
@@ -693,66 +691,41 @@ def determine_mode_with_confirmation(adjusted_score: int, components: dict) -> t
     else:
         for d in history['daily_scores']:
             if d['date'] == today:
-                d['raw_score'] = adjusted_score
-                d['components'] = components
+                d['raw_score']    = adjusted_score
+                d['components']   = components
                 break
 
     history['daily_scores'] = sorted(
         history['daily_scores'], key=lambda x: x['date']
     )[-HISTORY_KEEP_DAYS:]
 
-    # Smoothed score
-    recent = [d['raw_score'] for d in history['daily_scores'][-SMOOTH_WINDOW:]]
+    # Smoothed score (5-day average) — giữ smoothing để tránh noise ngày lẻ
+    recent   = [d['raw_score'] for d in history['daily_scores'][-SMOOTH_WINDOW:]]
     score_5d = round(sum(recent) / len(recent))
 
-    # Proposed mode dựa theo hysteresis
-    current = history.get('current_mode', 'SIDEWAYS')
-    if current == 'BULL':
-        proposed = 'BULL' if score_5d < BULL_EXIT else (
-            'BEAR' if score_5d >= BEAR_ENTER else 'SIDEWAYS'
-        )
-    elif current == 'BEAR':
-        proposed = 'BEAR' if score_5d > BEAR_EXIT else (
-            'BULL' if score_5d <= BULL_ENTER else 'SIDEWAYS'
-        )
+    # Mode trực tiếp từ score — không hysteresis, không confirmation
+    if score_5d <= BULL_THRESHOLD:
+        final_mode = 'BULL'
+    elif score_5d >= BEAR_THRESHOLD:
+        final_mode = 'BEAR'
     else:
-        if score_5d <= BULL_ENTER:       proposed = 'BULL'
-        elif score_5d >= BEAR_ENTER:     proposed = 'BEAR'
-        else:                            proposed = 'SIDEWAYS'
+        final_mode = 'SIDEWAYS'
 
-    # Confirmation
-    transition_info = None
-    if proposed == current:
-        history['pending_mode'] = None
-        history['pending_days'] = 0
+    # Cập nhật history đơn giản
+    prev_mode = history.get('current_mode', 'SIDEWAYS')
+    if final_mode != prev_mode:
+        print(f"\n  🔄 MODE CHANGE: {prev_mode} → {final_mode} (score_5d={score_5d})")
+        history['current_mode']        = final_mode
+        history['mode_confirmed_date'] = today
+        history['days_in_mode']        = 1
+    else:
         history['days_in_mode'] = history.get('days_in_mode', 0) + 1
-        final_mode = current
-    else:
-        if history.get('pending_mode') == proposed:
-            history['pending_days'] = history.get('pending_days', 0) + 1
-        else:
-            history['pending_mode'] = proposed
-            history['pending_days'] = 1
 
-        pd_ = history['pending_days']
-        transition_info = {
-            'pending_mode': proposed,
-            'pending_days': pd_,
-            'days_needed':  MIN_CONFIRMATION_DAYS,
-        }
+    # Xóa pending fields cũ nếu còn
+    history.pop('pending_mode', None)
+    history.pop('pending_days', None)
 
-        if pd_ >= MIN_CONFIRMATION_DAYS:
-            print(f"\n  🔄 MODE CHANGE: {current} → {proposed} (confirmed {pd_}d)")
-            history['current_mode']        = proposed
-            history['mode_confirmed_date'] = today
-            history['days_in_mode']        = 1
-            history['pending_mode']        = None
-            history['pending_days']        = 0
-            final_mode = proposed
-        else:
-            print(f"\n  ⏳ Pending: {current}→{proposed} ({pd_}/{MIN_CONFIRMATION_DAYS}d)...")
-            final_mode = current
-
+    transition_info = None
     save_history(history)
 
     MAP = {
@@ -771,7 +744,7 @@ def determine_mode_with_confirmation(adjusted_score: int, components: dict) -> t
 def run_market_analysis():
     print("\n" + "=" * 60)
     print("🔍 MARKET RISK ANALYSIS v4  (VN30 + MA200 + RSI + BB + MACD)")
-    print("   Smoothing: 5d | Confirmation: 3d | Hysteresis: ON")
+    print("   Smoothing: 5d | Direct mode từ score — không hysteresis/confirmation")
     print("=" * 60)
 
     # 1. VN30 (1 API call: trend + liquidity + breakdown + recovery)
@@ -822,13 +795,6 @@ def run_market_analysis():
         adjusted_score, components
     )
 
-    if transition_info:
-        pm = transition_info['pending_mode']
-        pd = transition_info['pending_days']
-        dn = transition_info['days_needed']
-        print(f"   Score 5d avg: {score_5d} → Pending: {pm} ({pd}/{dn}d)")
-    else:
-        print(f"   Score 5d avg: {score_5d} → Mode ổn định")
 
     DESC = {
         'BULL':     'Thị trường uptrend — Ưu tiên tìm điểm mua',
@@ -888,13 +854,9 @@ def run_market_analysis():
     print(f"{mode_emoji} MARKET MODE: {mode_label} ({market_mode})")
     print(f"📊 Score 5d avg: {score_5d}/100  |  Adjusted hôm nay: {adjusted_score}/100")
     print(f"   Base={base_score} | VN30 adj={risk_adj:+d}")
-    print(f"📅 Đã ở mode này: {history.get('days_in_mode', 0)} ngày")
+    print(f"📅 Đã ở mode này: {history.get('days_in_mode', 0)} ngày  (score_5d={score_5d})")
     print(f"💰 Tỷ trọng khuyến nghị: {ALLOCATION_MAP[market_mode]}% cổ phiếu")
-    if transition_info:
-        pm = transition_info['pending_mode']
-        pd = transition_info['pending_days']
-        dn = transition_info['days_needed']
-        print(f"⏳ Cảnh báo: Pending {pm} ({pd}/{dn} ngày nữa mới đổi)")
+
     if down_sigs: print(f"⚠️  Breakdown signals: {', '.join(down_sigs[:2])}")
     if up_sigs:   print(f"✅ Recovery signals:  {', '.join(up_sigs[:2])}")
     print("=" * 60 + "\n")
