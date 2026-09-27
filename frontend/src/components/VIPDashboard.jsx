@@ -962,7 +962,6 @@ function ModelPortfolioCard() {
               <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'baseline', padding: '5px 0', borderBottom: `1px solid ${C.border}22`, fontSize: '12px', flexWrap: 'wrap' }}>
                 <span style={{ color: C.muted, minWidth: '44px' }}>{fmtDate(t.trade_date)}</span>
                 <span style={badge(t.action === 'BUY' ? C.green : C.red)}>{t.action === 'BUY' ? 'MUA' : 'BÁN'}</span>
-                {(t.reason || '').startsWith('[Thủ công]') && <span style={badge(C.yellow)}>Thủ công</span>}
                 <b style={{ color: '#fff' }}>{t.ticker}</b>
                 <span style={{ color: C.text }}>{fmt(t.qty)} cp @ {fmtPrice(t.price)}</span>
                 {t.pnl_pct != null && <span style={{ color: col(t.pnl_pct), fontWeight: 700 }}>{pct(t.pnl_pct)}</span>}
@@ -978,9 +977,8 @@ function ModelPortfolioCard() {
             {/* Quy tắc */}
             <div style={{ marginTop: '14px', padding: '10px 12px', background: '#ffffff05', borderRadius: '10px', fontSize: '11px', color: C.muted, lineHeight: 1.7 }}>
               <b style={{ color: C.text }}>Quy tắc vận hành:</b> tỷ trọng cổ phiếu theo Market Dashboard ({data.target_stock_pct}%), chia đều tối đa {data.rules.max_positions} mã
-              (~{data.rules.slot_pct}% tài sản/mã) · chỉ mua theo tín hiệu VIP, không mua đuổi quá {data.rules.max_chase_pct}% ·
+              (~{data.rules.slot_pct}% tài sản/mã) · vào lệnh theo tín hiệu hệ thống AI, có thẩm định của đội ngũ phân tích, không mua đuổi quá {data.rules.max_chase_pct}% ·
               bán khi chạm cắt lỗ, khi hệ thống phát tín hiệu bán, hoặc sau {data.rules.max_hold_sessions} phiên · {data.rules.fees}.
-              {' '}Lệnh gắn nhãn <b style={{ color: C.text }}>Thủ công</b> do chuyên viên điều chỉnh, luôn kèm lý do.
               {data.stats.closed_trades > 0 && <> · Tỷ lệ lệnh bán có lãi: <b style={{ color: C.text }}>{data.stats.win_rate_pct}%</b> ({data.stats.closed_trades} lệnh).</>}
               <div style={{ marginTop: '6px' }}>⚠️ Danh mục mô phỏng để tham khảo, không phải tư vấn đầu tư. Giá cập nhật {fmtDate(data.as_of)} theo các lần quét trong phiên.</div>
             </div>

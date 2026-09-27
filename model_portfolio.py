@@ -2,6 +2,7 @@
 AI ADVISOR - LƯỚT SÓNG AI MODEL PORTFOLIO (danh mục mẫu VIP)
 =============================================================
 File: model_portfolio.py
+Version: 1.3 (2026-09-27) — nhãn [Thủ công] chỉ hiện cho admin, API khách chỉ trả lý do
 Version: 1.2 (2026-09-27) — can thiệp thủ công, bật/tắt tự động, hủy giao dịch, loại mã (quản lý qua signal_reviewer.py mục 23)
 
 Một danh mục MẪU (mô phỏng, không phải lệnh thật) vốn 1 tỷ VND, tự vận hành theo tín hiệu
@@ -38,7 +39,7 @@ Endpoints:
     GET  /api/vip/model-portfolio            [VIP JWT / admin key]  tổng quan + vị thế + lịch sử + NAV
     POST /api/admin/model-portfolio/run      [ADMIN]  {"dry_run": false}  — gọi sau mỗi lần cập nhật giá
     POST /api/admin/model-portfolio/reset    [ADMIN]  {"capital": 1000000000, "confirm": "RESET"}
-    POST /api/admin/model-portfolio/trade    [ADMIN]  mua/bán THỦ CÔNG (ghi nhãn [Thủ công] + lý do)
+    POST /api/admin/model-portfolio/trade    [ADMIN]  mua/bán THỦ CÔNG (nhãn [Thủ công] chỉ admin thấy)
     POST /api/admin/model-portfolio/position [ADMIN]  sửa cắt lỗ / mục tiêu của 1 mã
     POST /api/admin/model-portfolio/auto     [ADMIN]  {"enabled": false} tạm dừng tự động (chỉ định giá)
 """
@@ -493,7 +494,7 @@ def _load_ctx(s):
 def manual_trade(Session, action, ticker, reason, qty=None, pct=None, amount=None, price=None,
                  stop_loss=None, take_profit=None):
     """
-    Lệnh thủ công của admin. Luôn ghi vào lịch sử với nhãn [Thủ công] + lý do (khách nhìn thấy).
+    Lệnh thủ công của admin. Lưu với nhãn nội bộ [Thủ công] (chỉ admin thấy); khách chỉ thấy lý do.
       BUY : amount (VND) hoặc qty; giá mặc định = giá quét gần nhất; nên kèm stop_loss / take_profit.
       SELL: qty hoặc pct (% vị thế, mặc định 100); bán các lô cũ trước (FIFO); vẫn tôn trọng T+2.
     """
@@ -510,7 +511,7 @@ def manual_trade(Session, action, ticker, reason, qty=None, pct=None, amount=Non
         px = float(price) if price else prices.get(ticker)
         if not px:
             raise ValueError(f'Không có giá cho {ticker} — truyền price hoặc thêm mã vào danh sách cập nhật giá')
-        label = f"[Thủ công] {reason.strip()}"
+        label = f"{MANUAL_TAG} {reason.strip()}"
 
         if action == 'BUY':
             nav = st['cash'] + sum(p['qty'] * prices.get(p['ticker'], p['entry_price']) for p in _open_positions(s))
@@ -682,6 +683,14 @@ def admin_status(Session):
         s.close()
 
 
+MANUAL_TAG = '[Thủ công]'
+
+
+def _public_reason(reason):
+    r = (reason or '').strip()
+    return r[len(MANUAL_TAG):].strip() if r.startswith(MANUAL_TAG) else r
+
+
 def get_overview(Session):
     s = Session()
     try:
@@ -722,6 +731,9 @@ def get_overview(Session):
 
         trades = _rows(s, """SELECT trade_date, action, ticker, qty, price, value, pnl, pnl_pct, reason
                              FROM mp_trades ORDER BY id DESC LIMIT 50""")
+        # v1.3: nhãn [Thủ công] chỉ dùng nội bộ (admin / signal_reviewer) — không trả ra API cho khách
+        for t in trades:
+            t['reason'] = _public_reason(t.get('reason'))
         closed = _rows(s, "SELECT pnl FROM mp_trades WHERE action = 'SELL' AND pnl IS NOT NULL")
         wins = sum(1 for c in closed if c['pnl'] > 0)
         alloc = float(market.get('allocation') or MP_DEFAULT_ALLOC)
