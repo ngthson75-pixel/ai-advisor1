@@ -10,7 +10,8 @@
  *   BUG6 - Production (ai-advisor.vn) fallback về localhost vì VITE_API_URL không set
  *          → Fix: detect hostname production → hardcode production backend URL
  * v2.4 (2026-09-27):
- *   + ModelPortfolioCard — "Lướt sóng AI" danh mục mẫu 1 tỷ (mô phỏng), gắn trên ô chat.
+ *   + ModelPortfolioCard — "Lướt sóng AI" danh mục mẫu 1 tỷ (mô phỏng), đặt DƯỚI ô chat.
+ *   + CollapsibleSection — khung IIS thu gọn / mở rộng (mặc định thu gọn, nhớ theo trình duyệt).
  *     Chỉ THÊM component + 1 chỗ mount, không đổi tính năng cũ.
  * FIXES (2026-06-22):
  *   BUG7 - Chat history không load được: frontend đọc d.messages nhưng backend trả d.history
@@ -817,6 +818,36 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
   )
 }
 
+// ─── Khung thu gọn / mở rộng (v2.4) ──────────────────────────
+// Ghi nhớ trạng thái theo từng trình duyệt (localStorage, có try/catch — lỗi thì dùng mặc định)
+function CollapsibleSection({ storageKey, defaultOpen = false, icon, title, hint, children }) {
+  const [open, setOpen] = useState(() => {
+    try { const v = localStorage.getItem(storageKey); return v == null ? defaultOpen : v === '1' } catch { return defaultOpen }
+  })
+  const toggle = () => setOpen(o => {
+    const n = !o
+    try { localStorage.setItem(storageKey, n ? '1' : '0') } catch {}
+    return n
+  })
+  return (
+    <div>
+      <button onClick={toggle} style={{
+        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
+        padding: '10px 14px', marginBottom: open ? '8px' : 0, borderRadius: '12px', cursor: 'pointer',
+        background: C.bgCard, border: `1px solid ${C.border}`, color: C.text, textAlign: 'left',
+      }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+          <span>{icon}</span>
+          <b style={{ fontSize: '13px', color: C.purpleLight }}>{title}</b>
+          {!open && hint && <span style={{ fontSize: '11px', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hint}</span>}
+        </span>
+        <span style={{ fontSize: '12px', color: C.muted, whiteSpace: 'nowrap' }}>{open ? '▲ Thu gọn' : '▼ Mở'}</span>
+      </button>
+      {open && children}
+    </div>
+  )
+}
+
 // ─── Lướt sóng AI — Danh mục mẫu (Model Portfolio) ─────────────
 // v2.4 (2026-09-27): thẻ gắn ngay trên ô chat VIP. Dữ liệu: GET /api/vip/model-portfolio
 // Danh mục MÔ PHỎNG 1 tỷ, tự vận hành theo tín hiệu VIP + tỷ trọng Market Dashboard.
@@ -866,6 +897,7 @@ function ModelPortfolioCard() {
             <span style={{ fontSize: '16px' }}>🌊</span>
             <span style={{ fontWeight: 800, fontSize: '14px', color: C.purpleLight }}>Lướt sóng AI — Danh mục mẫu {mil(data.capital)}</span>
             <span style={badge(C.yellow)}>MÔ PHỎNG</span>
+            {data.auto_enabled === false && <span style={badge(C.red)}>TẠM DỪNG TỰ ĐỘNG</span>}
           </div>
           <button onClick={() => setOpen(o => !o)} style={{ background: 'none', border: 'none', color: C.purpleLight, cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
             {open ? '▲ Thu gọn' : '▼ Xem danh mục'}
@@ -930,10 +962,11 @@ function ModelPortfolioCard() {
               <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'baseline', padding: '5px 0', borderBottom: `1px solid ${C.border}22`, fontSize: '12px', flexWrap: 'wrap' }}>
                 <span style={{ color: C.muted, minWidth: '44px' }}>{fmtDate(t.trade_date)}</span>
                 <span style={badge(t.action === 'BUY' ? C.green : C.red)}>{t.action === 'BUY' ? 'MUA' : 'BÁN'}</span>
+                {(t.reason || '').startsWith('[Thủ công]') && <span style={badge(C.yellow)}>Thủ công</span>}
                 <b style={{ color: '#fff' }}>{t.ticker}</b>
                 <span style={{ color: C.text }}>{fmt(t.qty)} cp @ {fmtPrice(t.price)}</span>
                 {t.pnl_pct != null && <span style={{ color: col(t.pnl_pct), fontWeight: 700 }}>{pct(t.pnl_pct)}</span>}
-                <span style={{ color: C.muted, flexBasis: '100%', paddingLeft: '52px' }}>{t.reason}</span>
+                <span style={{ color: C.muted, flexBasis: '100%', paddingLeft: '52px' }}>{(t.reason || '').replace(/^\[Thủ công\]\s*/, '')}</span>
               </div>
             ))}
             {data.trades.length > 8 && (
@@ -947,6 +980,7 @@ function ModelPortfolioCard() {
               <b style={{ color: C.text }}>Quy tắc vận hành:</b> tỷ trọng cổ phiếu theo Market Dashboard ({data.target_stock_pct}%), chia đều tối đa {data.rules.max_positions} mã
               (~{data.rules.slot_pct}% tài sản/mã) · chỉ mua theo tín hiệu VIP, không mua đuổi quá {data.rules.max_chase_pct}% ·
               bán khi chạm cắt lỗ, khi hệ thống phát tín hiệu bán, hoặc sau {data.rules.max_hold_sessions} phiên · {data.rules.fees}.
+              {' '}Lệnh gắn nhãn <b style={{ color: C.text }}>Thủ công</b> do chuyên viên điều chỉnh, luôn kèm lý do.
               {data.stats.closed_trades > 0 && <> · Tỷ lệ lệnh bán có lãi: <b style={{ color: C.text }}>{data.stats.win_rate_pct}%</b> ({data.stats.closed_trades} lệnh).</>}
               <div style={{ marginTop: '6px' }}>⚠️ Danh mục mô phỏng để tham khảo, không phải tư vấn đầu tư. Giá cập nhật {fmtDate(data.as_of)} theo các lần quét trong phiên.</div>
             </div>
@@ -1053,23 +1087,31 @@ export default function VIPDashboard({ user, onSwitchBasic, onOpenIIS }) {
         </div>
       </div>
 
-      {/* IIS Score Widget — VIP có full IIS */}
+      {/* IIS Score Widget — VIP có full IIS (v2.4: thu gọn / mở rộng được) */}
       <div style={{ maxWidth: '760px', margin: '0 auto', padding: '20px 16px 0' }}>
-        <IISScoreWidget
-          userId={user.email}
-          userTier={user.tier || 'vip'}
-          onRequestUpdate={onOpenIIS || (() => {})}
-        />
+        <CollapsibleSection
+          storageKey="vip_iis_open"
+          defaultOpen={false}
+          icon="🧭"
+          title="Chỉ số nhà đầu tư (IIS)"
+          hint="Mức độ kỷ luật, điểm nghẽn và lộ trình nâng cấp"
+        >
+          <IISScoreWidget
+            userId={user.email}
+            userTier={user.tier || 'vip'}
+            onRequestUpdate={onOpenIIS || (() => {})}
+          />
+        </CollapsibleSection>
       </div>
 
-      {/* v2.4: Lướt sóng AI — Danh mục mẫu (ngay trên ô chat) */}
-      <div style={{ paddingTop: '8px' }}>
-        <ModelPortfolioCard />
-      </div>
-
-      {/* Inline AI Chat — always visible */}
+      {/* Inline AI Chat — always visible (giao diện chính) */}
       <div style={{ paddingTop: '8px' }}>
         <InlineAIChat userId={user.email} />
+      </div>
+
+      {/* v2.4: Lướt sóng AI — Danh mục mẫu (dưới ô chat) */}
+      <div style={{ paddingTop: '4px' }}>
+        <ModelPortfolioCard />
       </div>
 
       {/* Content */}

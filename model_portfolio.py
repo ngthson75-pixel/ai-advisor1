@@ -2,7 +2,7 @@
 AI ADVISOR - LƯỚT SÓNG AI MODEL PORTFOLIO (danh mục mẫu VIP)
 =============================================================
 File: model_portfolio.py
-Version: 1.0 (2026-09-27)
+Version: 1.1 (2026-09-27) — thêm can thiệp thủ công + bật/tắt tự động
 
 Một danh mục MẪU (mô phỏng, không phải lệnh thật) vốn 1 tỷ VND, tự vận hành theo tín hiệu
 VIP của hệ thống — học theo mô hình "danh mục mẫu để làm theo" của iCopy, nhưng mọi quyết định
@@ -38,6 +38,9 @@ Endpoints:
     GET  /api/vip/model-portfolio            [VIP JWT / admin key]  tổng quan + vị thế + lịch sử + NAV
     POST /api/admin/model-portfolio/run      [ADMIN]  {"dry_run": false}  — gọi sau mỗi lần cập nhật giá
     POST /api/admin/model-portfolio/reset    [ADMIN]  {"capital": 1000000000, "confirm": "RESET"}
+    POST /api/admin/model-portfolio/trade    [ADMIN]  mua/bán THỦ CÔNG (ghi nhãn [Thủ công] + lý do)
+    POST /api/admin/model-portfolio/position [ADMIN]  sửa cắt lỗ / mục tiêu của 1 mã
+    POST /api/admin/model-portfolio/auto     [ADMIN]  {"enabled": false} tạm dừng tự động (chỉ định giá)
 """
 
 import os
@@ -94,6 +97,18 @@ def ensure_tables(engine):
                 last_rebalance_date VARCHAR(20),
                 updated_at          TIMESTAMP
             )"""))
+    # v1.1: cờ bật/tắt chế độ tự động (admin can thiệp thủ công)
+    try:
+        with engine.begin() as c:
+            if sqlite:
+                cols = [r[1] for r in c.execute(text("PRAGMA table_info(mp_state)")).fetchall()]
+                if 'auto_enabled' not in cols:
+                    c.execute(text("ALTER TABLE mp_state ADD COLUMN auto_enabled BOOLEAN DEFAULT 1"))
+            else:
+                c.execute(text("ALTER TABLE mp_state ADD COLUMN IF NOT EXISTS auto_enabled BOOLEAN DEFAULT TRUE"))
+    except Exception as e:
+        logger.warning(f'[ModelPortfolio] auto_enabled column: {e}')
+    with engine.begin() as c:
         c.execute(text(f"""
             CREATE TABLE IF NOT EXISTS mp_positions (
                 id            {pk},
@@ -252,7 +267,7 @@ def _sell(s, st, pos, qty, price, trade_date, reason, log):
     return gross - fee
 
 
-def _buy(s, st, cand, budget, trade_date, log):
+def _buy(s, st, cand, budget, trade_date, log, reason=None):
     price = cand['price']
     qty = int(budget / (price * (1 + FEE_BUY)) // 100 * 100)
     if qty <= 0 or qty * price * (1 + FEE_BUY) > st['cash']:
@@ -266,8 +281,8 @@ def _buy(s, st, cand, budget, trade_date, log):
     """), dict(t=cand['ticker'], sc=cand.get('signal_code'), q=qty, p=price, d=trade_date, c=cost,
                sl=float(cand['stop_loss'] or 0), tp=float(cand['take_profit'] or 0), cf=cand['confidence']))
     st['cash'] -= cost
-    reason = (f"Tín hiệu VIP {cand['confidence']:.0f}% · cắt lỗ {_fmt(float(cand['stop_loss'] or 0))}"
-              f" · mục tiêu {_fmt(float(cand['take_profit'] or 0))}")
+    reason = reason or (f"Tín hiệu VIP {cand['confidence']:.0f}% · cắt lỗ {_fmt(float(cand['stop_loss'] or 0))}"
+                        f" · mục tiêu {_fmt(float(cand['take_profit'] or 0))}")
     _record_trade(s, trade_date, 'BUY', cand['ticker'], qty, price, fee, reason)
     log.append(f"MUA {cand['ticker']} {qty:,} cp @ {_fmt(price)} — {reason}")
     return True
@@ -276,6 +291,25 @@ def _buy(s, st, cand, budget, trade_date, log):
 # ============================================================
 # ENGINE
 # ============================================================
+
+def _save_nav(s, st, prices, trade_date, market, alloc, commit=True):
+    positions = _open_positions(s)
+    stock_val = sum(p['qty'] * prices.get(p['ticker'], p['entry_price']) for p in positions)
+    nav = st['cash'] + stock_val
+    if commit:
+        s.execute(text("""UPDATE mp_state SET cash = :c, last_rebalance_date = :d, updated_at = :now WHERE id = 1"""),
+                  dict(c=st['cash'], d=st.get('last_rebalance_date'), now=datetime.now()))
+        s.execute(text("""
+            INSERT INTO mp_nav (trade_date, nav, cash, stock_value, allocation, market_mode, updated_at)
+            VALUES (:d, :n, :c, :sv, :a, :m, :now)
+            ON CONFLICT (trade_date) DO UPDATE SET nav = EXCLUDED.nav, cash = EXCLUDED.cash,
+                stock_value = EXCLUDED.stock_value, allocation = EXCLUDED.allocation,
+                market_mode = EXCLUDED.market_mode, updated_at = EXCLUDED.updated_at
+        """), dict(d=trade_date, n=nav, c=st['cash'], sv=stock_val, a=alloc, m=(market or {}).get('market_mode'),
+                   now=datetime.now()))
+        s.commit()
+    return nav, stock_val
+
 
 def reset_portfolio(Session, capital=MP_CAPITAL):
     s = Session()
@@ -310,9 +344,11 @@ def run_model(Session, dry_run=False, force_rebalance=False):
             return {'success': False, 'error': 'Chưa có giá trong eod_prices'}
         market = _market(s) or {}
         alloc = float(market.get('allocation') or MP_DEFAULT_ALLOC)
-        rebalance = force_rebalance or (st.get('last_rebalance_date') or '') < trade_date
+        auto = st.get('auto_enabled')
+        auto = True if auto is None else bool(auto)
+        rebalance = auto and (force_rebalance or (st.get('last_rebalance_date') or '') < trade_date)
 
-        positions = _open_positions(s)
+        positions = _open_positions(s) if auto else []   # tự động TẮT -> không giao dịch, chỉ định giá
 
         # 1) Cắt lỗ — mọi lần quét
         for p in positions:
@@ -376,28 +412,13 @@ def run_model(Session, dry_run=False, force_rebalance=False):
             st['last_rebalance_date'] = trade_date
 
         # 6) Định giá + lưu NAV của phiên
-        positions = _open_positions(s)
-        stock_val = sum(p['qty'] * prices.get(p['ticker'], p['entry_price']) for p in positions)
-        nav = st['cash'] + stock_val
-
+        nav, stock_val = _save_nav(s, st, prices, trade_date, market, alloc, commit=not dry_run)
         if dry_run:
             s.rollback()
-        else:
-            s.execute(text("""UPDATE mp_state SET cash = :c, last_rebalance_date = :d, updated_at = :now WHERE id = 1"""),
-                      dict(c=st['cash'], d=st.get('last_rebalance_date'), now=datetime.now()))
-            s.execute(text("""
-                INSERT INTO mp_nav (trade_date, nav, cash, stock_value, allocation, market_mode, updated_at)
-                VALUES (:d, :n, :c, :sv, :a, :m, :now)
-                ON CONFLICT (trade_date) DO UPDATE SET nav = EXCLUDED.nav, cash = EXCLUDED.cash,
-                    stock_value = EXCLUDED.stock_value, allocation = EXCLUDED.allocation,
-                    market_mode = EXCLUDED.market_mode, updated_at = EXCLUDED.updated_at
-            """), dict(d=trade_date, n=nav, c=st['cash'], sv=stock_val, a=alloc, m=market.get('market_mode'),
-                       now=datetime.now()))
-            s.commit()
-            if log:
-                _notify(log, nav, st['capital'], trade_date)
+        elif log:
+            _notify(log, nav, st['capital'], trade_date)
 
-        return {'success': True, 'dry_run': dry_run, 'trade_date': trade_date, 'rebalanced': rebalance,
+        return {'success': True, 'dry_run': dry_run, 'trade_date': trade_date, 'rebalanced': rebalance, 'auto_enabled': auto,
                 'nav': round(nav), 'cash': round(st['cash']), 'stock_value': round(stock_val),
                 'allocation': alloc, 'actions': log}
     except Exception:
@@ -423,6 +444,118 @@ def _notify(log, nav, capital, trade_date):
                                 'disable_web_page_preview': True}, timeout=15)
     except Exception as e:
         logger.error(f'[ModelPortfolio] notify error: {e}')
+
+
+# ============================================================
+# CAN THIỆP THỦ CÔNG (admin)
+# ============================================================
+
+def _load_ctx(s):
+    st = _state(s)
+    if not st:
+        raise ValueError('Danh mục mẫu chưa khởi tạo — gọi /run hoặc /reset trước')
+    prices, trade_date = _prices(s)
+    market = _market(s) or {}
+    return dict(st), prices, trade_date, market, float(market.get('allocation') or MP_DEFAULT_ALLOC)
+
+
+def manual_trade(Session, action, ticker, reason, qty=None, pct=None, amount=None, price=None,
+                 stop_loss=None, take_profit=None):
+    """
+    Lệnh thủ công của admin. Luôn ghi vào lịch sử với nhãn [Thủ công] + lý do (khách nhìn thấy).
+      BUY : amount (VND) hoặc qty; giá mặc định = giá quét gần nhất; nên kèm stop_loss / take_profit.
+      SELL: qty hoặc pct (% vị thế, mặc định 100); bán các lô cũ trước (FIFO); vẫn tôn trọng T+2.
+    """
+    action = (action or '').upper()
+    ticker = (ticker or '').upper().strip()
+    if action not in ('BUY', 'SELL') or not ticker:
+        raise ValueError('action phải là BUY hoặc SELL và phải có ticker')
+    if not reason or len(reason.strip()) < 5:
+        raise ValueError('Cần ghi lý do (khách sẽ thấy lý do này trong lịch sử giao dịch)')
+    s = Session()
+    log = []
+    try:
+        st, prices, trade_date, market, alloc = _load_ctx(s)
+        px = float(price) if price else prices.get(ticker)
+        if not px:
+            raise ValueError(f'Không có giá cho {ticker} — truyền price hoặc thêm mã vào danh sách cập nhật giá')
+        label = f"[Thủ công] {reason.strip()}"
+
+        if action == 'BUY':
+            nav = st['cash'] + sum(p['qty'] * prices.get(p['ticker'], p['entry_price']) for p in _open_positions(s))
+            budget = float(amount) if amount else (float(qty) * px * (1 + FEE_BUY) if qty else nav * alloc / 100 / MP_MAX_POSITIONS)
+            if budget > st['cash']:
+                raise ValueError(f'Không đủ tiền: cần {_fmt(budget)}, còn {_fmt(st["cash"])}')
+            cand = {'ticker': ticker, 'price': px, 'stop_loss': stop_loss or 0, 'take_profit': take_profit or 0,
+                    'confidence': None, 'signal_code': None}
+            extra = []
+            if stop_loss: extra.append(f"cắt lỗ {_fmt(float(stop_loss))}")
+            if take_profit: extra.append(f"mục tiêu {_fmt(float(take_profit))}")
+            if not _buy(s, st, cand, budget, trade_date, log, reason=label + (' · ' + ' · '.join(extra) if extra else '')):
+                raise ValueError('Số tiền quá nhỏ để mua 1 lô 100 cp')
+        else:
+            rows = [p for p in _open_positions(s) if p['ticker'] == ticker and p['qty'] > 0]
+            if not rows:
+                raise ValueError(f'Danh mục mẫu không có {ticker}')
+            sellable = [p for p in rows if _sessions_held(s, p['entry_date'], trade_date) >= MP_MIN_HOLD]
+            if not sellable:
+                raise ValueError(f'{ticker} chưa đủ T+2, chưa bán được')
+            total = sum(p['qty'] for p in sellable)
+            want = int(qty) if qty else int(total * float(pct or 100) / 100)
+            want = total if want >= total else want // 100 * 100
+            if want <= 0:
+                raise ValueError('Khối lượng bán phải ≥ 100 cp')
+            for p in sellable:
+                if want <= 0:
+                    break
+                q = min(p['qty'], want)
+                _sell(s, st, p, q, px, trade_date, label, log)
+                want -= q
+
+        _save_nav(s, st, prices, trade_date, market, alloc)
+        _notify(log, st['cash'] + sum(p['qty'] * prices.get(p['ticker'], p['entry_price']) for p in _open_positions(s)),
+                st['capital'], trade_date)
+        return {'success': True, 'trade_date': trade_date, 'actions': log}
+    except Exception:
+        s.rollback()
+        raise
+    finally:
+        s.close()
+
+
+def update_position(Session, ticker, stop_loss=None, take_profit=None):
+    """Sửa cắt lỗ / mục tiêu cho mọi lô đang mở của 1 mã."""
+    ticker = (ticker or '').upper().strip()
+    s = Session()
+    try:
+        rows = [p for p in _open_positions(s) if p['ticker'] == ticker]
+        if not rows:
+            raise ValueError(f'Danh mục mẫu không có {ticker}')
+        sets, params = [], {'t': ticker}
+        if stop_loss is not None:
+            sets.append('stop_loss = :sl'); params['sl'] = float(stop_loss)
+        if take_profit is not None:
+            sets.append('take_profit = :tp'); params['tp'] = float(take_profit)
+        if not sets:
+            raise ValueError('Truyền stop_loss và/hoặc take_profit')
+        s.execute(text(f"UPDATE mp_positions SET {', '.join(sets)} WHERE ticker = :t AND status = 'open'"), params)
+        s.commit()
+        return {'success': True, 'ticker': ticker, 'stop_loss': stop_loss, 'take_profit': take_profit}
+    finally:
+        s.close()
+
+
+def set_auto(Session, enabled):
+    s = Session()
+    try:
+        if not _state(s):
+            raise ValueError('Danh mục mẫu chưa khởi tạo')
+        s.execute(text("UPDATE mp_state SET auto_enabled = :e, updated_at = :now WHERE id = 1"),
+                  dict(e=bool(enabled), now=datetime.now()))
+        s.commit()
+        return {'success': True, 'auto_enabled': bool(enabled)}
+    finally:
+        s.close()
 
 
 def get_overview(Session):
@@ -470,6 +603,7 @@ def get_overview(Session):
         alloc = float(market.get('allocation') or MP_DEFAULT_ALLOC)
         return {
             'initialized': True,
+            'auto_enabled': True if st.get('auto_enabled') is None else bool(st.get('auto_enabled')),
             'as_of': trade_date,
             'started_at': str(st['started_at'])[:10],
             'capital': st['capital'],
@@ -568,7 +702,38 @@ def init_model_portfolio_routes(app, engine, Session):
         ensure_tables(engine)
         return jsonify({'success': True, **reset_portfolio(Session, float(data.get('capital') or MP_CAPITAL))})
 
+    def _admin_call(fn):
+        data = request.get_json(silent=True) or {}
+        try:
+            ensure_tables(engine)
+            return jsonify(fn(data))
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+        except Exception as e:
+            logger.exception('[ModelPortfolio] admin error')
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/admin/model-portfolio/trade', methods=['POST'])
+    @_require_admin
+    def mp_trade():
+        return _admin_call(lambda d: manual_trade(
+            Session, d.get('action'), d.get('ticker'), d.get('reason'), qty=d.get('qty'), pct=d.get('pct'),
+            amount=d.get('amount'), price=d.get('price'), stop_loss=d.get('stop_loss'), take_profit=d.get('take_profit')))
+
+    @app.route('/api/admin/model-portfolio/position', methods=['POST'])
+    @_require_admin
+    def mp_position():
+        return _admin_call(lambda d: update_position(Session, d.get('ticker'), d.get('stop_loss'), d.get('take_profit')))
+
+    @app.route('/api/admin/model-portfolio/auto', methods=['POST'])
+    @_require_admin
+    def mp_auto():
+        return _admin_call(lambda d: set_auto(Session, d.get('enabled', True)))
+
     print("✅ Model Portfolio routes registered:")
     print("   GET  /api/vip/model-portfolio          [VIP]")
     print("   POST /api/admin/model-portfolio/run    [ADMIN]")
     print("   POST /api/admin/model-portfolio/reset  [ADMIN]")
+    print("   POST /api/admin/model-portfolio/trade  [ADMIN] mua/bán thủ công")
+    print("   POST /api/admin/model-portfolio/position [ADMIN] sửa cắt lỗ/mục tiêu")
+    print("   POST /api/admin/model-portfolio/auto   [ADMIN] bật/tắt tự động")
