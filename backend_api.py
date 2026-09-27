@@ -17,10 +17,16 @@ import json
 import subprocess
 import sqlite3
 from openai import OpenAI
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, func, Boolean, and_, not_, exists
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Date, Text, text, func, Boolean, and_, or_, not_, exists
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from vnstock import Vnstock
+# vnstock bị PyPI cách ly (quarantined) từ ~24/09/2026 -> không cài được trên Render.
+# Import tùy chọn: backend vẫn khởi động; chỉ 2 endpoint giá realtime bên dưới tạm báo lỗi.
+try:
+    from vnstock import Vnstock
+except Exception as _vn_err:
+    Vnstock = None
+    print(f"⚠️  vnstock không khả dụng ({_vn_err}) — /api/stock/price và /api/stock/batch-prices tạm tắt")
 
 # === VIP + PWA Push (graceful import) ===
 try:
@@ -33,6 +39,24 @@ except ImportError as e:
     push_vip_users = None
     print(f'⚠️  VIP/Push modules not found: {e}')
 
+# === VIP Signal Scanner (graceful import) ===
+try:
+    from vip_signal_scanner import init_vip_signal_routes
+    _has_vip_signals = True
+    print("\u2705 VIP Signal Scanner module loaded")
+except ImportError as e:
+    _has_vip_signals = False
+    print(f'\u26a0\ufe0f  VIP Signal Scanner not found: {e}')
+
+# === Campaign Registration (graceful import) ===
+try:
+    from campaign_api import init_campaign_routes
+    _has_campaign = True
+    print("✅ Campaign module loaded")
+except ImportError as e:
+    _has_campaign = False
+    print(f'⚠️  Campaign module not found: {e}')
+
 # SELL Signal Integration (graceful import)
 try:
     from backend_sell_api import register_sell_routes
@@ -40,6 +64,39 @@ try:
 except ImportError:
     _has_sell_api = False
     print('âš ï¸  backend_sell_api not found - using built-in sell routes')
+
+# === IIS Engine (graceful import) ===
+try:
+    from iis_engine import init_iis_routes
+    _has_iis = True
+    print("\u2705 IIS Engine module loaded")
+except ImportError as e:
+    _has_iis = False
+    print(f'\u26a0\ufe0f  IIS Engine not found: {e}')
+
+# === Compliance Rules (v2.2) — graceful import ===
+try:
+    from compliance_rules import COMPLIANCE_PROMPT, sanitize_ai_output
+    _has_compliance = True
+    print("\u2705 Compliance rules module loaded")
+except Exception as e:
+    COMPLIANCE_PROMPT = ""
+    sanitize_ai_output = lambda x: x
+    _has_compliance = False
+    print(f'\u26a0\ufe0f  Compliance rules not found: {e}')
+
+# === Bottleneck Engine (v2.2) — graceful import ===
+try:
+    from bottleneck_engine import (
+        init_bottleneck_routes,
+        diagnose as diagnose_bottleneck,
+        build_bottleneck_section,
+    )
+    _has_bottleneck = True
+    print("\u2705 Bottleneck Engine module loaded")
+except Exception as e:
+    _has_bottleneck = False
+    print(f'\u26a0\ufe0f  Bottleneck Engine not found: {e}')
 
 # ========================================================================
 # FLASK APP INITIALIZATION
@@ -101,7 +158,7 @@ print(f"{'='*70}\n")
 # ========================================================================
 
 Base = declarative_base()
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 Session = sessionmaker(bind=engine)
 
 # === INIT VIP + PUSH (module level — works with Gunicorn on Render) ===
@@ -115,6 +172,68 @@ if _has_vip:
         print("✅ VIP Auth + Push Notification routes registered")
     except Exception as _vip_err:
         print(f"⚠️  VIP init error: {_vip_err}")
+
+if _has_vip_signals:
+    try:
+        init_vip_signal_routes(app, engine, Session)
+        print("✅ VIP Signal routes registered")
+    except Exception as _vs_err:
+        print(f"⚠️  VIP Signal init error: {_vs_err}")
+
+# === Init Campaign Routes ===
+if _has_campaign:
+    try:
+        init_campaign_routes(app, engine, Session)
+    except Exception as _camp_err:
+        print(f"⚠️  Campaign init error: {_camp_err}")
+
+# === Rescue Watch: canh gác danh mục VIP + Telegram (graceful import) ===
+try:
+    from rescue_watch import init_rescue_watch_routes
+    init_rescue_watch_routes(app, engine, Session)
+except Exception as _rw_err:
+    print(f"⚠️  Rescue Watch init error: {_rw_err}")
+
+# === Auto-migrate chat_history for IIS behavioral columns ===
+try:
+    with engine.connect() as _conn:
+        _cols_added = []
+        _cols_failed = []
+        for _col, _type in [
+            ("emotional_state", "VARCHAR(20)"),
+            ("topic",           "VARCHAR(30)"),
+            ("iis_level",       "INTEGER"),
+        ]:
+            try:
+                _conn.execute(text(
+                    f"ALTER TABLE chat_history ADD COLUMN IF NOT EXISTS {_col} {_type}"
+                ))
+                _conn.commit()
+                _cols_added.append(_col)
+            except Exception as _col_err:
+                _cols_failed.append(f"{_col}: {_col_err}")
+        if _cols_failed:
+            print(f"⚠️  chat_history migration FAILED for: {_cols_failed}")
+        else:
+            print(f"✅ chat_history: IIS behavioral columns ready ({', '.join(_cols_added)})")
+except Exception as _e:
+    print(f"⚠️  chat_history migration error: {_e}")
+
+# === Init IIS Routes ===
+if _has_iis:
+    try:
+        init_iis_routes(app, Session)
+        print("\u2705 IIS routes registered: /api/iis/*")
+    except Exception as _iis_err:
+        print(f"\u26a0\ufe0f  IIS init error: {_iis_err}")
+
+# === Init Bottleneck Routes (v2.2) ===
+if _has_bottleneck:
+    try:
+        init_bottleneck_routes(app, Session)
+    except Exception as _bn_err:
+        print(f"\u26a0\ufe0f  Bottleneck init error: {_bn_err}")
+
 
 # ========================================================================
 # AI SYSTEM PROMPT
@@ -185,6 +304,13 @@ Ví dụ tư vấn dựa trên Market Dashboard:
   for stocks that are included in the official "Buysell Signal" list.
 - For all other stocks: analysis only, NO action guidance.
 
+=== SIGNAL DATA RULES (CRITICAL) ===
+
+Khi liệt kê danh sách Buysell Signal:
+- CHỈ được liệt kê ĐÚNG số mã và ĐÚNG tên như trong context (có ghi "Tong so: X ma")
+- TUYỆT ĐỐI KHÔNG thêm bất kỳ mã nào ngoài danh sách trong context
+- TUYỆT ĐỐI KHÔNG tự bịa Entry/SL/TP nếu không có trong context
+
 Core principles:
 1. You do NOT provide direct buy/sell commands outside the Buysell Signal list.
 2. You do NOT promise profits or guaranteed outcomes.
@@ -240,8 +366,444 @@ CRITICAL: Help users control FOMO and PANIC SELLING by:
 """
 
 # ========================================================================
-# DATABASE MODELS
+# IIS-AWARE CHAT ENGINE — v2.0
+# Inject IIS profile into system prompt, detect emotions, log behavior
 # ========================================================================
+
+
+# VN30 list for signal filtering
+VN30_TICKERS = ['ACB', 'BCM', 'BID', 'BVH', 'CTG', 'FPT', 'GAS', 'GVR', 'HDB', 'HPG', 'MBB', 'MSN', 'MWG', 'PLX', 'POW', 'SAB', 'SHB', 'SSB', 'SSI', 'STB', 'TCB', 'TPB', 'VCB', 'VHM', 'VIB', 'VIC', 'VJC', 'VNM', 'VPB', 'VRE']
+
+# In-memory IIS profile cache {user_id: (profile_dict, timestamp)}
+_iis_cache = {}
+_IIS_CACHE_TTL = 300  # 5 minutes
+
+def get_iis_profile_cached(user_id):
+    """Load IIS profile from DB with 5-min cache. Returns dict or None."""
+    import time
+    now = time.time()
+    if user_id in _iis_cache:
+        profile, ts = _iis_cache[user_id]
+        if now - ts < _IIS_CACHE_TTL:
+            return profile
+    session = Session()
+    try:
+        row = session.execute(
+            text("SELECT total, level_name, method, kl_score, kt_score, created_at "
+                 "FROM iis_results WHERE user_id = :uid "
+                 "ORDER BY created_at DESC LIMIT 1"),
+            {"uid": str(user_id)}
+        ).fetchone()
+        if row:
+            profile = {
+                "total": row[0], "level": row[1], "method": row[2],
+                "kl": row[3], "kt": row[4],
+                "created_at": str(row[5]) if row[5] else None
+            }
+        else:
+            profile = None
+        _iis_cache[user_id] = (profile, now)
+        return profile
+    except Exception as e:
+        print(f"[IIS cache] {e}")
+        return None
+    finally:
+        session.close()
+
+
+def detect_emotional_state(message):
+    """
+    Phân loại cảm xúc từ tin nhắn user.
+    Returns (state: str, confidence: str) 
+    state: 'fomo' | 'panic' | 'avg_down' | 'neutral'
+    """
+    msg = message.lower()
+
+    fomo_kw = [
+        'tăng mạnh', 'tăng quá mạnh', 'tăng quá', 'bứt phá',
+        'sợ bỏ lỡ', 'bỏ lỡ', 'mọi người đang mua', 'mọi người mua',
+        'mua ngay', 'vào ngay', 'còn kịp không', 'kịp không',
+        'hôm nay phải mua', 'nhanh lên', 'đang hot', 'đang sóng',
+        'đang bay', 'lên mạnh', 'mua trước', 'lỡ sóng', 'muộn không',
+        'có nên mua không', 'nên mua không', 'có nên vào không',
+        'tăng liên tục', 'tăng mãi', 'bỏ lỡ cơ hội',
+    ]
+    panic_kw = [
+        'sập', 'giảm mạnh', 'giảm quá mạnh', 'giảm quá',
+        'xuống mạnh', 'xuống sâu', 'xuống liên tục', 'đang xuống',
+        'xuống quá', 'xuống nhiều', 'giảm sâu', 'giảm liên tục',
+        'bán hết', 'thoát hết', 'sợ quá', 'lo quá',
+        'cắt lỗ hết', 'panik', 'panic', 'thị trường sập', 'mất hết',
+        'nên bán không', 'bán ngay', 'thoát ngay', 'giảm tiếp', 'sắp sập',
+        'nên bán hết không', 'có nên bán không', 'sắp giảm',
+        'thị trường xấu', 'rủi ro cao',
+    ]
+    avg_down_kw = [
+        'mua thêm', 'mua thêm vào', 'trung bình giá', 'average down',
+        'bình quân giá', 'mua bình quân', 'bình quân xuống', 'bình quân vào',
+        'bắt đáy', 'bắt thêm', 'giảm thì mua', 'gom thêm', 'tích thêm',
+        'đang lỗ mua thêm', 'lỗ mua thêm', 'đang lỗ muốn mua thêm',
+        'lỗ có nên mua thêm', 'đang lỗ', 'tích lũy thêm',
+        'mua xuống', 'mua khi giảm', 'mua vào khi giảm',
+    ]
+
+    fomo_score  = sum(1 for kw in fomo_kw    if kw in msg)
+    panic_score = sum(1 for kw in panic_kw   if kw in msg)
+    avg_score   = sum(1 for kw in avg_down_kw if kw in msg)
+
+    if avg_score >= 1:
+        return ('avg_down', 'high' if avg_score >= 2 else 'medium')
+    if fomo_score >= 2 or (fomo_score >= 1 and panic_score == 0):
+        return ('fomo', 'high' if fomo_score >= 2 else 'medium')
+    if panic_score >= 1:
+        return ('panic', 'high' if panic_score >= 2 else 'medium')
+    return ('neutral', 'low')
+
+
+def detect_trade_intent(message):
+    """
+    Phát hiện ý định giao dịch và ticker được nhắc đến.
+    Returns (topic: str, ticker: str|None)
+    topic: 'buy_intent' | 'sell_intent' | 'analysis' | 'portfolio' | 'portfolio_rescue' | 'general'
+    """
+    import re
+
+    # Portfolio Rescue: prompt do frontend tự soạn (nút "🆘 Giải cứu danh mục"),
+    # luôn có prefix cố định — nhận diện trực tiếp, không qua keyword scoring.
+    if message.strip().startswith('[PORTFOLIO RESCUE]'):
+        return ('portfolio_rescue', None)
+
+    msg = message.lower()
+
+    buy_kw  = ['mua', 'vào lệnh', 'entry', 'mở vị thế', 'giải ngân']
+    sell_kw = ['bán', 'chốt', 'thoát', 'cắt', 'exit', 'đóng vị thế']
+    port_kw = ['danh mục', 'portfolio', 'tỷ trọng', 'vốn', 'phân bổ']
+
+    buy_score  = sum(1 for kw in buy_kw  if kw in msg)
+    sell_score = sum(1 for kw in sell_kw if kw in msg)
+    port_score = sum(1 for kw in port_kw if kw in msg)
+
+    # Tìm ticker (2-4 chữ hoa)
+    tickers = re.findall(r'\b[A-Z]{2,4}\b', message)
+    ticker  = tickers[0] if tickers else None
+
+    if port_score >= 1:   return ('portfolio', ticker)
+    if buy_score  >= 1:   return ('buy_intent', ticker)
+    if sell_score >= 1:   return ('sell_intent', ticker)
+    if ticker:            return ('analysis', ticker)
+    return ('general', None)
+
+
+def build_iis_coaching_section(profile, emotional_state):
+    """
+    Tạo đoạn IIS context để inject vào system prompt.
+    profile: dict từ get_iis_profile_cached() hoặc None
+    emotional_state: str từ detect_emotional_state()
+    """
+    METHOD_NAMES = {
+        'luot_song': 'Lướt Sóng AI (Ngắn hạn)',
+        'bat_song':  'Bắt Sóng AI (Trung hạn)',
+        'tich_san':  'Tích Sản AI (Dài hạn)',
+        'hybrid_sm': 'Hybrid: Lướt Sóng + Bắt Sóng',
+        'hybrid_ml': 'Hybrid: Bắt Sóng + Tích Sản',
+    }
+    LEVEL_TRIGGERS = {
+        'Khởi Hành':  'Đặt SL cho ≥3 lệnh · Mở Clearance Card ≥3 lần · Hoàn thành checklist ≥3 lần',
+        'Định Hướng': 'Checklist ≥70% lệnh trong 1 tháng · Không average down ngoài kế hoạch 30 ngày',
+        'Phát Triển': 'Checklist 10/10 lệnh · Giữ ≥1 lệnh đến target · IIS Kỷ Luật tăng ≥10 điểm',
+        'Vững Vàng':  'Win rate ≥45% trong 3 tháng · Đọc Monthly Report 3 tháng · Streak ≥20 ngày',
+        'Tinh Thông': 'IIS retest ≥70 sau 90 ngày · Return dương 2 quý · ≥2 bias đã cải thiện',
+        'Chuyên Gia': '(Đã đạt cấp cao nhất)',
+    }
+    COACHING_MODES = {
+        'Khởi Hành':  'BẢO VỆ TỐI ĐA: Luôn hỏi stop loss trước mọi câu. Giải thích đơn giản, không thuật ngữ kỹ thuật. Nhắc rủi ro mỗi câu. Khuyến khích làm checklist.',
+        'Định Hướng': 'DẠY NỀN TẢNG: Giải thích tại sao, không chỉ nói gì. Kèm 1 lesson ngắn mỗi câu trả lời. Nhắc điều kiện lên level tiếp theo.',
+        'Phát Triển': 'HUẤN LUYỆN NHẤT QUÁN: Hỏi về entry/SL/TP trước khi thảo luận cổ phiếu. Nhận diện pattern lặp lại (FOMO lần thứ mấy?). Khen khi user làm đúng hệ thống.',
+        'Vững Vàng':  'TỐI ƯU HỆ THỐNG: Thảo luận ở level cao hơn — EV, Risk-Reward, Market Regime. Ít nhắc cơ bản. Tập trung tinh chỉnh theo phương pháp của user.',
+        'Tinh Thông': 'ĐỒNG HÀNH NGANG HÀNG: Thảo luận như đồng nghiệp. Phân tích sâu. Có thể challenge quan điểm user với data.',
+        'Chuyên Gia': 'THAM KHẢO: Ít coaching, nhiều phân tích sâu. AI là công cụ tham khảo. Gợi ý họ chia sẻ kinh nghiệm với cộng đồng.',
+    }
+
+    if not profile:
+        level_name = 'Khởi Hành'
+        section = """
+=== USER IIS PROFILE ===
+Level: Chưa làm IIS Test (mặc định Khởi Hành)
+COACHING MODE: BẢO VỆ TỐI ĐA
+- Luôn hỏi "Bạn đã đặt stop loss chưa?" trước mọi câu về cổ phiếu
+- Giải thích đơn giản, khuyến khích làm IIS Test để nhận coaching cá nhân hóa
+"""
+    else:
+        level_name  = profile.get('level', 'Khởi Hành')
+        total       = profile.get('total', 0)
+        kl          = profile.get('kl', 0)
+        kt          = profile.get('kt', 0)
+        method      = METHOD_NAMES.get(profile.get('method', ''), 'Chưa xác định')
+        mode        = COACHING_MODES.get(level_name, COACHING_MODES['Khởi Hành'])
+        trigger     = LEVEL_TRIGGERS.get(level_name, '')
+
+        # Xác định điểm yếu
+        weaknesses = []
+        if kl < 60: weaknesses.append(f'IIS Kỷ Luật thấp ({kl}/100) — hay bị FOMO, chưa nhất quán stop loss/checklist')
+        if kt < 60: weaknesses.append(f'IIS Kiến Thức cần cải thiện ({kt}/100) — cần học thêm Risk-Reward và Market Regime')
+
+        section = f"""
+=== USER IIS PROFILE ===
+Level: {level_name} — IIS {total}/100
+IIS Kỷ Luật: {kl}/100  |  IIS Kiến Thức: {kt}/100
+Phương pháp: {method}
+Điểm yếu: {' | '.join(weaknesses) if weaknesses else 'Không có — user đang phát triển tốt'}
+
+COACHING MODE: {mode}
+
+BẮT BUỘC — Mở đầu response bằng 1 dòng đề cập Level IIS của user:
+Ví dụ: "Với IIS {total}/100 (Level {level_name}) của bạn, ..."
+→ Giúp user thấy rõ AI đang coaching cá nhân hóa theo profile của họ.
+
+Điều kiện lên level tiếp theo (nhắc nhở khi phù hợp):
+{trigger}
+"""
+
+    # Thêm coaching đặc biệt theo emotional state
+    if emotional_state == 'fomo':
+        section += """
+⚠️ FOMO DETECTED — Áp dụng ngay:
+1. Acknowledge cảm xúc nhẹ nhàng, không phán xét
+2. Hiện trạng thái thị trường thực tế từ Market Dashboard
+3. Hỏi: "Bạn đã có entry/SL/TP rõ ràng chưa?"
+4. Nhắc IIS Kỷ Luật: "Top 5% nhà đầu tư không mua đuổi — họ chờ pullback"
+5. Gợi ý: Đợi 30 phút trước khi quyết định
+KHÔNG được khuyến khích mua ngay dù signal có vẻ tốt.
+"""
+    elif emotional_state == 'panic':
+        section += """
+⚠️ PANIC DETECTED — Áp dụng ngay:
+1. Dừng lại, làm dịu cảm xúc: "Hít thở, nhìn vào dữ liệu thực tế"
+2. Kiểm tra: Stop loss đã hit chưa? Nếu chưa → không cần làm gì
+3. Hiện Market Dashboard: Đây là pullback bình thường hay Bear Market?
+4. Hỏi: "Luận điểm đầu tư của bạn có thay đổi không?"
+5. KHÔNG khuyến khích bán hoảng loạn. Nhắc: "Panic sell phá vỡ kỷ luật hệ thống"
+"""
+    elif emotional_state == 'avg_down':
+        section += """
+⚠️ AVERAGE DOWN DETECTED — Áp dụng ngay:
+1. Kiểm tra: Cổ phiếu này có trong Signal list không?
+2. Hỏi: "Luận điểm đầu tư ban đầu còn đúng không?"
+3. Nhắc nguyên tắc: "Top 5% không average down ngoài kế hoạch — đây là điều kiện lên level tiếp theo"
+4. Nếu user vẫn muốn: yêu cầu viết ra LÝ DO CỤ THỂ trước khi thực hiện
+5. Nhắc: "Nếu mua thêm ngoài kế hoạch, đây là lỗi hành vi sẽ ảnh hưởng IIS Kỷ Luật"
+"""
+
+    return section
+
+
+# ========================================================================
+# PORTFOLIO RESCUE — chế độ chẩn đoán toàn danh mục (nút "🆘 Giải cứu danh mục")
+# Không phải feature riêng: dùng chung /api/chat, chỉ thêm 1 nhánh xử lý khi
+# topic == 'portfolio_rescue'. Xem PORTFOLIO_RESCUE_FEATURE_SPEC.md mục 8.
+# ========================================================================
+
+def compute_portfolio_risk_snapshot(user_id):
+    """
+    Tính nhanh các chỉ số rủi ro danh mục trực tiếp từ DB (không parse text tin nhắn
+    — đáng tin cậy hơn vì không phụ thuộc format prompt do frontend soạn).
+    Returns dict hoặc None nếu danh mục trống / không có tài sản.
+
+    v2 (2026-09-25): trả thêm 'holdings' (từng mã: tỷ trọng, lãi/lỗ, nhóm A/B/C/D,
+    % cần để hòa vốn) và 'cash_pct' để prompt Rescue phân loại theo ma trận.
+    Các key cũ giữ nguyên — tương thích snapshot_line/logging hiện có.
+    """
+    session = Session()
+    try:
+        portfolios = session.query(Portfolio).filter_by(user_id=str(user_id)).all()
+        if not portfolios:
+            return None
+        cash_pos = session.query(CashPosition).filter_by(user_id=str(user_id)).first()
+        cash = cash_pos.cash_amount if cash_pos else 0
+
+        holdings = []
+        total_cost = 0
+        total_value = 0
+        for p in portfolios:
+            cost = p.quantity * p.avg_price
+            live_price = get_current_price(p.ticker)
+            current_price = live_price or p.avg_price
+            value = p.quantity * current_price
+            pl_pct = ((value - cost) / cost * 100) if cost > 0 else 0
+            total_cost += cost
+            total_value += value
+            holdings.append({'ticker': p.ticker, 'value': value, 'pl_pct': pl_pct,
+                             'has_price': live_price is not None})
+
+        total_assets = total_value + cash
+        if total_assets <= 0:
+            return None
+
+        for h in holdings:
+            h['pct'] = h['value'] / total_assets * 100
+            # Phân nhóm cho ma trận quyết định (xem build_portfolio_rescue_section)
+            if h['pl_pct'] <= -15:
+                h['group'] = 'A'          # lỗ sâu — cần quyết định rõ ràng
+            elif h['pl_pct'] >= 0 and (h['pct'] > 25 or (h['pl_pct'] >= 50 and h['pct'] >= 5)):
+                h['group'] = 'B'          # tập trung đang lãi / lãi lớn — bảo vệ lãi
+            elif h['pct'] > 25:
+                h['group'] = 'C'          # tập trung, lỗ nhẹ — quản trị tập trung
+            else:
+                h['group'] = 'D'          # trong ngưỡng
+            # % cần tăng để hòa vốn (chỉ có nghĩa khi đang lỗ)
+            h['breakeven_pct'] = ((1 / (1 + h['pl_pct'] / 100)) - 1) * 100 if -100 < h['pl_pct'] < 0 else 0
+
+        top = max(holdings, key=lambda h: h['pct'])
+        red_count    = sum(1 for h in holdings if h['pl_pct'] <= -20)
+        orange_count = sum(1 for h in holdings if -20 < h['pl_pct'] <= -15)
+        total_pl_pct = ((total_value - total_cost) / total_cost * 100) if total_cost > 0 else 0
+
+        return {
+            'max_concentration': round(top['pct'], 1),
+            'top_ticker': top['ticker'],
+            'red_count': red_count,
+            'orange_count': orange_count,
+            'total_pl_pct': round(total_pl_pct, 1),
+            'holdings_count': len(holdings),
+            'cash_pct': round(cash / total_assets * 100, 1),
+            'holdings': sorted(holdings, key=lambda h: -h['pct']),
+        }
+    except Exception as e:
+        print(f"[compute_portfolio_risk_snapshot] {e}")
+        return None
+    finally:
+        session.close()
+
+
+def _parse_rescue_snapshot(portfolio_context_text):
+    """Đọc dòng [RESCUE_SNAPSHOT] đã lưu ở lượt Rescue trước (trong ChatHistory.portfolio_context),
+    dùng để so sánh tiến bộ. Không cần bảng DB mới — tái dùng cột text đã có sẵn."""
+    if not portfolio_context_text:
+        return None
+    for line in portfolio_context_text.splitlines():
+        if line.startswith('[RESCUE_SNAPSHOT]'):
+            try:
+                parts = line.replace('[RESCUE_SNAPSHOT]', '').strip().split('|')
+                data = {}
+                for part in parts:
+                    k, v = part.split('=')
+                    data[k] = float(v)
+                return data
+            except Exception:
+                return None
+    return None
+
+
+def _rescue_holdings_table(snapshot):
+    """Bảng từng mã (số đã tính sẵn) để GPT không phải tự tính/tự phân nhóm."""
+    group_name = {'A': 'NHÓM A — lỗ sâu', 'B': 'NHÓM B — bảo vệ lãi',
+                  'C': 'NHÓM C — tập trung, lỗ nhẹ', 'D': 'NHÓM D — trong ngưỡng'}
+    rows = []
+    for h in snapshot.get('holdings', []):
+        extra = f" | cần +{h['breakeven_pct']:.0f}% để hòa vốn" if h['group'] == 'A' else ""
+        no_price = " | (CHƯA CÓ GIÁ THỊ TRƯỜNG — số liệu có thể sai, nhắc user kiểm tra)" if not h.get('has_price', True) else ""
+        rows.append(f"  • {h['ticker']}: tỷ trọng {h['pct']:.1f}% | lãi/lỗ {h['pl_pct']:+.1f}%"
+                    f" | {group_name[h['group']]}{extra}{no_price}")
+    return "\n".join(rows)
+
+
+def build_portfolio_rescue_section(user_id, session):
+    """
+    Section bắt buộc chèn vào system prompt khi topic == 'portfolio_rescue'.
+    Trả về (section_text, snapshot_line).
+    snapshot_line được nhét vào đầu portfolio_context TRƯỚC khi lưu ChatHistory —
+    đây là toàn bộ cơ chế "logging" cho Rescue, không cần bảng/migration mới.
+
+    v2 (2026-09-25): thay "2-3 kịch bản chung chung" bằng MA TRẬN QUYẾT ĐỊNH theo từng mã
+    (luận điểm × tỷ trọng) + nhánh BẢO VỆ LÃI cho mã tập trung đang lãi (khách hybrid
+    lâu năm: HDG +46% chiếm >50% tài sản không phải là "danh mục kẹp").
+    """
+    snapshot = compute_portfolio_risk_snapshot(user_id)
+    if not snapshot:
+        return "", None
+
+    snapshot_line = (
+        f"[RESCUE_SNAPSHOT] max_concentration={snapshot['max_concentration']}"
+        f"|red_count={snapshot['red_count']}|total_pl_pct={snapshot['total_pl_pct']}"
+    )
+
+    # So sánh với lần Rescue gần nhất của cùng user (nếu có) để phát hiện tiến bộ
+    progress_note = ""
+    try:
+        prev_row = session.query(ChatHistory).filter_by(
+            user_id=str(user_id), topic='portfolio_rescue'
+        ).order_by(ChatHistory.created_at.desc()).first()
+        prev_snapshot = _parse_rescue_snapshot(prev_row.portfolio_context) if prev_row else None
+        if prev_snapshot:
+            conc_delta = prev_snapshot.get('max_concentration', 0) - snapshot['max_concentration']
+            red_delta  = prev_snapshot.get('red_count', 0) - snapshot['red_count']
+            if conc_delta > 3 or red_delta > 0:
+                progress_note = (
+                    "\nGHI NHẬN TIẾN BỘ: So với lần chẩn đoán trước, tỷ trọng mã lớn nhất đã giảm "
+                    f"{conc_delta:.1f} điểm % và/hoặc số mã RED giảm {red_delta:.0f}. "
+                    "BẮT BUỘC mở đầu câu trả lời bằng 1 câu ghi nhận ngắn gọn việc user đã chủ động "
+                    "cơ cấu lại, trước khi đi vào phân tích — đây là giai đoạn 'Acknowledge' trong khung coaching."
+                )
+    except Exception as e:
+        print(f"[build_portfolio_rescue_section] progress compare error: {e}")
+
+    groups = {g: [h for h in snapshot['holdings'] if h['group'] == g] for g in 'ABCD'}
+
+    section = f"""
+=== PORTFOLIO RESCUE MODE v2 — MA TRẬN QUYẾT ĐỊNH ===
+Đây là yêu cầu chẩn đoán TOÀN BỘ danh mục (không phải phân tích 1 mã riêng lẻ).
+Số liệu khách quan ĐÃ TÍNH SẴN từ hệ thống (dùng đúng các số này, KHÔNG tự tính lại, KHÔNG tự phân nhóm lại):
+- Mã tỷ trọng lớn nhất: {snapshot['top_ticker']} ({snapshot['max_concentration']}% tổng tài sản) → {'ĐÃ VƯỢT' if snapshot['max_concentration'] > 35 else 'CHƯA vượt'} ngưỡng tập trung 35% (kết luận này đã tính sẵn, dùng đúng như vậy) | Tiền mặt: {snapshot['cash_pct']}%
+- {snapshot['red_count']} mã lỗ >20%, {snapshot['orange_count']} mã lỗ 15-20% | Tổng lãi/lỗ danh mục: {snapshot['total_pl_pct']:+.1f}%
+- Chi tiết từng mã (tỷ trọng trên tổng tài sản | lãi/lỗ so với giá vốn | nhóm):
+{_rescue_holdings_table(snapshot)}
+{progress_note}
+
+Ý nghĩa các nhóm:
+- NHÓM A (lỗ ≤ -15%): cần một quyết định rõ ràng cho từng mã.
+- NHÓM B (tỷ trọng > 25% và đang lãi, HOẶC lãi ≥ 50% với tỷ trọng ≥ 5%): bài toán BẢO VỆ LÃI, KHÔNG phải giải cứu.
+  TUYỆT ĐỐI KHÔNG hỏi "có đang giữ vì giá vốn không" với nhóm này.
+- NHÓM C (tỷ trọng > 25%, lỗ nhẹ): bài toán quản trị rủi ro tập trung.
+- NHÓM D: trong ngưỡng — chỉ nhắc tên, KHÔNG phân tích dài (giai đoạn 'Stabilize').
+
+BẮT BUỘC trả lời theo đúng 5 phần sau, theo thứ tự (bỏ qua phần của nhóm không có mã nào):
+
+1. TRẠNG THÁI RỦI RO TỔNG THỂ (3-4 câu) — mức tập trung (dùng đúng kết luận vượt/chưa vượt ngưỡng ở trên), số mã ở từng mức cảnh báo,
+   tỷ trọng cổ phiếu hiện tại so với khuyến nghị từ Market Dashboard.
+
+2. NHÓM A — MA TRẬN QUYẾT ĐỊNH TỪNG MÃ ({len(groups['A'])} mã). Với mỗi mã, 3 dòng ngắn:
+   (a) 1 câu hỏi phản tư: "Luận điểm mua ban đầu của [mã] còn đúng không, hay đang giữ vì giá vốn?"
+       kèm con số "cần +X% để hòa vốn" đã cho sẵn ở trên.
+   (b) Nếu luận điểm KHÔNG còn / không rõ → tỷ trọng < 15%: cân nhắc thoát dứt khoát, không trì hoãn;
+       tỷ trọng ≥ 15%: cân nhắc thoát theo lô qua nhiều phiên, không bán dồn 1 lần.
+   (c) Nếu luận điểm CÒN đúng → giữ nhưng tự đặt MỐC NGÀY xem lại cụ thể (2-4 tuần) và một mức giá
+       mà tại đó luận điểm coi như sai; KHÔNG mua bình quân giá xuống.
+   Nếu nhóm A có hơn 5 mã: phân tích 5 mã tỷ trọng lớn nhất, gộp các mã còn lại trong 1 dòng.
+
+3. NHÓM B / NHÓM C ({len(groups['B'])} mã nhóm B, {len(groups['C'])} mã nhóm C).
+   - Nhóm B: ghi nhận khoản lãi trước. Trình bày 3 kịch bản bảo vệ lãi kèm hệ quả của từng kịch bản:
+     (i) tự đặt ngưỡng giữ lãi theo mức rời đỉnh mà user chấp nhận được;
+     (ii) hạ dần tỷ trọng khi giá xác nhận suy yếu (gãy xu hướng, mất hỗ trợ quan trọng);
+     (iii) giữ nguyên nếu user chấp nhận rủi ro tập trung — nêu rõ rủi ro nếu mã này điều chỉnh mạnh
+          thì tổng tài sản bị ảnh hưởng bao nhiêu (dựa trên tỷ trọng đã cho).
+     Với mã lãi lớn nhưng tỷ trọng vừa phải: chỉ cần 1-2 câu về ngưỡng giữ lãi, không phân tích dài.
+   - Nhóm C: nêu rằng đưa tỷ trọng về ngưỡng an toàn (~25-30%) theo từng bước là nguyên tắc quản trị
+     rủi ro, độc lập với quan điểm về cổ phiếu.
+
+4. NGUYÊN TẮC CHUNG (2-3 gạch đầu dòng): không mua bình quân giá xuống các mã nhóm A khi luận điểm
+   chưa được xác nhận lại; tiền giải phóng chỉ tái giải ngân theo tỷ trọng Market Dashboard cho phép;
+   ghi lại lý do cho mỗi quyết định.
+
+5. Câu disclaimer ngắn: đây là công cụ hỗ trợ quyết định, không phải tư vấn đầu tư.
+
+NGÔN NGỮ: dùng "cân nhắc", "nếu... thì..."; giọng tôn trọng nhà đầu tư có kinh nghiệm, không lên lớp.
+TUYỆT ĐỐI KHÔNG dùng "CẮT NGAY"/"PHÁN QUYẾT", KHÔNG đưa % bán cụ thể mang tính chỉ thị (vd "bán 30% ngay").
+"""
+    return section, snapshot_line
+
+
+# ========================================================================
+# DATABASE MODELS# ========================================================================
 
 class Signal(Base):
     __tablename__ = 'signals'
@@ -266,6 +828,12 @@ class Signal(Base):
     # Position tracking - MUST be in model for ORM to load from DB
     status = Column(String(20), default='open')       # open / partial / closed
     position_pct = Column(Integer, default=100)        # 0-100%
+    
+    # SELL signal exit tracking (for SELL signals)
+    exit_price = Column(Float, nullable=True)
+    exit_reason = Column(String(50), nullable=True)
+    exit_date = Column(Date, nullable=True)          # DATE in DB — must pass date object or None
+    exit_quantity_pct = Column(Integer, nullable=True)  # % bán: 50 (partial) / 100 (full)
 
 
 class Portfolio(Base):
@@ -298,6 +866,10 @@ class ChatHistory(Base):
     response = Column(Text, nullable=False)
     portfolio_context = Column(Text)
     created_at = Column(DateTime, default=datetime.now)
+    # IIS Behavioral Tracking — v2.0
+    emotional_state = Column(String(20))   # fomo | panic | avg_down | neutral | concentration_risk
+    topic           = Column(String(30))   # buy_intent | sell_intent | analysis | portfolio | portfolio_rescue | general
+    iis_level       = Column(Integer)      # snapshot IIS level tại thời điểm chat
 
 class TickerBlacklist(Base):
     __tablename__ = 'ticker_blacklist'
@@ -355,7 +927,7 @@ def get_current_price(ticker):
         session.close()
 
 
-def get_portfolio_context(user_id):
+def get_portfolio_context(user_id, user_tier='free'):
     """Get portfolio context with P&L + Market Dashboard data for AI advisor"""
     session = Session()
     try:
@@ -363,9 +935,19 @@ def get_portfolio_context(user_id):
         cash_pos = session.query(CashPosition).filter_by(user_id=user_id).first()
         cash = cash_pos.cash_amount if cash_pos else 0
 
-        # ALL active BUY signals (for Signal list)
-        signals = session.query(Signal).filter(Signal.action == 'BUY').all()
+        # ALL active BUY signals — lấy TẤT CẢ để AI Chat nhận diện đúng
+        # Không filter strength hay VN30 cho signal_tickers
+        # VIP: chỉ VN30 | Others: all signals strength >= 65
+        if user_tier == 'vip':
+            signals = [s for s in session.query(Signal).filter(
+                Signal.action == 'BUY', Signal.status == 'open'
+            ).all() if s.ticker in VN30_TICKERS and (s.strength or 0) >= 65]
+        else:
+            signals = [s for s in session.query(Signal).filter(
+                Signal.action == 'BUY', Signal.status == 'open'
+            ).all() if (s.strength or 0) >= 65]
         signal_tickers = set([s.ticker for s in signals])
+
 
         # MARKET DASHBOARD: Inject latest market risk into context
         market_context = ""
@@ -415,8 +997,13 @@ def get_portfolio_context(user_id):
         # Empty portfolio
         if not portfolios and cash == 0:
             context = f"{market_context}\nDanh muc: Trong\n"
-            context += f"\nCO PHIEU TRONG BUYSELL SIGNAL SYSTEM:\n"
-            context += ", ".join(sorted(signal_tickers)) if signal_tickers else "Chua co signal nao"
+            context += f"\nCO PHIEU TRONG BUYSELL SIGNAL (BUY - DANG MO - DANH SACH CHINH XAC):\n"
+            context += f"(Tong so: {len(signal_tickers)} ma. CHI DUOC dung dung {len(signal_tickers)} ma nay, KHONG them bat ky ma nao khac):\n"
+            if signal_tickers:
+                for _i, _t in enumerate(sorted(signal_tickers), 1):
+                    context += f"  {_i}. {_t}\n"
+            else:
+                context += "  Chua co signal nao dang mo\n"
             return context, signal_tickers
 
         context = f"{market_context}\n"
@@ -477,8 +1064,18 @@ def get_portfolio_context(user_id):
             except Exception:
                 pass
 
-        context += f"\n\nCO PHIEU TRONG BUYSELL SIGNAL SYSTEM:\n"
-        context += ", ".join(sorted(signal_tickers)) if signal_tickers else "Chua co signal nao"
+        context += f"\n\nCO PHIEU TRONG BUYSELL SIGNAL (BUY - DANG MO - DANH SACH CHINH XAC):\n"
+        context += f"(Tong so: {len(signals)} ma. CHI DUOC dung dung {len(signals)} ma nay, KHONG them bat ky ma nao khac):\n"
+        if signals:
+            for _s in sorted(signals, key=lambda x: x.ticker):
+                _entry = f"{_s.entry_price:,.0f}" if _s.entry_price else "N/A"
+                _sl    = f"{_s.stop_loss:,.0f}" if _s.stop_loss else "N/A"
+                _tp    = f"{_s.take_profit:,.0f}" if _s.take_profit else "N/A"
+                _score = f"{int(_s.strength)}%" if _s.strength else "N/A"
+                _date  = str(_s.date)[:10] if _s.date else "N/A"
+                context += f"  {_s.ticker}: Entry {_entry} | SL {_sl} | TP {_tp} | Score {_score} | {_date}\n"
+        else:
+            context += "  Chua co signal nao dang mo\n"
 
         return context, signal_tickers
 
@@ -489,10 +1086,55 @@ def get_portfolio_context(user_id):
         session.close()
 
 
-def chat_with_gpt(message, portfolio_context, signal_tickers):
-    """Chat with OpenAI using strict system prompt"""
+def chat_with_gpt(message, portfolio_context, signal_tickers,
+                  iis_section="", history=None):
+    """
+    Chat with GPT-4o-mini v2.0: IIS-aware system prompt + multi-turn history.
+    """
     if not openai_client:
-        return "Xin lÃ¡Â»â€”i, AI chÃ†Â°a Ã„â€˜Ã†Â°Ã¡Â»Â£c cÃ¡ÂºÂ¥u hÃƒÂ¬nh."
+        return "Xin lỗi, AI chưa được cấu hình."
+    try:
+        # Build signal rule từ signal_tickers để lock cứng vào system prompt
+        if signal_tickers:
+            _tlist = ", ".join(sorted(signal_tickers))
+            _tcount = len(signal_tickers)
+            _signal_rule = (
+                f"\n\n=== BUYSELL SIGNAL DANG MO (CHINH XAC - {_tcount} MA) ===\n"
+                f"Chi co {_tcount} ma: {_tlist}\n"
+                f"TUYET DOI KHONG them ma nao khac ngoai danh sach tren.\n"
+                f"Neu khong co trong danh sach tren thi KHONG phai Buysell Signal.\n"
+                f"=== HET DANH SACH ==="
+            )
+        else:
+            _signal_rule = "\n\n=== BUYSELL SIGNAL: Hien chua co signal nao dang mo ==="
+
+        # v2.2: COMPLIANCE_PROMPT đặt NGAY SAU AI_SYSTEM_PROMPT
+        # → quy tắc pháp lý được đọc trước mọi quy tắc hành vi khác
+        system_message = AI_SYSTEM_PROMPT + COMPLIANCE_PROMPT + _signal_rule
+        if iis_section:
+            system_message += "\n" + iis_section
+        system_message += "\n\n" + portfolio_context
+        messages = [{"role": "system", "content": system_message}]
+        if history:
+            # Chỉ lấy 3 turns gần nhất, truncate response cũ để tránh AI học lại data sai
+            for h in history[-3:]:
+                messages.append({"role": "user", "content": h.get("message", "")})
+                prev = h.get("response", "")
+                if len(prev) > 150:
+                    prev = prev[:150] + "..."
+                messages.append({"role": "assistant", "content": prev})
+        messages.append({"role": "user", "content": message})
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=900,
+            temperature=0.65
+        )
+        # v2.2: lớp fail-safe — lọc ngôn ngữ khuyến nghị mua/bán trước khi trả về
+        return sanitize_ai_output(response.choices[0].message.content)
+    except Exception as e:
+        print(f"OpenAI error: {e}")
+        return "Xin lỗi, AI không phản hồi được lúc này. Vui lòng thử lại."
     
     try:
         system_message = AI_SYSTEM_PROMPT + f"\n\n{portfolio_context}"
@@ -552,6 +1194,19 @@ def health():
 # SIGNALS ENDPOINTS
 # ========================================================================
 
+
+def __parse_date(value):
+    """Convert 'YYYY-MM-DD' string to date object, or return None."""
+    if value is None:
+        return None
+    if hasattr(value, 'year'):   # already a date/datetime
+        return value
+    try:
+        from datetime import date as _date
+        return _date.fromisoformat(str(value)[:10])
+    except Exception:
+        return None
+
 @app.route('/api/signals', methods=['GET', 'POST'])
 def signals_endpoint():
     """
@@ -561,19 +1216,75 @@ def signals_endpoint():
     
     if request.method == 'GET':
         # GET: Return all signals with rounding and deduplication
+        # Auto delay: free tier sau 1/6/2026 → delay 7 ngày
+        # VIP/Basic/Pro → luôn real-time
+        FREE_DELAY_DAYS = 7
+        TRIAL_END = datetime(2026, 6, 1)
+        PAID_TIERS = ('vip', 'basic', 'pro', 'basic_trial')
+
+        delay_days = request.args.get('delay', type=int)
+        # NOTE (2026-07-01): Root cause của bug "VIP không thấy tín hiệu mới":
+        # App.jsx trước đây gọi /signals KHÔNG kèm ?delay cho full-access user,
+        # khiến nhánh auto-detect bên dưới chạy và ép delay=7 vì FE không gửi
+        # Authorization Bearer token tới route này. Đã fix tại App.jsx: FE giờ
+        # luôn gửi ?delay=0 (full access) hoặc ?delay=7 (free) tường minh, nên
+        # delay_days sẽ KHÔNG còn None khi gọi từ app chính → nhánh dưới chỉ
+        # còn là fallback an toàn cho client gọi trực tiếp không qua FE.
+
+        # Auto-detect tier từ JWT token
+        if delay_days is None and datetime.now() > TRIAL_END:
+            auth_header = request.headers.get('Authorization', '')
+            if auth_header.startswith('Bearer '):
+                try:
+                    from vip_auth import _verify_jwt, VIPUser as _VUser
+                    payload = _verify_jwt(auth_header.replace('Bearer ', ''))
+                    if payload:
+                        _s = Session()
+                        try:
+                            _u = _s.query(_VUser).filter_by(id=payload['user_id']).first()
+                            if _u:
+                                # Paid tier → không delay
+                                if _u.tier in PAID_TIERS:
+                                    delay_days = 0  # real-time
+                                else:
+                                    # Free tier → delay 7 ngày
+                                    delay_days = FREE_DELAY_DAYS
+                        finally:
+                            _s.close()
+                    else:
+                        delay_days = FREE_DELAY_DAYS  # token invalid → delay
+                except Exception:
+                    delay_days = FREE_DELAY_DAYS  # lỗi → delay để an toàn
+            else:
+                # Không có token → public view → delay
+                delay_days = FREE_DELAY_DAYS
+
         session = Session()
         try:
-            signals = session.query(Signal)\
-              .filter(
-              ~exists().where(
-                and_(
-                TickerBlacklist.ticker == Signal.ticker,
-                TickerBlacklist.is_active == True
-                     )
-                  )
-               )\
-              .order_by(Signal.created_at.desc())\
-              .all()
+            query = session.query(Signal).filter(
+                ~exists().where(
+                    and_(
+                        TickerBlacklist.ticker == Signal.ticker,
+                        TickerBlacklist.is_active == True
+                    )
+                )
+            )
+            if delay_days and delay_days > 0:
+                cutoff = datetime.utcnow() - timedelta(days=delay_days)
+                # SELL signals are never delayed -- always visible regardless of tier
+                # Only apply delay to BUY signals (created_at NULL-safe: treat NULL as current)
+                query = query.filter(
+                    or_(
+                        Signal.action == 'SELL',
+                        Signal.created_at == None,  # NULL created_at = show always
+                        Signal.created_at <= cutoff
+                    )
+                )
+            # Sort: signals with created_at first (desc), NULL created_at last but still included
+            signals = query.order_by(
+                Signal.created_at.desc().nullslast(),
+                Signal.id.desc()
+            ).all()
             
             # Build signals with rounded prices
             signals_data = []
@@ -583,9 +1294,9 @@ def signals_endpoint():
                     'ticker': s.ticker,
                     'code': s.ticker,
                     'strategy': s.strategy,
-                    'entry_price': round(s.entry_price / 100) * 100,  # Round to nearest 100 VND
-                    'stop_loss': round(s.stop_loss / 100) * 100,      # Round to nearest 100 VND
-                    'take_profit': round(s.take_profit / 100) * 100,  # Round to nearest 100 VND
+                    'entry_price': round(s.entry_price / 100) * 100 if s.entry_price else 0,
+                    'stop_loss': round(s.stop_loss / 100) * 100 if s.stop_loss else 0,
+                    'take_profit': round(s.take_profit / 100) * 100 if s.take_profit else 0,
                     'risk_reward': round(s.risk_reward, 2) if s.risk_reward else None,
                     'strength': s.strength or 0,
                     'stock_type': s.stock_type,
@@ -598,30 +1309,43 @@ def signals_endpoint():
                     'buy_signal_code': s.buy_signal_code,
                     'status': s.status or ('open' if s.action == 'BUY' else 'closed'),
                     'position_pct': s.position_pct if s.position_pct is not None else (100 if s.action == 'BUY' else 0),
+                    # SELL signal exit fields (for SELL signals display)
+                    'exit_price': round(s.exit_price / 100) * 100 if s.exit_price else None,
+                    'exit_reason': s.exit_reason,
+                    'exit_date': s.exit_date,
                 })
             
-            # Deduplicate: Keep BEST signal per ticker per date (highest strength)
-            seen = {}  # Track: ticker_date Ã¢â€ â€™ signal
+            # Deduplicate: Only deduplicate BUY signals with same ticker+date
+            # SELL signals are NEVER deduplicated -- each is a real trade event
+            seen = {}  # Track: ticker_date -> signal (BUY only)
             deduplicated = []
-            
+
             for signal in signals_data:
-                key = f"{signal['ticker']}_{signal['date']}"
-                
+                action = signal.get('action', 'BUY')
+
+                # SELL signals: always keep, never deduplicate
+                if action == 'SELL':
+                    deduplicated.append(signal)
+                    continue
+
+                # BUY signals: deduplicate by ticker+date, keep highest strength
+                # Use signal id as fallback when date is None
+                date_part = signal['date'] or f"id_{signal['id']}"
+                key = f"{signal['ticker']}_{date_part}"
+
                 if key not in seen:
-                    # First signal for this ticker+date Ã¢â€ â€™ Keep it
                     seen[key] = signal
                     deduplicated.append(signal)
                 else:
-                    # Duplicate found Ã¢â€ â€™ Keep signal with HIGHER strength
+                    # Duplicate found -- Keep signal with HIGHER strength
                     existing_strength = seen[key].get('strength', 0)
                     new_strength = signal.get('strength', 0)
-                    
+
                     if new_strength > existing_strength:
                         # Replace with better signal
                         deduplicated.remove(seen[key])
                         seen[key] = signal
                         deduplicated.append(signal)
-            
             return jsonify({
                 'success': True,
                 'signals': deduplicated,
@@ -665,7 +1389,14 @@ def signals_endpoint():
                 stock_type=data.get('stock_type'),
                 rsi=data.get('rsi'),
                 date=data.get('date'),
-                action=data.get('action', 'BUY')
+                action=data.get('action', 'BUY'),
+                # ✅ FIX: Add exit fields for SELL signals (2026-03-11)
+                exit_price=data.get('exit_price'),
+                exit_date=__parse_date(data.get('exit_date')),
+                exit_reason=data.get('exit_reason'),
+                signal_code=data.get('signal_code'),
+                buy_signal_code=data.get('buy_signal_code'),
+                exit_quantity_pct=data.get('exit_quantity_pct')
             )
             
             # Save to database
@@ -684,9 +1415,7 @@ def signals_endpoint():
                 signal.status = 'closed'
                 signal.position_pct = 0
                 # Lấy sell_pct từ request (TAKE_PROFIT=50%, STOP_LOSS=100%)
-                sell_pct = data.get('sell_pct', 100)
-                if data.get('strategy') == 'TAKE_PROFIT' and 'sell_pct' not in data:
-                    sell_pct = 50  # TAKE_PROFIT mặc định bán 50%
+                sell_pct = data.get('exit_quantity_pct') or data.get('sell_pct', 100)
                 # Update BUY signal tương ứng (FIFO)
                 buy_update_info = auto_update_buy_status(signal.ticker, session, sell_pct=sell_pct)
                 # Link SELL â†’ BUY
@@ -880,19 +1609,31 @@ def create_sell_signal():
             if not buy_signal:
                 return jsonify({'error': f'Signal {buy_signal_code} not found'}), 404
             
+            # Warn if BUY signal already fully closed
+            if buy_signal.status == 'closed' or (buy_signal.position_pct is not None and buy_signal.position_pct <= 0):
+                return jsonify({
+                    'error': f'Signal {buy_signal_code} is already fully closed (position_pct=0). '
+                             f'Cannot create SELL against a closed position.'
+                }), 400
+            
             selection_method = 'manual'
         else:
-            # AUTO FIFO: Find oldest open signal for this ticker
+            # AUTO FIFO: Find oldest OPEN/PARTIAL signal for this ticker
+            # Only match BUY signals that still have position (not fully closed)
             buy_signal = session.query(Signal).filter(
                 Signal.ticker == ticker,
-                Signal.action == 'BUY'
+                Signal.action == 'BUY',
+                Signal.status.in_(['open', 'partial'])
             ).order_by(
                 Signal.date.asc(),
                 Signal.created_at.asc()
             ).first()
             
             if not buy_signal:
-                return jsonify({'error': f'No BUY signal found for {ticker}'}), 404
+                return jsonify({
+                    'error': f'No open BUY signal found for {ticker}. '
+                             f'All positions may already be closed.'
+                }), 404
             
             selection_method = 'auto_fifo'
         
@@ -1340,37 +2081,118 @@ def update_cash():
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    """Chat with AI using strict system prompt"""
+    """IIS-aware chat endpoint v2.0"""
     data = request.json
     user_id = data.get('user_id', 1)
     message = data.get('message', '').strip()
-    
+    print(f"[CHAT-DEBUG] user={user_id} msg={message[:50]}", flush=True)
     if not message:
         return jsonify({'success': False, 'error': 'Message required'}), 400
-    
     session = Session()
     try:
-        portfolio_context, signal_tickers = get_portfolio_context(user_id)
-        ai_response = chat_with_gpt(message, portfolio_context, signal_tickers)
-        
-        chat_entry = ChatHistory(
-            user_id=user_id,
+        iis_profile     = get_iis_profile_cached(str(user_id))
+        # Fallback: dùng IIS profile từ frontend nếu backend chưa có (Render sleep issue)
+        if not iis_profile and data.get('iis_profile_fallback'):
+            iis_profile = data['iis_profile_fallback']
+            print(f"[IIS] Using frontend fallback profile for {user_id}: {iis_profile.get('level')}")
+        emotional_state, _ = detect_emotional_state(message)
+        topic, ticker_mentioned = detect_trade_intent(message)
+        if topic == 'portfolio_rescue':
+            # Portfolio Rescue là Risk Shield, không phải coaching cảm xúc theo từ khóa —
+            # override emotional_state để backend/analytics phân biệt rõ nguồn gốc
+            emotional_state = 'concentration_risk'
+
+        # IIS coaching chỉ cho Basic+ và VIP
+        user_tier = data.get('user_tier', 'free')
+        PAID_TIERS = {'basic', 'basic_trial', 'early_adopter', 'vip'}
+        is_paid    = user_tier in PAID_TIERS
+
+        # 30-day free trial — tính từ ngày làm IIS test
+        trial_active    = False
+        trial_days_left = 0
+        if iis_profile and iis_profile.get('created_at'):
+            from datetime import datetime, timedelta
+            try:
+                _trial_start   = datetime.fromisoformat(str(iis_profile['created_at'])[:19])
+                _trial_expires = _trial_start + timedelta(days=30)
+                _now           = datetime.now()
+                trial_active   = _now < _trial_expires
+                trial_days_left = max(0, (_trial_expires - _now).days)
+            except Exception as _te:
+                print(f"[Trial] {_te}")
+
+        coaching_enabled = is_paid or trial_active
+        iis_section = build_iis_coaching_section(iis_profile, emotional_state) if coaching_enabled else ""
+        tier_locked  = not coaching_enabled
+
+        # Portfolio Rescue: đưa vào MỌI tier (kể cả free) — đây là Risk Shield cơ bản,
+        # không phải coaching cá nhân hóa trả phí. Không bị gate bởi coaching_enabled.
+        rescue_snapshot_line = None
+        if topic == 'portfolio_rescue':
+            rescue_section, rescue_snapshot_line = build_portfolio_rescue_section(user_id, session)
+            iis_section += rescue_section
+
+        # === v2.2: chèn ĐIỂM NGHẼN vào system prompt ===
+        # Chỉ MỘT điểm nghẽn mỗi lần — coaching tập trung, không liệt kê 5 thứ
+        _bottleneck = None
+        if _has_bottleneck and coaching_enabled:
+            try:
+                _bottleneck = diagnose_bottleneck(Session, str(user_id))
+                iis_section += build_bottleneck_section(_bottleneck)
+            except Exception as _bn_e:
+                print(f"[bottleneck] inject skipped: {_bn_e}")
+        # Load history — resilient: nếu fail (vd: cột mới chưa có) thì dùng []
+        try:
+            history_rows = session.query(ChatHistory)                .filter_by(user_id=str(user_id))                .order_by(ChatHistory.created_at.desc())                .limit(5).all()
+            history = [{"message": h.message, "response": h.response}
+                       for h in reversed(history_rows)]
+        except Exception as _hist_err:
+            session.rollback()
+            print(f"[/api/chat] history load failed (non-fatal): {_hist_err}")
+            history = []
+        portfolio_context, signal_tickers = get_portfolio_context(user_id, user_tier=user_tier)
+        if rescue_snapshot_line:
+            # Nhét snapshot vào đầu context — vừa để GPT tham chiếu, vừa để lưu vào
+            # ChatHistory.portfolio_context cho lần Rescue kế tiếp so sánh (mục 8.1 spec)
+            portfolio_context = rescue_snapshot_line + "\n" + portfolio_context
+        ai_response = chat_with_gpt(
+            message, portfolio_context, signal_tickers,
+            iis_section=iis_section, history=history
+        )
+        iis_level_now = iis_profile.get('total') if iis_profile else None
+        session.add(ChatHistory(
+            user_id=str(user_id),
             message=message,
             response=ai_response,
-            portfolio_context=portfolio_context
-        )
-        session.add(chat_entry)
+            portfolio_context=portfolio_context,
+            emotional_state=emotional_state,
+            topic=topic,
+            iis_level=iis_level_now
+        ))
         session.commit()
-        
-        return jsonify({'success': True, 'response': ai_response})
-        
+        print(f"[CHAT-DEBUG] emotion={emotional_state} topic={topic} iis={iis_level_now}", flush=True)
+        return jsonify({
+            'success': True,
+            'response': ai_response,
+            'meta': {
+                'emotional_state': emotional_state,  # luôn gửi actual state, dùng tier_locked để control CTA
+                'topic': topic,
+                'ticker': ticker_mentioned,
+                'iis_level': iis_level_now,
+                'iis_level_name': iis_profile.get('level') if iis_profile else None,
+                'tier_locked': tier_locked,
+                'user_tier': user_tier,
+                'bottleneck': (_bottleneck or {}).get('bottleneck'),
+                'bottleneck_name': (_bottleneck or {}).get('bottleneck_name'),
+                'trial_active': trial_active,
+                'trial_days_left': trial_days_left,
+            }
+        })
     except Exception as e:
         session.rollback()
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'response': 'Xin lÃ¡Â»â€”i, cÃƒÂ³ lÃ¡Â»â€”i xÃ¡ÂºÂ£y ra.'
-        }), 500
+        print(f"[/api/chat] Error: {e}")
+        return jsonify({'success': False, 'error': str(e),
+                        'response': 'Xin lỗi, có lỗi xảy ra. Vui lòng thử lại.'}), 500
     finally:
         session.close()
 
@@ -1422,6 +2244,9 @@ def get_stock_price_endpoint():
         }), 400
     
     ticker = ticker.upper()
+
+    if Vnstock is None:
+        return jsonify({'success': False, 'error': 'Nguồn giá realtime (vnstock) tạm thời không khả dụng'}), 503
     
     try:
         stock_api = Vnstock()
@@ -1488,6 +2313,9 @@ def get_batch_prices():
             'error': 'Tickers array required'
         }), 400
     
+    if Vnstock is None:
+        return jsonify({'success': False, 'error': 'Nguồn giá realtime (vnstock) tạm thời không khả dụng'}), 503
+
     stock_api = Vnstock()
     prices = {}
     failed = []
@@ -1615,6 +2443,224 @@ def migrate():
 # ========================================================================
 # ADMIN: Update signal status/position
 # ========================================================================
+
+@app.route('/api/market-pulse', methods=['GET'])
+def get_market_pulse():
+    """Lấy market pulse scan mới nhất từ DB"""
+    session = Session()
+    try:
+        from sqlalchemy import text
+        result = session.execute(text("""
+            SELECT scan_time, advancing, declining, unchanged, total_scanned,
+                   top_gainers, top_losers, ceil_stocks, floor_stocks,
+                   sector_data, summary_text
+            FROM market_pulse
+            ORDER BY scan_time DESC
+            LIMIT 1
+        """)).fetchone()
+        
+        if not result:
+            return jsonify({'success': False, 'message': 'Chưa có dữ liệu market pulse'})
+        
+        return jsonify({
+            'success': True,
+            'scan_time': str(result[0]),
+            'advancing': result[1],
+            'declining': result[2],
+            'unchanged': result[3],
+            'total_scanned': result[4],
+            'top_gainers': result[5] if result[5] else [],
+            'top_losers':  result[6] if result[6] else [],
+            'ceil_stocks': result[7] if result[7] else [],
+            'floor_stocks':result[8] if result[8] else [],
+            'sector_data': result[9] if result[9] else [],
+            'summary_text':result[10],
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/market-greeting', methods=['GET'])
+def get_market_greeting():
+    """
+    Tổng hợp data thị trường từ DB → GPT viết tóm tắt tự nhiên.
+    Dùng cho AI Chat greeting khi user mở app.
+    Cache 30 phút để tránh gọi GPT nhiều lần.
+    """
+    import time
+    
+    # ── Simple in-memory cache 30 phút ──────────────────────────
+    cache = getattr(get_market_greeting, '_cache', None)
+    if cache and (time.time() - cache['ts']) < 1800:
+        return jsonify(cache['data'])
+    
+    session = Session()
+    try:
+        from datetime import date
+        today = date.today().strftime('%Y-%m-%d')
+        
+        # ── 1. Market Risk data ──────────────────────────────────
+        latest_risk = session.query(MarketRisk).order_by(
+            MarketRisk.id.desc()
+        ).first()
+        
+        mode       = latest_risk.market_mode if latest_risk else 'SIDEWAYS'
+        risk_score = latest_risk.risk_score  if latest_risk else 50
+        allocation = latest_risk.allocation  if latest_risk else 50
+        vni        = latest_risk.vnindex_value if latest_risk else None
+        
+        mode_label = {'BULL': 'TÍCH CỰC 🟢', 'SIDEWAYS': 'THẬN TRỌNG 🟡', 'BEAR': 'PHÒNG THỦ 🔴'}.get(mode, mode)
+        
+        # ── 1b. Market Pulse data (nếu có) ──────────────────────
+        pulse_summary = None
+        try:
+            pulse_result = session.execute(text("""
+                SELECT summary_text, scan_time, advancing, declining,
+                       ceil_stocks, floor_stocks, sector_data
+                FROM market_pulse
+                ORDER BY scan_time DESC LIMIT 1
+            """)).fetchone()
+            if pulse_result and pulse_result[0]:
+                pulse_summary = pulse_result[0]
+                pulse_time = pulse_result[1]
+        except:
+            pass
+
+        # ── 2. Signals data ──────────────────────────────────────
+        open_buys = session.query(Signal).filter(
+            Signal.action == 'BUY', Signal.status == 'open'
+        ).order_by(Signal.date.desc()).all()
+        
+        # SELL signals hôm nay
+        today_sells = session.query(Signal).filter(
+            Signal.action == 'SELL',
+            Signal.date == today
+        ).all()
+        
+        strong_buys = [s for s in open_buys if (s.strength or 0) >= 70]
+        top_tickers = [s.ticker for s in open_buys[:5]]
+        
+        # ── 3. Breadth từ EodPrice ───────────────────────────────
+        eod_prices = session.query(EodPrice).filter(
+            EodPrice.prev_price.isnot(None),
+            EodPrice.prev_price > 0
+        ).all()
+        
+        advancing = declining = unchanged = 0
+        top_gainers = []
+        top_losers  = []
+        
+        for p in eod_prices:
+            pct = (p.price - p.prev_price) / p.prev_price * 100
+            if pct > 6.5:
+                top_gainers.append({'ticker': p.ticker, 'pct': round(pct, 1)})
+                advancing += 1
+            elif pct > 0.1:
+                advancing += 1
+            elif pct < -6.5:
+                top_losers.append({'ticker': p.ticker, 'pct': round(pct, 1)})
+                declining += 1
+            elif pct < -0.1:
+                declining += 1
+            else:
+                unchanged += 1
+        
+        top_gainers.sort(key=lambda x: x['pct'], reverse=True)
+        top_losers.sort(key=lambda x: x['pct'])
+        
+        # ── 4. Build context cho GPT ─────────────────────────────
+        from datetime import datetime
+        weekday_vn = ['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ nhật']
+        wd = weekday_vn[datetime.now().weekday()]
+        date_str = datetime.now().strftime(f'{wd}, %d/%m/%Y')
+        
+        breadth_str = ''
+        if advancing + declining > 0:
+            breadth_str = f"Breadth thị trường: {advancing} mã tăng / {declining} mã giảm / {unchanged} mã đứng (trong {advancing+declining+unchanged} mã theo dõi)."
+        
+        ceil_str = ''
+        if top_gainers:
+            _g = ', '.join(["{}(+{}%)".format(g['ticker'], g['pct']) for g in top_gainers[:5]])
+            ceil_str = f"Đột biến trần: {_g}."
+        floor_str = ''
+        if top_losers:
+            _l = ', '.join(["{}({}%)".format(l['ticker'], l['pct']) for l in top_losers[:5]])
+            floor_str = f"Đột biến sàn: {_l}."
+        
+        vni_str = f"VN30 tham chiếu: {vni:,.0f} điểm." if vni else ""
+        sells_str = f"{len(today_sells)} tín hiệu BÁN mới kích hoạt hôm nay." if today_sells else ""
+        
+        # Dùng market pulse nếu có, không thì dùng data tĩnh
+        if pulse_summary:
+            context = f"""{pulse_summary}
+
+Thông tin bổ sung:
+Chế độ thị trường: {mode_label}. Risk Score: {risk_score}/100. Tỷ trọng khuyến nghị: {allocation}%. {vni_str}
+Tín hiệu MUA đang mở: {len(open_buys)} mã ({len(strong_buys)} mã score >70%). Top: {', '.join(top_tickers)}.
+{sells_str}"""
+        else:
+            context = f"""Hôm nay là {date_str}.
+Chế độ thị trường: {mode_label}. Risk Score: {risk_score}/100. Tỷ trọng cổ phiếu khuyến nghị: {allocation}%. {vni_str}
+{breadth_str}
+{ceil_str}
+{floor_str}
+Tín hiệu MUA đang mở: {len(open_buys)} mã, trong đó {len(strong_buys)} mã score >70%. Top tín hiệu mới nhất: {', '.join(top_tickers)}.
+{sells_str}"""
+
+        # ── 5. Gọi GPT viết greeting tự nhiên ───────────────────
+        import openai
+        openai_client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        
+        prompt = f"""Bạn là AI Advisor — trợ lý đầu tư chứng khoán Việt Nam.
+Viết tin nhắn chào ngắn gọn (150-200 từ) tóm tắt thị trường hôm nay dựa trên data sau:
+
+{context}
+
+Yêu cầu:
+- Giọng văn chuyên nghiệp nhưng thân thiện, như một chuyên gia tóm tắt cho nhà đầu tư
+- Nêu rõ tình trạng thị trường, điểm nổi bật về breadth, cổ phiếu đột biến (nếu có)
+- Kết thúc bằng 1 câu hỏi gợi mở để user tương tác
+- Không dùng markdown, viết thuần text
+- Không bịa số liệu ngoài data được cung cấp"""
+
+        resp = openai_client.chat.completions.create(
+            model='gpt-4o',
+            messages=[{'role': 'user', 'content': prompt}],
+            max_tokens=300,
+            temperature=0.7,
+        )
+        greeting_text = resp.choices[0].message.content.strip()
+        
+        result = {
+            'success':  True,
+            'greeting': greeting_text,
+            'context': {
+                'mode': mode, 'risk_score': risk_score,
+                'allocation': allocation, 'vni': vni,
+                'open_buys': len(open_buys),
+                'strong_buys': len(strong_buys),
+                'advancing': advancing, 'declining': declining,
+                'ceil_count': len(top_gainers),
+                'floor_count': len(top_losers),
+            }
+        }
+        
+        # Cache kết quả
+        get_market_greeting._cache = {'ts': time.time(), 'data': result}
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'greeting': None
+        }), 500
+    finally:
+        session.close()
+
 
 @app.route('/api/admin/fix-signal', methods=['POST'])
 def admin_fix_signal():
@@ -1931,6 +2977,188 @@ def get_market_risk_history():
     finally:
         session.close()
 
+
+@app.route('/api/admin/fix-orphaned-signals', methods=['POST'])
+def fix_orphaned_signals():
+    """
+    Fix BUY signals that have exit_date/exit_reason but status still 'open'
+    
+    ADMIN ONLY endpoint for database cleanup
+    """
+    session = get_session()
+    
+    try:
+        # Find orphaned BUY signals
+        orphaned = session.query(Signal).filter(
+            Signal.action == 'buy',
+            Signal.status == 'open',
+            Signal.exit_date.isnot(None),
+            Signal.exit_date != ''
+        ).all()
+        
+        if not orphaned:
+            return jsonify({
+                'success': True,
+                'fixed': 0,
+                'message': 'No orphaned signals found'
+            })
+        
+        # Get list before fixing
+        orphaned_list = []
+        for sig in orphaned:
+            orphaned_list.append({
+                'id': sig.id,
+                'ticker': sig.ticker,
+                'entry_date': sig.entry_date,
+                'exit_date': sig.exit_date,
+                'exit_reason': sig.exit_reason,
+                'old_status': sig.status
+            })
+        
+        # Fix them
+        for sig in orphaned:
+            sig.status = 'closed'
+        
+        session.commit()
+        
+        return jsonify({
+            'success': True,
+            'fixed': len(orphaned),
+            'signals': orphaned_list,
+            'message': f'Fixed {len(orphaned)} orphaned BUY signals'
+        })
+        
+    except Exception as e:
+        session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+    finally:
+        session.close()
+
+
+
+
+# ========================================================================
+# TELEGRAM WEBHOOK — nhận /start từ users, lưu chat_id
+# ========================================================================
+
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
+
+@app.route('/api/telegram/webhook', methods=['POST', 'GET'])
+def telegram_webhook():
+    if request.method == 'GET':
+        return jsonify({'status': 'Telegram webhook active'}), 200
+
+    try:
+        data = request.get_json(silent=True) or {}
+        message = data.get('message', {})
+        if not message:
+            return jsonify({'ok': True}), 200
+
+        chat_id    = str(message.get('chat', {}).get('id', ''))
+        text       = message.get('text', '').strip()
+        first_name = message.get('from', {}).get('first_name', 'bạn')
+
+        if not chat_id:
+            return jsonify({'ok': True}), 200
+
+        def send_reply(msg):
+            if not TELEGRAM_BOT_TOKEN:
+                return
+            try:
+                import requests as req
+                req.post(
+                    f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage',
+                    json={'chat_id': chat_id, 'text': msg, 'parse_mode': 'HTML'},
+                    timeout=10
+                )
+            except Exception as e2:
+                print(f'[Telegram] send_reply error: {e2}')
+
+        if text.startswith('/start'):
+            # Tìm user trong DB — dùng import động để tránh circular import
+            found_user = None
+            try:
+                if _has_vip:
+                    from vip_auth import VIPUser as _VIPUser
+                    _session = Session()
+                    found_user = _session.query(_VIPUser).filter_by(telegram_chat_id=chat_id).first()
+                    _session.close()
+            except Exception as e3:
+                print(f'[Telegram] DB lookup error: {e3}')
+
+            if found_user:
+                send_reply(
+                    f"\U0001F44B Xin chao <b>{found_user.full_name or first_name}</b>!\n\n"
+                    f"\u2705 Tai khoan VIP da ket noi Telegram.\n"
+                    f"Ban se nhan tin hieu tu dong tu AI Advisor.\n\n"
+                    f"\U0001F310 ai-advisor.vn"
+                )
+            else:
+                send_reply(
+                    f"\U0001F44B Xin chao <b>{first_name}</b>! Chao mung den voi <b>AI Advisor</b>\n\n"
+                    f"\U0001F4CC <b>Chat ID cua ban la:</b>\n"
+                    f"<code>{chat_id}</code>\n\n"
+                    f"Vui long gui Chat ID nay cho admin de kich hoat nhan tin hieu VIP.\n\n"
+                    f"\U0001F310 ai-advisor.vn"
+                )
+
+        return jsonify({'ok': True}), 200
+
+    except Exception as e:
+        print(f'[Telegram] webhook error: {e}')
+        return jsonify({'ok': True}), 200
+
+
+# ── Portfolio Rescue commit endpoint ────────────────────────────────
+@app.route('/api/portfolio-rescue/commit', methods=['POST'])
+def rescue_commit():
+    """Lưu cam kết cắt lỗ của user"""
+    try:
+        data      = request.get_json() or {}
+        user_id   = data.get('user_id', 'anonymous')
+        positions = data.get('positions', [])
+        session   = Session()
+        try:
+            session.execute(text("""
+                CREATE TABLE IF NOT EXISTS rescue_commits (
+                    id SERIAL PRIMARY KEY,
+                    user_id VARCHAR(255),
+                    ticker VARCHAR(10),
+                    loss_pct FLOAT,
+                    loss_amt FLOAT,
+                    verdict VARCHAR(50),
+                    commit_type VARCHAR(20),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            session.commit()
+        except Exception:
+            session.rollback()
+        for pos in positions:
+            try:
+                session.execute(text("""
+                    INSERT INTO rescue_commits
+                      (user_id, ticker, loss_pct, loss_amt, verdict, commit_type, created_at)
+                    VALUES (:uid, :ticker, :lp, :la, :vd, :ct, NOW())
+                """), {
+                    'uid': user_id, 'ticker': pos.get('ticker',''),
+                    'lp':  float(pos.get('loss_pct', 0)),
+                    'la':  float(pos.get('loss_amt', 0)),
+                    'vd':  pos.get('verdict',''), 'ct': pos.get('commit',''),
+                })
+            except Exception:
+                session.rollback()
+        session.commit()
+        session.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f'[Rescue] commit error: {e}')
+        return jsonify({'success': True})
+
+
 if __name__ == '__main__':
     # Initialize database
     try:
@@ -1953,6 +3181,7 @@ if __name__ == '__main__':
     print(f"AI: {'Ã¢Å“â€¦ GPT-4o-mini (Strict Rules)' if openai_client else 'Ã¢ÂÅ’ Not configured'}")
     print("EOD Prices: Stored in PostgreSQL (eod_prices table)")
     print(f"VIP/Push: {'✅ Enabled' if _has_vip else '⚠️  Not loaded'}")
+    print(f"VIP Signals: {'✅ Enabled' if _has_vip_signals else '⚠️  Not loaded'}")
     print("Use /api/eod/status to check price count")
     print(f"Database: {DATABASE_URL}")
     print(f"Host: 0.0.0.0 (Render-ready)")
@@ -1961,3 +3190,4 @@ if __name__ == '__main__':
     
     # CRITICAL: Bind to 0.0.0.0 and use PORT from environment!
     app.run(debug=False, host='0.0.0.0', port=port)
+# redeploy trigger 2026-04-26
