@@ -1,23 +1,23 @@
 name: Update EOD Prices
 
+# v2 (2026-09-27): lấy giá theo bảng giá (~1-2 phút/lần thay vì 11-60 phút)
+# -> quét được 6 lần/ngày mà vẫn trong 2.000 phút miễn phí của GitHub Actions.
+# Lần 16:00 (EOD) chạy thêm Rescue Watch ngay sau khi giá cuối ngày đã về.
 on:
   schedule:
-    # Vietnam time (UTC+7) - Monday to Friday
-    # 9:30 AM VN  = 2:30 UTC
-    - cron: '30 2 * * 1-5'
-    # 11:30 AM VN = 4:30 UTC
-    - cron: '30 4 * * 1-5'
-    # 1:30 PM VN  = 6:30 UTC
-    - cron: '30 6 * * 1-5'
-    # 2:30 PM VN  = 7:30 UTC
-    - cron: '30 7 * * 1-5'
-    # 4:00 PM VN  = 9:00 UTC (EOD - after market close)
-    - cron: '0 9 * * 1-5'
+    # Giờ Việt Nam (UTC+7), thứ 2 - thứ 6
+    - cron: '30 2 * * 1-5'   #  9:30 VN
+    - cron: '30 3 * * 1-5'   # 10:30 VN
+    - cron: '30 4 * * 1-5'   # 11:30 VN (hết phiên sáng)
+    - cron: '30 6 * * 1-5'   # 13:30 VN
+    - cron: '30 7 * * 1-5'   # 14:30 VN
+    - cron: '0 9 * * 1-5'    # 16:00 VN (EOD) + Rescue Watch
   workflow_dispatch:
 
 jobs:
   update-prices:
     runs-on: ubuntu-latest
+    timeout-minutes: 25          # chặn lần chạy bất thường ăn hết phút Actions
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -29,7 +29,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install "sqlalchemy>=2.0" "psycopg[binary]" pytz --quiet && pip install --extra-index-url https://vnstocks.com/api/simple "vnstock==4.0.9" "vnai==2.6.2" --quiet
+          pip install "sqlalchemy>=2.0" "psycopg[binary]" pytz pandas --quiet && pip install --extra-index-url https://vnstocks.com/api/simple "vnstock==4.0.9" "vnai==2.6.2" --quiet
           python -c "from vnstock import Quote; print('vnstock OK')"
 
       - name: Run price update
@@ -41,3 +41,16 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python verify_prices.py
+
+      - name: Rescue Watch (sau cap nhat EOD 16:00)
+        if: github.event.schedule == '0 9 * * 1-5'
+        env:
+          ADMIN_KEY: ${{ secrets.ADMIN_SECRET }}
+          MODE: ${{ vars.RESCUE_WATCH_MODE || 'admin' }}
+        run: |
+          curl -s --max-time 90 https://ai-advisor1-backend.onrender.com/health > /dev/null || true
+          curl -sS --max-time 180 -X POST \
+            -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
+            -d "{\"mode\": \"$MODE\"}" \
+            https://ai-advisor1-backend.onrender.com/api/admin/rescue-watch/run \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print('success:', d.get('success'), d.get('error','')); [print(u['user'][:3]+'***', '| events:', u['events'], '| sent:', u['sent'], '| skipped:', u['skipped'], '| data warnings:', len(u['warnings'])) for u in d.get('users',[])]" || true

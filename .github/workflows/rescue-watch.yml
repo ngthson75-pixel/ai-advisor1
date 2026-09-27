@@ -1,13 +1,11 @@
 name: Rescue Watch (VIP)
 
-# Canh gác danh mục khách VIP sau phiên — chạy SAU job cập nhật giá EOD (16:00 giờ VN).
-# Chế độ mặc định lấy từ biến repo RESCUE_WATCH_MODE (Settings → Variables):
+# Chạy TỰ ĐỘNG: đã gắn vào cuối job "Update EOD Prices" lúc 16:00 (dùng luôn giá vừa cập nhật).
+# File này chỉ để CHẠY TAY khi cần (preview / admin / live).
+# Chế độ tự động lấy từ biến repo RESCUE_WATCH_MODE (Settings → Variables):
 #   admin = gửi bản nháp cho admin duyệt (tuần đầu)   |   live = gửi thẳng cho khách
+# Log chỉ in email đã che + số lượng, không in danh mục (tránh lộ dữ liệu khách nếu repo public)
 on:
-  schedule:
-    # 16:40 giờ VN (UTC+7) = 09:40 UTC, thứ 2 - thứ 6
-    - cron: '40 9 * * 1-5'
-  # Log chỉ in email đã che + số lượng, không in danh mục (tránh lộ dữ liệu khách nếu repo public)
   workflow_dispatch:
     inputs:
       mode:
