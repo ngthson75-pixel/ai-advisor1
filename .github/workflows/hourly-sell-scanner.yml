@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install --upgrade vnstock
+          pip install --extra-index-url https://vnstocks.com/api/simple "vnstock==4.0.9" "vnai==2.6.2"
           pip install psycopg2-binary python-dotenv pandas numpy
       
       - name: Run Sell Scanner v5.3

@@ -29,7 +29,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install "sqlalchemy>=2.0" "psycopg[binary]" vnstock pytz --quiet
+          pip install "sqlalchemy>=2.0" "psycopg[binary]" pytz --quiet && pip install --extra-index-url https://vnstocks.com/api/simple "vnstock==4.0.9" "vnai==2.6.2" --quiet
           python -c "from vnstock import Quote; print('vnstock OK')"
 
       - name: Run price update

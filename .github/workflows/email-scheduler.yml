@@ -1,0 +1,88 @@
+name: Email Scheduler
+
+on:
+  schedule:
+    # Email 1: Bản tin sáng — 8:00 AM VN (01:00 UTC) thứ 2-6
+    - cron: '0 1 * * 1-5'
+    # Email 4: IIS Weekly — 7:30 AM VN thứ Hai (00:30 UTC)
+    - cron: '30 0 * * 1'
+    # Email 3: Portfolio Alert — check 4 lần/ngày trong giờ giao dịch
+    - cron: '0 3,6,8,9 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      email_type:
+        description: 'Loại email cần gửi'
+        required: true
+        default: 'morning'
+        type: choice
+        options: [morning, signal, portfolio, weekly]
+      dry_run:
+        description: 'Dry run (không gửi thực)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  send-emails:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install sqlalchemy psycopg requests --quiet
+
+      - name: Determine email type from schedule
+        id: email_type
+        run: |
+          HOUR=$(date -u +%H)
+          MINUTE=$(date -u +%M)
+          DOW=$(date -u +%u)  # 1=Mon ... 7=Sun
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "type=${{ github.event.inputs.email_type }}" >> $GITHUB_OUTPUT
+            echo "dry_run=${{ github.event.inputs.dry_run }}" >> $GITHUB_OUTPUT
+          elif [ "$HOUR" = "00" ] && [ "$MINUTE" = "30" ] && [ "$DOW" = "1" ]; then
+            echo "type=weekly" >> $GITHUB_OUTPUT
+            echo "dry_run=false" >> $GITHUB_OUTPUT
+          elif [ "$HOUR" = "01" ] && [ "$MINUTE" = "00" ]; then
+            echo "type=morning" >> $GITHUB_OUTPUT
+            echo "dry_run=false" >> $GITHUB_OUTPUT
+          else
+            echo "type=portfolio" >> $GITHUB_OUTPUT
+            echo "dry_run=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Email Scheduler
+        env:
+          DATABASE_URL:        ${{ secrets.DATABASE_URL }}
+          GMAIL_CLIENT_ID:     ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          SMTP_USER:           ${{ secrets.SMTP_USER }}
+          FRONTEND_URL:        ${{ secrets.FRONTEND_URL }}
+        run: |
+          TYPE="${{ steps.email_type.outputs.type }}"
+          DRY="${{ steps.email_type.outputs.dry_run }}"
+
+          echo "📧 Sending email type: $TYPE (dry_run=$DRY)"
+
+          if [ "$DRY" = "true" ]; then
+            python3 email_scheduler.py --type "$TYPE" --dry-run
+          else
+            python3 email_scheduler.py --type "$TYPE"
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Email scheduler failed for type: ${{ steps.email_type.outputs.type }}"
+          # Telegram notification tự động qua existing bot nếu cần

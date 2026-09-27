@@ -1,0 +1,35 @@
+name: Rescue Watch (VIP)
+
+# Canh gác danh mục khách VIP sau phiên — chạy SAU job cập nhật giá EOD (16:00 giờ VN).
+# Chế độ mặc định lấy từ biến repo RESCUE_WATCH_MODE (Settings → Variables):
+#   admin = gửi bản nháp cho admin duyệt (tuần đầu)   |   live = gửi thẳng cho khách
+on:
+  schedule:
+    # 16:40 giờ VN (UTC+7) = 09:40 UTC, thứ 2 - thứ 6
+    - cron: '40 9 * * 1-5'
+  # Log chỉ in email đã che + số lượng, không in danh mục (tránh lộ dữ liệu khách nếu repo public)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'preview | admin | live'
+        required: true
+        default: 'preview'
+
+jobs:
+  rescue-watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake backend
+        run: curl -s --max-time 90 https://ai-advisor1-backend.onrender.com/health || true
+
+      - name: Run Rescue Watch
+        env:
+          ADMIN_KEY: ${{ secrets.ADMIN_SECRET }}
+          MODE: ${{ github.event.inputs.mode || vars.RESCUE_WATCH_MODE || 'admin' }}
+        run: |
+          echo "Mode: $MODE"
+          curl -sS --fail-with-body --max-time 180 -X POST \
+            -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
+            -d "{\"mode\": \"$MODE\"}" \
+            https://ai-advisor1-backend.onrender.com/api/admin/rescue-watch/run \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); [print(u['user'][:3]+'***', '| events:', u['events'], '| sent:', u['sent'], '| skipped:', u['skipped'], '| data warnings:', len(u['warnings'])) for u in d.get('users',[])]"
