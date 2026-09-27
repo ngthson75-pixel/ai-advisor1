@@ -194,6 +194,13 @@ try:
 except Exception as _rw_err:
     print(f"⚠️  Rescue Watch init error: {_rw_err}")
 
+# === Lướt sóng AI Model Portfolio: danh mục mẫu VIP (graceful import) ===
+try:
+    from model_portfolio import init_model_portfolio_routes
+    init_model_portfolio_routes(app, engine, Session)
+except Exception as _mp_err:
+    print(f"⚠️  Model Portfolio init error: {_mp_err}")
+
 # === Auto-migrate chat_history for IIS behavioral columns ===
 try:
     with engine.connect() as _conn:
@@ -700,7 +707,11 @@ def _rescue_holdings_table(snapshot):
                   'C': 'NHÓM C — tập trung, lỗ nhẹ', 'D': 'NHÓM D — trong ngưỡng'}
     rows = []
     for h in snapshot.get('holdings', []):
-        extra = f" | cần +{h['breakeven_pct']:.0f}% để hòa vốn" if h['group'] == 'A' else ""
+        extra = ""
+        if h['group'] == 'A':
+            exit_way = ('thoát THEO LÔ qua nhiều phiên (tỷ trọng ≥15%)' if h['pct'] >= 15
+                        else 'thoát DỨT KHOÁT, không trì hoãn (tỷ trọng <15%)')
+            extra = f" | cần +{h['breakeven_pct']:.0f}% để hòa vốn | nếu luận điểm sai: {exit_way}"
         no_price = " | (CHƯA CÓ GIÁ THỊ TRƯỜNG — số liệu có thể sai, nhắc user kiểm tra)" if not h.get('has_price', True) else ""
         rows.append(f"  • {h['ticker']}: tỷ trọng {h['pct']:.1f}% | lãi/lỗ {h['pl_pct']:+.1f}%"
                     f" | {group_name[h['group']]}{extra}{no_price}")
@@ -774,13 +785,14 @@ BẮT BUỘC trả lời theo đúng 5 phần sau, theo thứ tự (bỏ qua ph�
 2. NHÓM A — MA TRẬN QUYẾT ĐỊNH TỪNG MÃ ({len(groups['A'])} mã). Với mỗi mã, 3 dòng ngắn:
    (a) 1 câu hỏi phản tư: "Luận điểm mua ban đầu của [mã] còn đúng không, hay đang giữ vì giá vốn?"
        kèm con số "cần +X% để hòa vốn" đã cho sẵn ở trên.
-   (b) Nếu luận điểm KHÔNG còn / không rõ → tỷ trọng < 15%: cân nhắc thoát dứt khoát, không trì hoãn;
-       tỷ trọng ≥ 15%: cân nhắc thoát theo lô qua nhiều phiên, không bán dồn 1 lần.
-   (c) Nếu luận điểm CÒN đúng → giữ nhưng tự đặt MỐC NGÀY xem lại cụ thể (2-4 tuần) và một mức giá
-       mà tại đó luận điểm coi như sai; KHÔNG mua bình quân giá xuống.
+   (b) "Nếu luận điểm không còn / không rõ → cân nhắc ..." — dùng ĐÚNG cách thoát đã ghi sẵn cho mã đó
+       trong bảng ("nếu luận điểm sai: ..."), KHÔNG tự đổi.
+   (c) "Nếu luận điểm còn đúng → giữ, tự đặt mốc ngày xem lại (2-4 tuần) và một mức giá mà tại đó
+       luận điểm coi như sai; không mua bình quân giá xuống."
+   BẮT BUỘC viết đủ cả (a), (b), (c) cho TỪNG mã.
    Nếu nhóm A có hơn 5 mã: phân tích 5 mã tỷ trọng lớn nhất, gộp các mã còn lại trong 1 dòng.
 
-3. NHÓM B / NHÓM C ({len(groups['B'])} mã nhóm B, {len(groups['C'])} mã nhóm C).
+3. NHÓM B / NHÓM C ({len(groups['B'])} mã nhóm B, {len(groups['C'])} mã nhóm C).{'' if (groups['B'] or groups['C']) else chr(10) + '   KHÔNG có mã nào: chỉ viết đúng 1 dòng "Không có mã cần bảo vệ lãi hoặc quản trị tập trung."'}
    - Nhóm B: ghi nhận khoản lãi trước. Trình bày 3 kịch bản bảo vệ lãi kèm hệ quả của từng kịch bản:
      (i) tự đặt ngưỡng giữ lãi theo mức rời đỉnh mà user chấp nhận được;
      (ii) hạ dần tỷ trọng khi giá xác nhận suy yếu (gãy xu hướng, mất hỗ trợ quan trọng);
@@ -794,12 +806,36 @@ BẮT BUỘC trả lời theo đúng 5 phần sau, theo thứ tự (bỏ qua ph�
    chưa được xác nhận lại; tiền giải phóng chỉ tái giải ngân theo tỷ trọng Market Dashboard cho phép;
    ghi lại lý do cho mỗi quyết định.
 
-5. Câu disclaimer ngắn: đây là công cụ hỗ trợ quyết định, không phải tư vấn đầu tư.
+5. Viết NGUYÊN VĂN đúng 1 dòng: "5. Đây là công cụ hỗ trợ quyết định, không phải tư vấn đầu tư. Quyết định và trách nhiệm thuộc về nhà đầu tư."
+   Không thêm chữ "disclaimer", không lặp lại câu này ở chỗ khác.
 
 NGÔN NGỮ: dùng "cân nhắc", "nếu... thì..."; giọng tôn trọng nhà đầu tư có kinh nghiệm, không lên lớp.
 TUYỆT ĐỐI KHÔNG dùng "CẮT NGAY"/"PHÁN QUYẾT", KHÔNG đưa % bán cụ thể mang tính chỉ thị (vd "bán 30% ngay").
 """
     return section, snapshot_line
+
+
+RESCUE_DISCLAIMER = "5. Đây là công cụ hỗ trợ quyết định, không phải tư vấn đầu tư. Quyết định và trách nhiệm thuộc về nhà đầu tư."
+
+
+def finalize_rescue_response(text_):
+    """Chuẩn hóa phần cuối câu trả lời Rescue: đúng 1 dòng mục 5, bỏ dòng miễn trừ bị lặp
+    (sanitize_ai_output tự thêm 1 dòng miễn trừ — trùng với mục 5)."""
+    import re
+    if not text_:
+        return text_
+    lines = text_.rstrip().splitlines()
+    out = []
+    for ln in lines:
+        plain = re.sub(r'[*_#>`]', '', ln).strip()
+        low = plain.lower()
+        is_disclaimer = ('tư vấn đầu tư' in low and ('công cụ hỗ trợ' in low or 'disclaimer' in low))
+        if is_disclaimer or re.match(r'^5[\.\)]\s*(câu\s+)?disclaimer', low):
+            continue   # bỏ mọi dòng miễn trừ/mục 5 do GPT hoặc sanitize thêm — sẽ thêm lại 1 dòng chuẩn
+        out.append(ln)
+    while out and not out[-1].strip():
+        out.pop()
+    return "\n".join(out) + "\n\n" + RESCUE_DISCLAIMER
 
 
 # ========================================================================
@@ -2159,6 +2195,8 @@ def chat():
             message, portfolio_context, signal_tickers,
             iis_section=iis_section, history=history
         )
+        if topic == 'portfolio_rescue':
+            ai_response = finalize_rescue_response(ai_response)
         iis_level_now = iis_profile.get('total') if iis_profile else None
         session.add(ChatHistory(
             user_id=str(user_id),

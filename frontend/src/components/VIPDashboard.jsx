@@ -1,4 +1,4 @@
-﻿/**
+/**
  * AI ADVISOR - VIP DASHBOARD v2.3
  * ================================
  * FIXES (2026-03-22):
@@ -9,6 +9,9 @@
  * FIXES (2026-06-01):
  *   BUG6 - Production (ai-advisor.vn) fallback về localhost vì VITE_API_URL không set
  *          → Fix: detect hostname production → hardcode production backend URL
+ * v2.4 (2026-09-27):
+ *   + ModelPortfolioCard — "Lướt sóng AI" danh mục mẫu 1 tỷ (mô phỏng), gắn trên ô chat.
+ *     Chỉ THÊM component + 1 chỗ mount, không đổi tính năng cũ.
  * FIXES (2026-06-22):
  *   BUG7 - Chat history không load được: frontend đọc d.messages nhưng backend trả d.history
  *          → Fix: đổi sang d.history + convert format {message,response} → {role,content}
@@ -814,6 +817,151 @@ Bạn muốn tôi phân tích cổ phiếu nào, hoặc đánh giá danh mục h
   )
 }
 
+// ─── Lướt sóng AI — Danh mục mẫu (Model Portfolio) ─────────────
+// v2.4 (2026-09-27): thẻ gắn ngay trên ô chat VIP. Dữ liệu: GET /api/vip/model-portfolio
+// Danh mục MÔ PHỎNG 1 tỷ, tự vận hành theo tín hiệu VIP + tỷ trọng Market Dashboard.
+function ModelPortfolioCard() {
+  const [data, setData]       = useState(null)
+  const [open, setOpen]       = useState(false)
+  const [showAll, setShowAll] = useState(false)
+  const [err, setErr]         = useState(null)
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_BASE}/vip/model-portfolio`, { headers: authHeaders() })
+      const d = await r.json()
+      if (d.success) { setData(d); setErr(null) } else setErr(d.error || 'Không tải được danh mục mẫu')
+    } catch { setErr('Không tải được danh mục mẫu') }
+  }, [])
+
+  useEffect(() => { load(); const t = setInterval(load, 5 * 60 * 1000); return () => clearInterval(t) }, [load])
+
+  if (err && !data) return null
+  if (!data) return null
+  if (!data.initialized) return null
+
+  const pct  = (v) => v == null ? '—' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`
+  const col  = (v) => (v || 0) >= 0 ? C.green : C.red
+  const mil  = (v) => v == null ? '—' : `${(v / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} tr`
+  const trades = showAll ? data.trades : data.trades.slice(0, 8)
+
+  const askAI = () => window.dispatchEvent(new CustomEvent('askAI', { detail:
+    `[DANH MUC MAU LUOT SONG AI] Giai thich ngan gon trang thai danh muc mau hien tai: NAV ${fmt(data.nav)} (${pct(data.total_return_pct)} tu dau), ` +
+    `co phieu ${data.stock_pct}% / muc tieu ${data.target_stock_pct}% theo Market Dashboard. Cac ma dang giu: ` +
+    (data.positions.map(p => `${p.ticker} ${pct(p.pl_pct)}`).join(', ') || 'chua co') +
+    `. Giao dich gan nhat: ${(data.trades[0] && `${data.trades[0].action} ${data.trades[0].ticker} - ${data.trades[0].reason}`) || 'chua co'}.`
+  }))
+
+  const th = { padding: '6px', color: C.muted, fontWeight: 600, textAlign: 'left', fontSize: '11px' }
+  const td = { padding: '7px 6px', fontSize: '12px' }
+
+  return (
+    <div style={{ maxWidth: '760px', margin: '0 auto 12px', padding: '0 16px' }}>
+      <div style={{ ...card, marginBottom: 0, padding: '14px 16px', border: `1px solid ${C.purpleLight}55`,
+        background: 'linear-gradient(135deg,#7c3aed1f,#13111f)' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '16px' }}>🌊</span>
+            <span style={{ fontWeight: 800, fontSize: '14px', color: C.purpleLight }}>Lướt sóng AI — Danh mục mẫu {mil(data.capital)}</span>
+            <span style={badge(C.yellow)}>MÔ PHỎNG</span>
+          </div>
+          <button onClick={() => setOpen(o => !o)} style={{ background: 'none', border: 'none', color: C.purpleLight, cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
+            {open ? '▲ Thu gọn' : '▼ Xem danh mục'}
+          </button>
+        </div>
+
+        {/* Chỉ số chính */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: '8px', marginTop: '10px' }}>
+          {[
+            { l: 'Giá trị danh mục', v: `${fmt(data.nav)} đ`, c: C.text },
+            { l: 'Lãi/lỗ từ đầu', v: pct(data.total_return_pct), c: col(data.total_return_pct),
+              s: data.vnindex_return_pct != null ? `VN-Index ${pct(data.vnindex_return_pct)}` : `từ ${fmtDate(data.started_at)}` },
+            { l: 'Hôm nay', v: pct(data.today_return_pct), c: col(data.today_return_pct) },
+            { l: 'Cổ phiếu / Tiền', v: `${data.stock_pct}% / ${(100 - data.stock_pct).toFixed(1)}%`, c: C.text,
+              s: `Mục tiêu ${data.target_stock_pct}% (${data.mode_label || data.market_mode || 'Market Dashboard'})` },
+          ].map(x => (
+            <div key={x.l} style={{ background: '#ffffff06', border: '1px solid #ffffff0d', borderRadius: '10px', padding: '8px 10px' }}>
+              <div style={{ fontSize: '10px', color: C.muted }}>{x.l}</div>
+              <div style={{ fontSize: '15px', fontWeight: 800, color: x.c }}>{x.v}</div>
+              {x.s && <div style={{ fontSize: '10px', color: C.muted, marginTop: '2px' }}>{x.s}</div>}
+            </div>
+          ))}
+        </div>
+
+        {open && (
+          <div style={{ marginTop: '14px' }}>
+            {/* Vị thế đang giữ */}
+            <div style={{ fontSize: '12px', fontWeight: 700, color: C.purpleLight, marginBottom: '6px' }}>
+              📌 Đang nắm giữ ({data.positions.length}/{data.rules.max_positions} mã)
+            </div>
+            {data.positions.length === 0 ? (
+              <div style={{ fontSize: '12px', color: C.muted, padding: '8px 0' }}>Đang giữ 100% tiền mặt — chờ tín hiệu phù hợp.</div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                    {['Mã', 'SL', 'Giá vốn', 'Giá HT', 'Lãi/Lỗ', 'Tỷ trọng', 'Phiên', 'Cắt lỗ / Mục tiêu'].map(h => <th key={h} style={th}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {data.positions.map(p => (
+                      <tr key={p.ticker} style={{ borderBottom: `1px solid ${C.border}22` }}>
+                        <td style={{ ...td, fontWeight: 700, color: C.purpleLight }}>{p.ticker}</td>
+                        <td style={td}>{fmt(p.qty)}</td>
+                        <td style={td}>{fmtPrice(p.entry_price)}</td>
+                        <td style={td}>{fmtPrice(p.price)}</td>
+                        <td style={{ ...td, color: col(p.pl_pct), fontWeight: 700 }}>{pct(p.pl_pct)}</td>
+                        <td style={td}>{p.weight.toFixed(1)}%</td>
+                        <td style={td}>{p.sessions}/{data.rules.max_hold_sessions}</td>
+                        <td style={{ ...td, color: C.muted }}>{fmtPrice(p.stop_loss)} / {fmtPrice(p.take_profit)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Lịch sử giao dịch */}
+            <div style={{ fontSize: '12px', fontWeight: 700, color: C.purpleLight, margin: '14px 0 6px' }}>🧾 Lịch sử giao dịch</div>
+            {data.trades.length === 0 ? (
+              <div style={{ fontSize: '12px', color: C.muted }}>Chưa có giao dịch.</div>
+            ) : trades.map((t, i) => (
+              <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'baseline', padding: '5px 0', borderBottom: `1px solid ${C.border}22`, fontSize: '12px', flexWrap: 'wrap' }}>
+                <span style={{ color: C.muted, minWidth: '44px' }}>{fmtDate(t.trade_date)}</span>
+                <span style={badge(t.action === 'BUY' ? C.green : C.red)}>{t.action === 'BUY' ? 'MUA' : 'BÁN'}</span>
+                <b style={{ color: '#fff' }}>{t.ticker}</b>
+                <span style={{ color: C.text }}>{fmt(t.qty)} cp @ {fmtPrice(t.price)}</span>
+                {t.pnl_pct != null && <span style={{ color: col(t.pnl_pct), fontWeight: 700 }}>{pct(t.pnl_pct)}</span>}
+                <span style={{ color: C.muted, flexBasis: '100%', paddingLeft: '52px' }}>{t.reason}</span>
+              </div>
+            ))}
+            {data.trades.length > 8 && (
+              <button onClick={() => setShowAll(v => !v)} style={{ background: 'none', border: 'none', color: C.purpleLight, cursor: 'pointer', fontSize: '11px', marginTop: '6px' }}>
+                {showAll ? 'Thu gọn' : `Xem thêm ${data.trades.length - 8} giao dịch`}
+              </button>
+            )}
+
+            {/* Quy tắc */}
+            <div style={{ marginTop: '14px', padding: '10px 12px', background: '#ffffff05', borderRadius: '10px', fontSize: '11px', color: C.muted, lineHeight: 1.7 }}>
+              <b style={{ color: C.text }}>Quy tắc vận hành:</b> tỷ trọng cổ phiếu theo Market Dashboard ({data.target_stock_pct}%), chia đều tối đa {data.rules.max_positions} mã
+              (~{data.rules.slot_pct}% tài sản/mã) · chỉ mua theo tín hiệu VIP, không mua đuổi quá {data.rules.max_chase_pct}% ·
+              bán khi chạm cắt lỗ, khi hệ thống phát tín hiệu bán, hoặc sau {data.rules.max_hold_sessions} phiên · {data.rules.fees}.
+              {data.stats.closed_trades > 0 && <> · Tỷ lệ lệnh bán có lãi: <b style={{ color: C.text }}>{data.stats.win_rate_pct}%</b> ({data.stats.closed_trades} lệnh).</>}
+              <div style={{ marginTop: '6px' }}>⚠️ Danh mục mô phỏng để tham khảo, không phải tư vấn đầu tư. Giá cập nhật {fmtDate(data.as_of)} theo các lần quét trong phiên.</div>
+            </div>
+
+            <button onClick={askAI} style={{ marginTop: '10px', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
+              background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.35)', color: C.purpleLight }}>
+              🤖 Hỏi AI về danh mục mẫu
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────
 export default function VIPDashboard({ user, onSwitchBasic, onOpenIIS }) {
   const [tab, setTab]         = useState('signals')
@@ -912,6 +1060,11 @@ export default function VIPDashboard({ user, onSwitchBasic, onOpenIIS }) {
           userTier={user.tier || 'vip'}
           onRequestUpdate={onOpenIIS || (() => {})}
         />
+      </div>
+
+      {/* v2.4: Lướt sóng AI — Danh mục mẫu (ngay trên ô chat) */}
+      <div style={{ paddingTop: '8px' }}>
+        <ModelPortfolioCard />
       </div>
 
       {/* Inline AI Chat — always visible */}
