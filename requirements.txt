@@ -1,4 +1,4 @@
-# AI ADVISOR BACKEND v3.3 - REQUIREMENTS
+﻿# AI ADVISOR BACKEND v3.3 - REQUIREMENTS
 # Python 3.13 Compatible
 
 # Flask web framework
@@ -14,7 +14,6 @@ psycopg[binary]==3.2.3
 openai==1.55.3
 
 # Stock data & data processing
-vnstock==3.3.1
 pandas>=2.0.0
 numpy>=1.24.0
 
