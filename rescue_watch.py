@@ -45,7 +45,7 @@ Endpoints (header X-Admin-Key):
 Env:
     TELEGRAM_BOT_TOKEN        (đã có)
     ADMIN_SECRET              (đã có)
-    ADMIN_TELEGRAM_CHAT_ID    (MỚI — chat_id Telegram của admin, nhận bản nháp + tóm tắt)
+    ADMIN_TELEGRAM_CHAT_ID    (tùy chọn — nếu không đặt sẽ dùng TELEGRAM_CHAT_ID đã có)
 """
 
 import os
@@ -66,7 +66,8 @@ logger = logging.getLogger(__name__)
 
 ADMIN_SECRET       = os.getenv('ADMIN_SECRET', 'ai-advisor-admin-2026')
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
-ADMIN_CHAT_ID      = os.getenv('ADMIN_TELEGRAM_CHAT_ID', '')
+# Dùng lại TELEGRAM_CHAT_ID (chat của admin, đã có sẵn trên Render) nếu chưa đặt biến riêng
+ADMIN_CHAT_ID      = os.getenv('ADMIN_TELEGRAM_CHAT_ID') or os.getenv('TELEGRAM_CHAT_ID', '')
 
 # Ngưỡng — trùng với Risk Shield trong spec (Yellow/Orange/Red) và nút Giải cứu (35%)
 LEVELS             = [(-20.0, 'red'), (-15.0, 'orange'), (-10.0, 'yellow')]
@@ -404,7 +405,7 @@ def run_watch(Session, mode='preview', only_user=None, today=None):
     if mode not in ('preview', 'admin', 'live'):
         raise ValueError('mode phải là preview | admin | live')
     if mode == 'admin' and not ADMIN_CHAT_ID:
-        raise ValueError('Chưa đặt biến môi trường ADMIN_TELEGRAM_CHAT_ID')
+        raise ValueError('Chưa có chat_id admin: đặt TELEGRAM_CHAT_ID hoặc ADMIN_TELEGRAM_CHAT_ID trên Render')
 
     today = today or date.today()
     session = Session()
