@@ -2,7 +2,7 @@
 AI ADVISOR - LƯỚT SÓNG AI MODEL PORTFOLIO (danh mục mẫu VIP)
 =============================================================
 File: model_portfolio.py
-Version: 1.1 (2026-09-27) — thêm can thiệp thủ công + bật/tắt tự động
+Version: 1.2 (2026-09-27) — can thiệp thủ công, bật/tắt tự động, hủy giao dịch, loại mã (quản lý qua signal_reviewer.py mục 23)
 
 Một danh mục MẪU (mô phỏng, không phải lệnh thật) vốn 1 tỷ VND, tự vận hành theo tín hiệu
 VIP của hệ thống — học theo mô hình "danh mục mẫu để làm theo" của iCopy, nhưng mọi quyết định
@@ -138,7 +138,15 @@ def ensure_tables(engine):
                 fee         DOUBLE PRECISION,
                 pnl         DOUBLE PRECISION,
                 pnl_pct     DOUBLE PRECISION,
-                reason      TEXT
+                reason      TEXT,
+                position_id INTEGER,
+                cost_basis  DOUBLE PRECISION
+            )"""))
+        c.execute(text("""
+            CREATE TABLE IF NOT EXISTS mp_exclude (
+                ticker      VARCHAR(10) PRIMARY KEY,
+                reason      TEXT,
+                created_at  TIMESTAMP
             )"""))
         c.execute(text("""
             CREATE TABLE IF NOT EXISTS mp_nav (
@@ -151,6 +159,18 @@ def ensure_tables(engine):
                 updated_at   TIMESTAMP
             )"""))
 
+    # v1.2: liên kết giao dịch <-> vị thế để HỦY được giao dịch; bảng mã bị loại khỏi tự mua
+    for col, typ in (('position_id', 'INTEGER'), ('cost_basis', 'DOUBLE PRECISION')):
+        try:
+            with engine.begin() as c:
+                if sqlite:
+                    cols = [r[1] for r in c.execute(text("PRAGMA table_info(mp_trades)")).fetchall()]
+                    if cols and col not in cols:
+                        c.execute(text(f"ALTER TABLE mp_trades ADD COLUMN {col} {typ}"))
+                else:
+                    c.execute(text(f"ALTER TABLE mp_trades ADD COLUMN IF NOT EXISTS {col} {typ}"))
+        except Exception as e:
+            logger.warning(f'[ModelPortfolio] mp_trades.{col}: {e}')
 
 def _rows(s, sql, **p):
     return [dict(r) for r in s.execute(text(sql), p).mappings().all()]
@@ -212,9 +232,16 @@ def _vip_candidates(s, prices, trade_date):
         today = datetime.strptime(trade_date[:10], '%Y-%m-%d').date()
     except Exception:
         today = date.today()
+    try:
+        excluded = {r['ticker'] for r in _rows(s, "SELECT ticker FROM mp_exclude")}
+    except Exception:
+        s.rollback()
+        excluded = set()
     out = []
     for r in rows:
         t = (r['ticker'] or '').upper().strip()
+        if t in excluded:
+            continue
         conf = float(r['strength'] or 0)
         if not t or not ((t in VN30 and conf >= VIP_MIN_CONF) or conf >= VIP_HIGH_CONF):
             continue
@@ -238,12 +265,14 @@ def _vip_candidates(s, prices, trade_date):
 # TRADING PRIMITIVES
 # ============================================================
 
-def _record_trade(s, trade_date, action, ticker, qty, price, fee, reason, pnl=None, pnl_pct=None):
+def _record_trade(s, trade_date, action, ticker, qty, price, fee, reason, pnl=None, pnl_pct=None,
+                  position_id=None, cost_basis=None):
     s.execute(text("""
-        INSERT INTO mp_trades (trade_date, created_at, action, ticker, qty, price, value, fee, pnl, pnl_pct, reason)
-        VALUES (:d, :now, :a, :t, :q, :p, :v, :f, :pnl, :pp, :r)
+        INSERT INTO mp_trades (trade_date, created_at, action, ticker, qty, price, value, fee, pnl, pnl_pct, reason,
+                               position_id, cost_basis)
+        VALUES (:d, :now, :a, :t, :q, :p, :v, :f, :pnl, :pp, :r, :pid, :cb)
     """), dict(d=trade_date, now=datetime.now(), a=action, t=ticker, q=int(qty), p=price, v=qty * price,
-               f=fee, pnl=pnl, pp=pnl_pct, r=reason))
+               f=fee, pnl=pnl, pp=pnl_pct, r=reason, pid=position_id, cb=cost_basis))
 
 
 def _sell(s, st, pos, qty, price, trade_date, reason, log):
@@ -261,7 +290,8 @@ def _sell(s, st, pos, qty, price, trade_date, reason, log):
                    ca=None if remaining > 0 else trade_date, id=pos['id']))
     st['cash'] += gross - fee
     label = 'BÁN HẾT' if remaining == 0 else 'BÁN 1 PHẦN'
-    _record_trade(s, trade_date, 'SELL', pos['ticker'], qty, price, fee, reason, pnl, pnl_pct)
+    _record_trade(s, trade_date, 'SELL', pos['ticker'], qty, price, fee, reason, pnl, pnl_pct,
+                  position_id=pos['id'], cost_basis=cost_part)
     log.append(f"{label} {pos['ticker']} {qty:,} cp @ {_fmt(price)} — {reason} ({pnl_pct:+.1f}%)")
     pos['qty'], pos['cost'] = remaining, pos['cost'] - cost_part
     return gross - fee
@@ -274,16 +304,17 @@ def _buy(s, st, cand, budget, trade_date, log, reason=None):
         return False
     fee = qty * price * FEE_BUY
     cost = qty * price + fee
-    s.execute(text("""
+    pid = s.execute(text("""
         INSERT INTO mp_positions (ticker, signal_code, qty, init_qty, entry_price, entry_date, cost,
                                   stop_loss, take_profit, confidence, status)
         VALUES (:t, :sc, :q, :q, :p, :d, :c, :sl, :tp, :cf, 'open')
+        RETURNING id
     """), dict(t=cand['ticker'], sc=cand.get('signal_code'), q=qty, p=price, d=trade_date, c=cost,
-               sl=float(cand['stop_loss'] or 0), tp=float(cand['take_profit'] or 0), cf=cand['confidence']))
+               sl=float(cand['stop_loss'] or 0), tp=float(cand['take_profit'] or 0), cf=cand['confidence'])).scalar()
     st['cash'] -= cost
     reason = reason or (f"Tín hiệu VIP {cand['confidence']:.0f}% · cắt lỗ {_fmt(float(cand['stop_loss'] or 0))}"
                         f" · mục tiêu {_fmt(float(cand['take_profit'] or 0))}")
-    _record_trade(s, trade_date, 'BUY', cand['ticker'], qty, price, fee, reason)
+    _record_trade(s, trade_date, 'BUY', cand['ticker'], qty, price, fee, reason, position_id=pid, cost_basis=cost)
     log.append(f"MUA {cand['ticker']} {qty:,} cp @ {_fmt(price)} — {reason}")
     return True
 
@@ -558,6 +589,99 @@ def set_auto(Session, enabled):
         s.close()
 
 
+def void_trade(Session, trade_id):
+    """
+    HỦY 1 giao dịch như chưa từng xảy ra (hoàn tiền / hoàn cổ phiếu, xóa khỏi lịch sử).
+    Chỉ hủy được giao dịch MỚI NHẤT của vị thế đó (hủy dần từ mới đến cũ) để số liệu luôn khớp.
+    """
+    s = Session()
+    try:
+        st, prices, trade_date, market, alloc = _load_ctx(s)
+        t = _one(s, "SELECT * FROM mp_trades WHERE id = :i", i=int(trade_id))
+        if not t:
+            raise ValueError(f'Không có giao dịch #{trade_id}')
+        if not t.get('position_id'):
+            raise ValueError('Giao dịch cũ (trước v1.2) không có liên kết vị thế — không hủy tự động được')
+        later = _one(s, "SELECT id FROM mp_trades WHERE position_id = :p AND id > :i ORDER BY id LIMIT 1",
+                     p=t['position_id'], i=t['id'])
+        if later:
+            raise ValueError(f"Phải hủy giao dịch mới hơn của {t['ticker']} trước (#{later['id']})")
+        pos = _one(s, "SELECT * FROM mp_positions WHERE id = :p", p=t['position_id'])
+        if not pos:
+            raise ValueError('Không tìm thấy vị thế gốc')
+        if t['action'] == 'BUY':
+            if int(pos['qty']) != int(pos['init_qty']):
+                raise ValueError('Vị thế đã bán một phần — hủy các lệnh bán trước')
+            s.execute(text("DELETE FROM mp_positions WHERE id = :p"), dict(p=pos['id']))
+            st['cash'] += float(t['cost_basis'] or (t['value'] + t['fee']))
+            # tránh lần quét sau tự mua lại đúng mã vừa hủy -> tự đưa vào danh sách loại (admin mở lại khi muốn)
+            s.execute(text("DELETE FROM mp_exclude WHERE ticker = :t"), dict(t=t['ticker']))
+            s.execute(text("INSERT INTO mp_exclude (ticker, reason, created_at) VALUES (:t, :r, :now)"),
+                      dict(t=t['ticker'], r=f"Admin hủy lệnh mua #{t['id']}", now=datetime.now()))
+            note = f"{t['ticker']} đã được đưa vào danh sách LOẠI khỏi tự mua (mở lại trong mục loại mã nếu muốn)"
+        else:
+            s.execute(text("""UPDATE mp_positions SET qty = qty + :q, cost = cost + :c, status = 'open', closed_at = NULL
+                              WHERE id = :p"""), dict(q=int(t['qty']), c=float(t['cost_basis'] or 0), p=pos['id']))
+            st['cash'] -= float(t['value']) - float(t['fee'])
+            note = (f"Vị thế {t['ticker']} đã được khôi phục. Nếu giá vẫn dưới cắt lỗ {_fmt(float(pos['stop_loss'] or 0))}, "
+                    "lần quét sau sẽ tự bán lại — hãy sửa cắt lỗ hoặc tạm dừng tự động nếu không muốn")
+        s.execute(text("DELETE FROM mp_trades WHERE id = :i"), dict(i=t['id']))
+        msg = f"HỦY giao dịch #{t['id']}: {t['action']} {t['ticker']} {int(t['qty']):,} cp @ {_fmt(t['price'])} ({t['trade_date']})"
+        nav, _ = _save_nav(s, st, prices, trade_date, market, alloc)
+        _notify([msg], nav, st['capital'], trade_date)
+        return {'success': True, 'voided': msg, 'note': note, 'nav': round(nav), 'cash': round(st['cash'])}
+    except Exception:
+        s.rollback()
+        raise
+    finally:
+        s.close()
+
+
+def set_exclude(Session, ticker, exclude=True, reason=''):
+    """Loại (hoặc cho phép lại) 1 mã khỏi danh sách TỰ ĐỘNG mua. Không ảnh hưởng vị thế đang giữ."""
+    ticker = (ticker or '').upper().strip()
+    if not ticker:
+        raise ValueError('Thiếu mã')
+    s = Session()
+    try:
+        s.execute(text("DELETE FROM mp_exclude WHERE ticker = :t"), dict(t=ticker))
+        if exclude:
+            s.execute(text("INSERT INTO mp_exclude (ticker, reason, created_at) VALUES (:t, :r, :now)"),
+                      dict(t=ticker, r=reason or '', now=datetime.now()))
+        s.commit()
+        return {'success': True, 'ticker': ticker, 'excluded': bool(exclude)}
+    finally:
+        s.close()
+
+
+def admin_status(Session):
+    """Toàn bộ chi tiết cho admin: vị thế (có id), giao dịch (có id), mã bị loại, ứng viên hiện tại."""
+    s = Session()
+    try:
+        st = _state(s)
+        if not st:
+            return {'success': True, 'initialized': False}
+        prices, trade_date = _prices(s)
+        pos = _open_positions(s)
+        for p in pos:
+            p['price'] = prices.get(p['ticker'])
+            p['pl_pct'] = round((p['qty'] * p['price'] / p['cost'] - 1) * 100, 2) if p['price'] and p['cost'] else None
+            p['sessions'] = _sessions_held(s, p['entry_date'], trade_date)
+        trades = _rows(s, """SELECT id, trade_date, action, ticker, qty, price, pnl_pct, reason, position_id
+                             FROM mp_trades ORDER BY id DESC LIMIT 40""")
+        cands = [{'ticker': c['ticker'], 'score': c['score'], 'confidence': c['confidence'], 'price': c['price'],
+                  'entry_price': c['entry_price'], 'date': str(c['date'])[:10],
+                  'held': c['ticker'] in {p['ticker'] for p in pos}}
+                 for c in _vip_candidates(s, prices, trade_date)][:15]
+        return {'success': True, 'initialized': True, 'as_of': trade_date,
+                'auto_enabled': True if st.get('auto_enabled') is None else bool(st.get('auto_enabled')),
+                'cash': round(st['cash']), 'positions': pos, 'trades': trades,
+                'excluded': _rows(s, "SELECT ticker, reason, created_at FROM mp_exclude ORDER BY ticker"),
+                'candidates': cands}
+    finally:
+        s.close()
+
+
 def get_overview(Session):
     s = Session()
     try:
@@ -725,6 +849,26 @@ def init_model_portfolio_routes(app, engine, Session):
     def mp_position():
         return _admin_call(lambda d: update_position(Session, d.get('ticker'), d.get('stop_loss'), d.get('take_profit')))
 
+    @app.route('/api/admin/model-portfolio/void', methods=['POST'])
+    @_require_admin
+    def mp_void():
+        return _admin_call(lambda d: void_trade(Session, d.get('trade_id')))
+
+    @app.route('/api/admin/model-portfolio/exclude', methods=['POST'])
+    @_require_admin
+    def mp_exclude():
+        return _admin_call(lambda d: set_exclude(Session, d.get('ticker'), d.get('exclude', True), d.get('reason', '')))
+
+    @app.route('/api/admin/model-portfolio/admin', methods=['GET'])
+    @_require_admin
+    def mp_admin_status():
+        try:
+            ensure_tables(engine)
+            return jsonify(admin_status(Session))
+        except Exception as e:
+            logger.exception('[ModelPortfolio] admin status error')
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @app.route('/api/admin/model-portfolio/auto', methods=['POST'])
     @_require_admin
     def mp_auto():
@@ -737,3 +881,6 @@ def init_model_portfolio_routes(app, engine, Session):
     print("   POST /api/admin/model-portfolio/trade  [ADMIN] mua/bán thủ công")
     print("   POST /api/admin/model-portfolio/position [ADMIN] sửa cắt lỗ/mục tiêu")
     print("   POST /api/admin/model-portfolio/auto   [ADMIN] bật/tắt tự động")
+    print("   POST /api/admin/model-portfolio/void   [ADMIN] hủy 1 giao dịch")
+    print("   POST /api/admin/model-portfolio/exclude [ADMIN] loại/cho phép mã khỏi tự mua")
+    print("   GET  /api/admin/model-portfolio/admin  [ADMIN] chi tiết cho signal_reviewer")
