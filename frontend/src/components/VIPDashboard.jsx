@@ -100,7 +100,7 @@ const tabStyle = (active) => ({
   borderBottom: `2px solid ${active ? C.purpleLight : 'transparent'}`,
   cursor: 'pointer', transition: 'all 0.2s',
 })
-const fmt     = (n) => n == null ? '—' : Number(n).toLocaleString('vi-VN')
+const fmt     = (n) => n == null ? '—' : Math.round(Number(n)).toLocaleString('vi-VN')
 // Làm tròn giá cổ phiếu đến hàng trăm (quy định TTCK VN: bước giá 100đ)
 const roundPrice = (n) => n == null ? null : Math.round(Number(n) / 100) * 100
 const fmtPrice   = (n) => n == null ? '—' : roundPrice(n).toLocaleString('vi-VN')
