@@ -4,7 +4,8 @@ import { track } from '../analytics'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10000/api'
 
-const fmt = (n) => n?.toLocaleString('vi-VN') || '0'
+// FIX: Math.round() removes all decimal places from monetary display
+const fmt = (n) => Math.round(n || 0).toLocaleString('vi-VN')
 const fmtPct = (n) => (n >= 0 ? '+' : '') + n?.toFixed(1) + '%'
 
 export default function AIPortfolioManager({ userId, userTier = 'free', onOpenIIS }) {
@@ -142,69 +143,6 @@ export default function AIPortfolioManager({ userId, userTier = 'free', onOpenII
     'Cổ phiếu nào nên xem xét bán?',
   ]
 
-  // ── Portfolio Rescue: chẩn đoán toàn danh mục ──────────────────
-  // Xem PORTFOLIO_RESCUE_FEATURE_SPEC.md — không phải feature riêng,
-  // chỉ là 1 nút tự soạn prompt và bắn vào AI Advisor Chat có sẵn (askAI event).
-  const maxConcentration = (totalAssets > 0 && portfolio.length > 0)
-    ? Math.max(...portfolio.map(p => ((p.current_value || 0) / totalAssets) * 100))
-    : 0
-
-  const topConcentrationTicker = (() => {
-    if (portfolio.length === 0 || totalAssets === 0) return null
-    let top = null, topPct = -1
-    portfolio.forEach(p => {
-      const pct = ((p.current_value || 0) / totalAssets) * 100
-      if (pct > topPct) { topPct = pct; top = p }
-    })
-    return top?.ticker || null
-  })()
-
-  const redAlertCount    = portfolio.filter(p => (p.pl_pct || 0) <= -20).length
-  const orangeAlertCount = portfolio.filter(p => (p.pl_pct || 0) <= -15 && (p.pl_pct || 0) > -20).length
-
-  const needsRescue = portfolio.length > 0 && (
-    maxConcentration > 35 ||
-    redAlertCount >= 1 ||
-    (orangeAlertCount + redAlertCount) >= 2
-  )
-
-  // Track badge hiển thị 1 lần khi trạng thái chuyển sang cần rescue (không lặp lại mỗi render)
-  useEffect(() => {
-    if (needsRescue) {
-      track('portfolio_rescue_badge_shown', {
-        user_tier: userTier,
-        max_concentration: Math.round(maxConcentration),
-        red_alert_count: redAlertCount,
-      })
-    }
-  }, [needsRescue])
-
-  function buildRescuePrompt() {
-    const holdingsText = portfolio.map(p => {
-      const pct = totalAssets > 0 ? (((p.current_value || 0) / totalAssets) * 100).toFixed(1) : '0'
-      const plPct = (p.pl_pct || 0).toFixed(1)
-      return `${p.ticker}: ${fmt(p.quantity)} CP, tỷ trọng ${pct}%, lãi/lỗ ${plPct}%`
-    }).join('; ')
-
-    return `[PORTFOLIO RESCUE] Chẩn đoán toàn bộ danh mục của tôi:
-${holdingsText}
-Tiền mặt: ${fmt(cash)} VND (${cashPct.toFixed(1)}% tổng tài sản)
-Mã có tỷ trọng lớn nhất: ${topConcentrationTicker || 'N/A'} (${maxConcentration.toFixed(1)}%)
-Số mã đang lỗ trên 20%: ${redAlertCount}
-Số mã đang lỗ 15-20%: ${orangeAlertCount}
-Hãy đánh giá rủi ro tổng thể của danh mục và đề xuất hướng xử lý theo từng bước.`
-  }
-
-  function handleRescueClick() {
-    track('portfolio_rescue_click', {
-      user_tier: userTier,
-      max_concentration: Math.round(maxConcentration),
-      red_alert_count: redAlertCount,
-      needs_rescue: needsRescue,
-    })
-    window.dispatchEvent(new CustomEvent('askAI', { detail: buildRescuePrompt() }))
-  }
-
   return (
     <div style={{
       display: 'flex',
@@ -219,11 +157,37 @@ Hãy đánh giá rủi ro tổng thể của danh mục và đề xuất hướn
       {/* ── IIS SCORE WIDGET ── */}
       <IISScoreWidget
         userId={userId}
-        userTier={userTier}
         onRequestUpdate={onOpenIIS || (() => {})}
       />
 
-
+      {/* ── MARKET MODE BADGE ── */}
+      {marketMode && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '10px',
+          padding: '10px 16px',
+          background: 'rgba(255,255,255,0.04)',
+          borderRadius: '10px',
+          border: `1px solid ${modeColor}33`,
+          fontSize: '13px',
+        }}>
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: modeColor, boxShadow: `0 0 8px ${modeColor}`,
+            display: 'inline-block', flexShrink: 0,
+          }}/>
+          <span style={{ color: modeColor, fontWeight: 700 }}>
+            {marketMode.market_mode}
+          </span>
+          <span style={{ color: '#94a3b8' }}>·</span>
+          <span style={{ color: '#94a3b8' }}>
+            Risk Score <strong style={{ color: '#e2e8f0' }}>{marketMode.risk_score}/100</strong>
+          </span>
+          <span style={{ color: '#94a3b8' }}>·</span>
+          <span style={{ color: '#94a3b8' }}>
+            Khuyến nghị tỷ trọng CP: <strong style={{ color: modeColor }}>{marketMode.allocation}%</strong>
+          </span>
+        </div>
+      )}
 
       {/* ══════════════════════════════════════════════
           PHẦN 2: DANH MỤC (bên dưới)
@@ -238,37 +202,10 @@ Hãy đánh giá rủi ro tổng thể của danh mục và đề xuất hướn
         <div style={{
           padding: '16px 20px',
           borderBottom: '1px solid #1e293b',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          gap: '10px', flexWrap: 'wrap',
+          display: 'flex', alignItems: 'center', gap: '10px',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '18px' }}>📊</span>
-            <div style={{ fontWeight: 700, color: '#e2e8f0', fontSize: '15px' }}>Danh mục đầu tư</div>
-          </div>
-
-          {/* ── Nút Portfolio Rescue — KHÁC nút "Xem phân tích AI" của từng tín hiệu ── */}
-          {portfolio.length > 0 && (
-            <button
-              onClick={handleRescueClick}
-              title="Chẩn đoán rủi ro toàn bộ danh mục — trả lời trong AI Advisor Chat"
-              style={{
-                position: 'relative',
-                display: 'inline-flex', alignItems: 'center', gap: '6px',
-                padding: '7px 14px',
-                background: needsRescue ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${needsRescue ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.12)'}`,
-                borderRadius: '20px',
-                color: needsRescue ? '#f87171' : '#94a3b8',
-                fontSize: '12px', fontWeight: 600, cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = needsRescue ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.08)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = needsRescue ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.04)' }}
-            >
-              🆘 Giải cứu danh mục
-              {needsRescue && <span className="rescue-badge-dot" />}
-            </button>
-          )}
+          <span style={{ fontSize: '18px' }}>📊</span>
+          <div style={{ fontWeight: 700, color: '#e2e8f0', fontSize: '15px' }}>Danh mục đầu tư</div>
         </div>
 
         {/* ── TỔNG QUAN: 4 cards bao gồm tiền mặt ── */}
@@ -482,6 +419,9 @@ Hãy đánh giá rủi ro tổng thể của danh mục và đề xuất hướn
                   const pl = p.pl_amount || 0
                   const plPct = p.pl_pct || 0
                   const isPos = pl >= 0
+                  // FIX Bug 2: when current_price equals avg_price (HNX/UPCoM fallback),
+                  // pl_amount will be 0 and we show "Chưa có" indicator
+                  const noEodPrice = Math.abs(p.current_price - p.avg_price) < 1 && pl === 0
                   return (
                     <tr key={i} style={{
                       borderBottom: '1px solid rgba(255,255,255,0.04)',
@@ -499,19 +439,23 @@ Hãy đánh giá rủi ro tổng thể của danh mục và đề xuất hướn
                       <td style={{ padding: '12px 16px', textAlign: 'right', color: '#94a3b8' }}>
                         {fmt(p.avg_price)}
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', color: '#e2e8f0' }}>
-                        {fmt(p.current_price)}
+                      <td style={{ padding: '12px 16px', textAlign: 'right', color: noEodPrice ? '#64748b' : '#e2e8f0' }}>
+                        {noEodPrice ? <span title="Chưa có giá EOD">—</span> : fmt(p.current_price)}
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'right', color: '#e2e8f0' }}>
                         {fmt(p.current_value)}
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                        <span style={{ color: isPos ? '#10b981' : '#ef4444', fontWeight: 600 }}>
-                          {isPos ? '+' : ''}{fmt(pl)}<br/>
-                          <span style={{ fontSize: '11px', opacity: 0.8 }}>
-                            {fmtPct(plPct)}
+                        {noEodPrice ? (
+                          <span style={{ color: '#64748b', fontSize: '11px' }}>Chưa cập nhật</span>
+                        ) : (
+                          <span style={{ color: isPos ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                            {isPos ? '+' : ''}{fmt(pl)}<br/>
+                            <span style={{ fontSize: '11px', opacity: 0.8 }}>
+                              {fmtPct(plPct)}
+                            </span>
                           </span>
-                        </span>
+                        )}
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'left' }}>
                         <button onClick={() => handleDeleteStock(p.ticker)} style={{
@@ -556,15 +500,6 @@ Hãy đánh giá rủi ro tổng thể của danh mục và đề xuất hướn
         @keyframes pulse {
           0%, 100% { opacity: 0.3; transform: scale(0.8); }
           50% { opacity: 1; transform: scale(1); }
-        }
-        .rescue-badge-dot {
-          position: absolute;
-          top: -3px; right: -3px;
-          width: 9px; height: 9px;
-          background: #ef4444;
-          border: 2px solid #0f172a;
-          border-radius: 50%;
-          animation: pulse 2s infinite;
         }
         @media (max-width: 600px) {
           form[style*="grid-template-columns"] {
