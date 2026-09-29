@@ -91,8 +91,22 @@ WATCHLIST_172 = [
     'VC7', 'MIG', 'PGB', 'NRC', 'NAG', 
 ]
 
-# DÃ¹ng WATCHLIST_172 cho scanner
-TOP_343_STOCKS = WATCHLIST_172  # backward-compat alias
+# ============================================================
+# VIP CUSTOMER EXTRA TICKERS - can gia EOD cho danh muc khach VIP
+# Khong trong WATCHLIST_172 nhung can track gia
+# Scanner van an toan: bo loc avg_vol_20 < 200k tu loai
+# Updated: 2026-09-29
+# ============================================================
+VIP_EXTRA_TICKERS = [
+    'IJC',  # HNX - Becamex IDC
+    'SGB',  # HNX - Saigon Bank
+    'VBB',  # HNX - Viet Capital Bank
+    'BVB',  # HNX - Bac Viet Bank
+    'NKG',  # HOSE - Nam Kim Steel
+    'VGT',  # HNX - Vinatex
+    'SD9',  # HNX - Song Da 9 (thieu trong WATCHLIST)
+]
+TOP_343_STOCKS = list(dict.fromkeys(WATCHLIST_172 + VIP_EXTRA_TICKERS))
 # Blue Chip = Tier 1 (43 mÃ£ vá»‘n hoÃ¡ lá»›n nháº¥t)
 BLUE_CHIP_STOCKS = [
     'VCB', 'BID', 'CTG', 'VHM', 'VIC', 'VNM', 'HPG', 'TCB', 'VPB', 'MBB',
