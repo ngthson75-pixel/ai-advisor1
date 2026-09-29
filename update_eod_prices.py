@@ -193,7 +193,7 @@ def fetch_prices_board(tickers):
 
 def fetch_price_history(ticker, start_date, end_date):
     from vnstock import Quote
-    for source in ('VCI', 'vci', 'KBS', 'kbs'):
+    for source in ("VCI", "vci", "TCBS", "tcbs", "SSI", "ssi"):
         try:
             try:
                 q = Quote(symbol=ticker, source=source)
