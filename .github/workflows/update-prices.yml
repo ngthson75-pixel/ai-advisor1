@@ -61,6 +61,7 @@ jobs:
         run: python verify_prices.py
 
       - name: Model Portfolio (danh muc mau - moi lan cap nhat gia)
+        continue-on-error: true
         env:
           ADMIN_KEY: ${{ secrets.ADMIN_SECRET }}
         run: |
@@ -68,10 +69,11 @@ jobs:
           curl -sS --max-time 120 -X POST \
             -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" -d '{}' \
             https://ai-advisor1-backend.onrender.com/api/admin/model-portfolio/run \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); print('success:', d.get('success'), d.get('error',''), '| NAV:', d.get('nav'), '| rebalanced:', d.get('rebalanced')); [print('  ', a) for a in d.get('actions',[])]" || true
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print('success:', d.get('success'), d.get('error',''), '| NAV:', d.get('nav'), '| rebalanced:', d.get('rebalanced')); [print('  ', a) for a in d.get('actions',[])]; sys.exit(0 if d.get('success') else 1)"
 
       - name: Giam sat danh muc VIP - cuoi ngay (16:00)
         if: github.event.schedule == '0 9 * * 1-5' || inputs.run_eod_watch
+        continue-on-error: true
         env:
           ADMIN_KEY: ${{ secrets.ADMIN_SECRET }}
           MODE: ${{ vars.RESCUE_WATCH_MODE || 'live' }}
@@ -81,10 +83,11 @@ jobs:
             -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
             -d "{\"mode\": \"$MODE\", \"scope\": \"eod\"}" \
             https://ai-advisor1-backend.onrender.com/api/admin/rescue-watch/run \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); print('success:', d.get('success'), d.get('error','')); [print(u['user'][:3]+'***', '| events:', u.get('event_types'), '| sent:', u['sent'], u.get('channels'), '| skipped:', u['skipped'], '| data warnings:', len(u['warnings'])) for u in d.get('users',[])]" || true
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print('success:', d.get('success'), d.get('error','')); [print(u['user'][:3]+'***', '| events:', u.get('event_types'), '| sent:', u['sent'], u.get('channels'), '| skipped:', u['skipped'], '| data warnings:', len(u['warnings'])) for u in d.get('users',[])]; sys.exit(0 if d.get('success') else 1)"
 
       - name: Giam sat danh muc VIP - trong phien
         if: github.event_name == 'schedule' && github.event.schedule != '0 9 * * 1-5'
+        continue-on-error: true
         env:
           ADMIN_KEY: ${{ secrets.ADMIN_SECRET }}
           MODE: ${{ vars.RESCUE_WATCH_MODE || 'live' }}
@@ -93,4 +96,4 @@ jobs:
             -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
             -d "{\"mode\": \"$MODE\", \"scope\": \"intraday\"}" \
             https://ai-advisor1-backend.onrender.com/api/admin/rescue-watch/run \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); print('success:', d.get('success'), d.get('error','')); [print(u['user'][:3]+'***', '| events:', u.get('event_types'), '| sent:', u['sent']) for u in d.get('users',[]) if u['events']]" || true
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print('success:', d.get('success'), d.get('error','')); [print(u['user'][:3]+'***', '| events:', u.get('event_types'), '| sent:', u['sent']) for u in d.get('users',[]) if u['events']]; sys.exit(0 if d.get('success') else 1)"

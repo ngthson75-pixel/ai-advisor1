@@ -578,6 +578,12 @@ def run_watch(Session, mode='preview', only_user=None, today=None, scope='eod', 
     if mode == 'admin' and not ADMIN_CHAT_ID:
         raise ValueError('Chưa có chat_id admin: đặt TELEGRAM_CHAT_ID hoặc ADMIN_TELEGRAM_CHAT_ID trên Render')
 
+    if scope == 'intraday' and today is None:
+        vn_now = datetime.utcnow() + timedelta(hours=7)
+        if not (9 <= vn_now.hour < 15) or vn_now.weekday() >= 5:
+            # GitHub đôi khi chạy lịch trễ hàng giờ — ngoài giờ giao dịch thì "trong phiên" không còn ý nghĩa
+            return {'mode': mode, 'scope': scope, 'date': vn_now.date().isoformat(), 'users': [],
+                    'note': f'Bỏ qua: ngoài giờ giao dịch ({vn_now.strftime("%H:%M")} giờ VN) — để lần quét cuối ngày xử lý'}
     today = today or date.today()
     session = Session()
     report = {'mode': mode, 'scope': scope, 'date': today.isoformat(), 'users': []}
