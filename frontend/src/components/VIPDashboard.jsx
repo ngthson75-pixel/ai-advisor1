@@ -16,6 +16,9 @@
  * FIXES (2026-06-22):
  *   BUG7 - Chat history không load được: frontend đọc d.messages nhưng backend trả d.history
  *          → Fix: đổi sang d.history + convert format {message,response} → {role,content}
+ * FIXES (2026-10-01):
+ *   BUG8 - Tín hiệu mua trùng ticker (PLX xuất hiện 3+ lần) trong tab VN30 và Tất cả MUA
+ *          → Fix: dedupeByTicker() — giữ tín hiệu MỚI NHẤT cho mỗi mã, chỉ apply cho MUA
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -259,14 +262,26 @@ function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysCh
   const getDate = s => s.created_at || s.entry_date || s.signal_date || s.date || ''
   const sortDesc = arr => [...arr].sort((a, b) => getDate(b).localeCompare(getDate(a)))
 
-  // Tab VN30: chỉ VN30 đang mở, mới nhất lên trên
-  const vn30Buy = sortDesc(signals.filter(s => isVN30s(s) && (s.action || 'BUY') === 'BUY' && isOpen(s)))
+  // BUG8 FIX: Dedup by ticker — giữ tín hiệu MỚI NHẤT cho mỗi mã (tránh PLX xuất hiện nhiều lần)
+  // Gọi SAU sortDesc để phần tử đầu tiên luôn là mới nhất → Set.has() loại bỏ các bản sao cũ hơn
+  const dedupeByTicker = arr => {
+    const seen = new Set()
+    return arr.filter(s => {
+      const t = (s.ticker || s.code || '').toUpperCase()
+      if (seen.has(t)) return false
+      seen.add(t)
+      return true
+    })
+  }
 
-  // Tab Tất cả MUA: VN30 + non-VN30 score >= 80%, đang mở, mới nhất lên trên
-  const allBuy  = sortDesc(signals.filter(s =>
+  // Tab VN30: chỉ VN30 đang mở, mới nhất lên trên, mỗi mã 1 lần
+  const vn30Buy = dedupeByTicker(sortDesc(signals.filter(s => isVN30s(s) && (s.action || 'BUY') === 'BUY' && isOpen(s))))
+
+  // Tab Tất cả MUA: VN30 + non-VN30 score >= 80%, đang mở, mới nhất lên trên, mỗi mã 1 lần
+  const allBuy  = dedupeByTicker(sortDesc(signals.filter(s =>
     (s.action || 'BUY') === 'BUY' && isOpen(s) &&
     (isVN30s(s) || (s.strength || s.confidence || 0) >= 80)
-  ))
+  )))
 
   // Tab BÁN: đang mở, mới nhất lên trên
   // SELL signals: VN30 only, không filter isOpen (SELL đã là lệnh đã thực hiện)
