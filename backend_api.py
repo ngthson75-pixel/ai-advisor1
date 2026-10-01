@@ -3143,6 +3143,24 @@ def telegram_webhook():
                     f"\U0001F310 ai-advisor.vn"
                 )
 
+        elif text.startswith(('/tat', '/off', '/stop', '/bat', '/on')):
+            # Giám sát danh mục VIP (Rescue Watch v2): khách tự tắt / bật khuyến nghị tự động
+            _on = text.startswith(('/bat', '/on'))
+            try:
+                from rescue_watch import set_prefs_by_chat
+                _email, _p = set_prefs_by_chat(Session, chat_id, _on)
+            except Exception as e4:
+                print(f'[Telegram] /tat /bat error: {e4}')
+                _email, _p = None, None
+            if not _email:
+                send_reply("Tài khoản Telegram này chưa được gắn với tài khoản VIP. Gõ /start để lấy Chat ID gửi admin.")
+            elif _on:
+                send_reply("✅ Đã BẬT lại khuyến nghị tự động: giám sát danh mục + tín hiệu VIP.\n"
+                           "Hệ thống chỉ nhắn khi có biến động đáng chú ý. Tắt bất cứ lúc nào: gõ /tat")
+            else:
+                send_reply("⏸️ Đã TẮT khuyến nghị tự động. Anh/chị vẫn dùng VIP Dashboard bình thường.\n"
+                           "Muốn nhận lại: gõ /bat")
+
         return jsonify({'ok': True}), 200
 
     except Exception as e:

@@ -4,6 +4,11 @@ name: Update EOD Prices
 # -> quét được 6 lần/ngày mà vẫn trong 2.000 phút miễn phí của GitHub Actions.
 # Sau MỖI lần cập nhật giá: định giá lại danh mục mẫu Lướt sóng AI.
 # Lần 16:00 (EOD) chạy thêm Rescue Watch ngay sau khi giá cuối ngày đã về.
+# v3 (2026-10-01) — Giám sát danh mục VIP (Rescue Watch v2):
+#   16:00  nạp nến ngày (update_price_history.py) -> Giám sát scope=eod (đủ mọi biến cố, gộp 1 tin/khách)
+#   các lần trong phiên -> Giám sát scope=intraday (chỉ giảm >=5% / xuyên hỗ trợ >2%)
+#   Gửi thật hay chỉ bản nháp được quyết định THEO TỪNG KHÁCH (signal_reviewer.py -> 24 -> 9), mặc định bản nháp.
+#   CÔNG TẮC KHẨN: GitHub -> Settings -> Variables -> RESCUE_WATCH_MODE = admin  => dừng gửi MỌI khách (chỉ bản nháp).
 on:
   schedule:
     # Giờ Việt Nam (UTC+7), thứ 2 - thứ 6
@@ -14,6 +19,11 @@ on:
     - cron: '30 7 * * 1-5'   # 14:30 VN
     - cron: '0 9 * * 1-5'    # 16:00 VN (EOD) + Rescue Watch
   workflow_dispatch:
+    inputs:
+      run_eod_watch:
+        description: 'Chạy cả lịch sử nến + Giám sát cuối ngày (chỉ chọn khi đã hết phiên)'
+        type: boolean
+        default: false
 
 jobs:
   update-prices:
@@ -38,6 +48,13 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python update_eod_prices.py
 
+      - name: Price history (nen ngay cho Giam sat danh muc - 16:00)
+        if: github.event.schedule == '0 9 * * 1-5' || inputs.run_eod_watch
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python update_price_history.py
+
       - name: Verify prices updated
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -53,15 +70,27 @@ jobs:
             https://ai-advisor1-backend.onrender.com/api/admin/model-portfolio/run \
             | python3 -c "import sys,json; d=json.load(sys.stdin); print('success:', d.get('success'), d.get('error',''), '| NAV:', d.get('nav'), '| rebalanced:', d.get('rebalanced')); [print('  ', a) for a in d.get('actions',[])]" || true
 
-      - name: Rescue Watch (sau cap nhat EOD 16:00)
-        if: github.event.schedule == '0 9 * * 1-5'
+      - name: Giam sat danh muc VIP - cuoi ngay (16:00)
+        if: github.event.schedule == '0 9 * * 1-5' || inputs.run_eod_watch
         env:
           ADMIN_KEY: ${{ secrets.ADMIN_SECRET }}
-          MODE: ${{ vars.RESCUE_WATCH_MODE || 'admin' }}
+          MODE: ${{ vars.RESCUE_WATCH_MODE || 'live' }}
         run: |
           curl -s --max-time 90 https://ai-advisor1-backend.onrender.com/health > /dev/null || true
           curl -sS --max-time 180 -X POST \
             -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
-            -d "{\"mode\": \"$MODE\"}" \
+            -d "{\"mode\": \"$MODE\", \"scope\": \"eod\"}" \
             https://ai-advisor1-backend.onrender.com/api/admin/rescue-watch/run \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); print('success:', d.get('success'), d.get('error','')); [print(u['user'][:3]+'***', '| events:', u['events'], '| sent:', u['sent'], '| skipped:', u['skipped'], '| data warnings:', len(u['warnings'])) for u in d.get('users',[])]" || true
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print('success:', d.get('success'), d.get('error','')); [print(u['user'][:3]+'***', '| events:', u.get('event_types'), '| sent:', u['sent'], u.get('channels'), '| skipped:', u['skipped'], '| data warnings:', len(u['warnings'])) for u in d.get('users',[])]" || true
+
+      - name: Giam sat danh muc VIP - trong phien
+        if: github.event_name == 'schedule' && github.event.schedule != '0 9 * * 1-5'
+        env:
+          ADMIN_KEY: ${{ secrets.ADMIN_SECRET }}
+          MODE: ${{ vars.RESCUE_WATCH_MODE || 'live' }}
+        run: |
+          curl -sS --max-time 180 -X POST \
+            -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
+            -d "{\"mode\": \"$MODE\", \"scope\": \"intraday\"}" \
+            https://ai-advisor1-backend.onrender.com/api/admin/rescue-watch/run \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print('success:', d.get('success'), d.get('error','')); [print(u['user'][:3]+'***', '| events:', u.get('event_types'), '| sent:', u['sent']) for u in d.get('users',[]) if u['events']]" || true

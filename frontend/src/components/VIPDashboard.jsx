@@ -9,6 +9,8 @@
  * FIXES (2026-06-01):
  *   BUG6 - Production (ai-advisor.vn) fallback về localhost vì VITE_API_URL không set
  *          → Fix: detect hostname production → hardcode production backend URL
+ * v2.5 (2026-10-01):
+ *   ~ TelegramBadge: badge tĩnh → công tắc Giám sát danh mục (bật/tắt + kênh Telegram/Email).
  * v2.4 (2026-09-27):
  *   + ModelPortfolioCard — "Lướt sóng AI" danh mục mẫu 1 tỷ (mô phỏng), đặt DƯỚI ô chat.
  *   + CollapsibleSection — khung IIS thu gọn / mở rộng (mặc định thu gọn, nhớ theo trình duyệt).
@@ -16,9 +18,6 @@
  * FIXES (2026-06-22):
  *   BUG7 - Chat history không load được: frontend đọc d.messages nhưng backend trả d.history
  *          → Fix: đổi sang d.history + convert format {message,response} → {role,content}
- * FIXES (2026-10-01):
- *   BUG8 - Tín hiệu mua trùng ticker (PLX xuất hiện 3+ lần) trong tab VN30 và Tất cả MUA
- *          → Fix: dedupeByTicker() — giữ tín hiệu MỚI NHẤT cho mỗi mã, chỉ apply cho MUA
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -103,7 +102,7 @@ const tabStyle = (active) => ({
   borderBottom: `2px solid ${active ? C.purpleLight : 'transparent'}`,
   cursor: 'pointer', transition: 'all 0.2s',
 })
-const fmt     = (n) => n == null ? '—' : Math.round(Number(n)).toLocaleString('vi-VN')
+const fmt     = (n) => n == null ? '—' : Number(n).toLocaleString('vi-VN')
 // Làm tròn giá cổ phiếu đến hàng trăm (quy định TTCK VN: bước giá 100đ)
 const roundPrice = (n) => n == null ? null : Math.round(Number(n) / 100) * 100
 const fmtPrice   = (n) => n == null ? '—' : roundPrice(n).toLocaleString('vi-VN')
@@ -130,16 +129,82 @@ function renderMarkdown(text) {
   return html
 }
 
-// ─── Telegram Status Badge (static — toggle feature pending) ──
+// ─── Giám sát danh mục: công tắc Bật/Tắt + kênh nhận (v2.5, 2026-10-01) ──
+// Trước đây là badge tĩnh "Telegram đang bật" (toggle feature pending) → nay là công tắc thật.
+// API: GET/POST /api/vip/watch/prefs  { enabled, channel: 'telegram' | 'email' | 'both' }
+// Tắt = dừng hẳn khuyến nghị tự động (giám sát danh mục + tín hiệu Telegram). Khách cũng gõ /tat, /bat trong Telegram.
 function TelegramBadge() {
+  const [prefs, setPrefs] = useState(null)
+  const [open, setOpen]   = useState(false)
+  const [busy, setBusy]   = useState(false)
+
+  useEffect(() => {
+    fetch(`${API_BASE}/vip/watch/prefs`, { headers: authHeaders() })
+      .then(r => r.json()).then(d => { if (d.success) setPrefs(d) }).catch(() => {})
+  }, [])
+
+  const save = async (patch) => {
+    setBusy(true)
+    try {
+      const r = await fetch(`${API_BASE}/vip/watch/prefs`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(patch) })
+      const d = await r.json()
+      if (d.success) setPrefs(d)
+    } catch {}
+    setBusy(false)
+  }
+
+  // Chỉ hiện khi admin đã mở gửi thật cho khách này (giai đoạn thử nghiệm: khách chưa thấy tính năng)
+  if (!prefs || !prefs.live) return null
+  const on  = prefs.enabled
+  const col = on ? '#22c55e' : C.muted
+  const CH  = [['both', 'Telegram + Email'], ['telegram', 'Chỉ Telegram'], ['email', 'Chỉ Email']]
+
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '6px',
-      background: '#22c55e22', border: '1px solid #22c55e44',
-      borderRadius: '8px', padding: '6px 12px', fontSize: '13px',
-    }}>
-      <span>🔔</span>
-      <span style={{ color: '#22c55e', fontWeight: '600' }}>Telegram đang bật</span>
+    <div style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer',
+        background: on ? '#22c55e22' : '#ffffff0a', border: `1px solid ${on ? '#22c55e44' : C.border}`,
+        borderRadius: '8px', padding: '6px 12px', fontSize: '13px', color: col, fontWeight: 600,
+      }}>
+        <span>{on ? '🛡️' : '⏸️'}</span>
+        <span>Giám sát danh mục: {on ? 'Bật' : 'Tắt'}</span>
+        <span style={{ fontSize: '10px' }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 50, width: '270px',
+          background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: '12px', padding: '14px',
+          boxShadow: '0 10px 30px #0008', fontSize: '12px', color: C.text, lineHeight: 1.6 }}>
+          <div style={{ fontWeight: 700, marginBottom: '6px' }}>🛡️ Khuyến nghị tự động</div>
+          <div style={{ color: C.muted, marginBottom: '10px' }}>
+            Hệ thống theo dõi danh mục của anh/chị mỗi ngày và chỉ nhắn khi có biến động đáng chú ý:
+            thủng hỗ trợ, bán đột biến, chạm cản / đỉnh cũ, vượt cản.
+          </div>
+          <button disabled={busy} onClick={() => save({ enabled: !on })} style={{
+            width: '100%', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '13px',
+            background: on ? '#ffffff0d' : C.purple, color: on ? C.text : '#fff', border: `1px solid ${on ? C.border : C.purple}`,
+          }}>{on ? 'Tắt khuyến nghị' : 'Bật khuyến nghị'}</button>
+          {on && (
+            <div style={{ marginTop: '10px' }}>
+              <div style={{ color: C.muted, marginBottom: '4px' }}>Nhận qua:</div>
+              {CH.map(([k, label]) => (
+                <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '2px 0' }}>
+                  <input type="radio" name="watch-ch" checked={prefs.channel === k} disabled={busy}
+                    onChange={() => save({ channel: k })} />
+                  {label}
+                </label>
+              ))}
+              {!prefs.telegram_connected && prefs.channel !== 'email' && (
+                <div style={{ color: C.yellow, marginTop: '6px' }}>
+                  Chưa kết nối Telegram — tin sẽ chỉ gửi qua email. Nhắn /start cho bot rồi gửi Chat ID cho admin.
+                </div>
+              )}
+            </div>
+          )}
+          <div style={{ color: C.muted, marginTop: '10px', fontSize: '11px' }}>
+            Trong Telegram: gõ /tat để tắt, /bat để bật lại.
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -262,26 +327,14 @@ function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysCh
   const getDate = s => s.created_at || s.entry_date || s.signal_date || s.date || ''
   const sortDesc = arr => [...arr].sort((a, b) => getDate(b).localeCompare(getDate(a)))
 
-  // BUG8 FIX: Dedup by ticker — giữ tín hiệu MỚI NHẤT cho mỗi mã (tránh PLX xuất hiện nhiều lần)
-  // Gọi SAU sortDesc để phần tử đầu tiên luôn là mới nhất → Set.has() loại bỏ các bản sao cũ hơn
-  const dedupeByTicker = arr => {
-    const seen = new Set()
-    return arr.filter(s => {
-      const t = (s.ticker || s.code || '').toUpperCase()
-      if (seen.has(t)) return false
-      seen.add(t)
-      return true
-    })
-  }
+  // Tab VN30: chỉ VN30 đang mở, mới nhất lên trên
+  const vn30Buy = sortDesc(signals.filter(s => isVN30s(s) && (s.action || 'BUY') === 'BUY' && isOpen(s)))
 
-  // Tab VN30: chỉ VN30 đang mở, mới nhất lên trên, mỗi mã 1 lần
-  const vn30Buy = dedupeByTicker(sortDesc(signals.filter(s => isVN30s(s) && (s.action || 'BUY') === 'BUY' && isOpen(s))))
-
-  // Tab Tất cả MUA: VN30 + non-VN30 score >= 80%, đang mở, mới nhất lên trên, mỗi mã 1 lần
-  const allBuy  = dedupeByTicker(sortDesc(signals.filter(s =>
+  // Tab Tất cả MUA: VN30 + non-VN30 score >= 80%, đang mở, mới nhất lên trên
+  const allBuy  = sortDesc(signals.filter(s =>
     (s.action || 'BUY') === 'BUY' && isOpen(s) &&
     (isVN30s(s) || (s.strength || s.confidence || 0) >= 80)
-  )))
+  ))
 
   // Tab BÁN: đang mở, mới nhất lên trên
   // SELL signals: VN30 only, không filter isOpen (SELL đã là lệnh đã thực hiện)

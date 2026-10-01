@@ -1,0 +1,340 @@
+"""
+AI ADVISOR - WATCH TA (phân tích kỹ thuật cho Giám sát danh mục VIP)
+====================================================================
+File: watch_ta.py
+Version: 1.0 (2026-10-01)
+
+Module THUẦN (không Flask, không DB) — nhận chuỗi nến ngày và trả về:
+  - các mốc cản / hỗ trợ (đỉnh-đáy nổi bật 1 năm, đỉnh cũ, MA50/100/200, mốc admin nhập tay)
+  - các BIẾN CỐ của phiên (chỉ khi có thay đổi đột biến) kèm GỢI Ý HÀNH ĐỘNG 2 kịch bản
+
+Nến: list dict theo thời gian tăng dần {date:'YYYY-MM-DD', open, high, low, close, volume}, giá VND.
+
+Biến cố (EOD — sau phiên, giá đóng cửa đã xác nhận):
+  BREAKDOWN    Thủng hỗ trợ: đóng cửa dưới hỗ trợ >= 1%
+  SELL_VOLUME  Bán đột biến: KL >= 2x TB20 và (giảm >= 2% hoặc đóng cửa ở 1/3 dưới biên độ, phiên giảm)
+  SHARP_DROP   Giảm >= 5% trong phiên (khi không có biến cố nặng hơn cho mã đó)
+  NEAR_PEAK    Chạm vùng đỉnh cũ (±2% quanh đỉnh lớn nhất 1 năm, trừ 10 phiên gần nhất)
+  NEAR_RESIST  Áp sát vùng cản (cách <= 3%) hoặc chạm cản trong phiên rồi bị đẩy xuống
+  BREAKOUT     Vượt cản >= 1% với KL >= 1,5x TB20
+Biến cố trong phiên:
+  INTRADAY     Giảm >= 5% so với giá đóng cửa hôm trước, hoặc thủng hỗ trợ > 2%
+"""
+
+import math
+
+PIVOT_WIN      = 10      # đỉnh/đáy nổi bật = cao/thấp nhất trong ±10 phiên (~1 tháng)
+LOOKBACK       = 250     # ~1 năm giao dịch
+CLUSTER_TOL    = 0.02    # gộp các mốc cách nhau <= 2%
+NEAR_PCT       = 3.0     # áp sát cản (khớp cách đọc của admin: BSR 31,9 vs cản ~33)
+PEAK_ZONE_PCT  = 2.0     # vùng đỉnh cũ
+BREAK_PCT      = 1.0     # vượt / thủng xác nhận
+VOL_SPIKE      = 2.0     # bán đột biến
+VOL_BREAKOUT   = 1.5     # vượt cản cần KL
+SHARP_PCT      = 5.0     # giảm mạnh
+INTRADAY_BREAK = 2.0     # thủng hỗ trợ trong phiên
+LIQ_SHARE      = 0.15    # mỗi phiên chỉ nên bán <= 15% KL TB
+MIN_BARS       = 60
+
+SEVERITY = {'BREAKDOWN': 1, 'INTRADAY': 1, 'SELL_VOLUME': 2, 'SYSTEM_SELL': 2, 'SHARP_DROP': 2,
+            'MARKET': 3, 'NEAR_PEAK': 3, 'NEAR_RESIST': 4, 'GIVEBACK': 4, 'BREAKOUT': 5, 'CONCENTRATION': 5}
+EMOJI = {'BREAKDOWN': '🔴', 'INTRADAY': '⚡', 'SELL_VOLUME': '🔴', 'SYSTEM_SELL': '🔔', 'SHARP_DROP': '📉',
+         'MARKET': '🌐', 'NEAR_PEAK': '🟡', 'NEAR_RESIST': '🟠', 'GIVEBACK': '💰', 'BREAKOUT': '🟢',
+         'CONCENTRATION': '🎯'}
+
+
+# ------------------------------------------------------------------ format
+def fp(v):
+    """Giá kiểu Việt Nam: 33900 -> '33.900'."""
+    if v is None:
+        return '—'
+    return f"{round(v / 50) * 50:,.0f}".replace(',', '.') if v >= 10000 else f"{round(v / 10) * 10:,.0f}".replace(',', '.')
+
+
+def fpct(v, sign=True):
+    if v is None:
+        return '—'
+    s = f"{v:+.1f}" if sign else f"{abs(v):.1f}"
+    return s.replace('.', ',') + '%'
+
+
+def fqty(v):
+    return f"{int(v):,}".replace(',', '.')
+
+
+def _month(d):
+    try:
+        return f"{int(str(d)[5:7])}/{str(d)[:4]}"
+    except Exception:
+        return str(d)[:7]
+
+
+# ------------------------------------------------------------------ indicators
+def sma(vals, n):
+    return sum(vals[-n:]) / n if len(vals) >= n else None
+
+
+def avg_volume(bars, n=20, exclude_last=True):
+    vs = [b['volume'] for b in (bars[:-1] if exclude_last else bars)][-n:]
+    vs = [v for v in vs if v]
+    return sum(vs) / len(vs) if vs else None
+
+
+def pivots(bars, win=PIVOT_WIN):
+    out = []
+    hs, ls = [b['high'] for b in bars], [b['low'] for b in bars]
+    for i in range(win, len(bars) - win):
+        if hs[i] == max(hs[i - win:i + win + 1]):
+            out.append({'price': hs[i], 'date': bars[i]['date'], 'kind': 'H'})
+        if ls[i] == min(ls[i - win:i + win + 1]):
+            out.append({'price': ls[i], 'date': bars[i]['date'], 'kind': 'L'})
+    return out
+
+
+def _cluster(pts, tol=CLUSTER_TOL):
+    pts = sorted(pts, key=lambda p: p['price'])
+    groups = []
+    for p in pts:
+        if groups and p['price'] <= groups[-1][0]['price'] * (1 + tol):
+            groups[-1].append(p)
+        else:
+            groups.append([p])
+    return groups
+
+
+def find_levels(bars, manual=None):
+    """
+    Mốc giá từ dữ liệu ĐẾN HẾT bars (không gồm phiên đang xét — hàm gọi tự cắt).
+    Trả list {price, lo, hi, touches, label, source} sắp theo giá.
+    """
+    bars = bars[-LOOKBACK:]
+    levels = []
+    for g in _cluster(pivots(bars)):
+        prices = [p['price'] for p in g]
+        last = max(g, key=lambda p: p['date'])
+        kinds = {p['kind'] for p in g}
+        if kinds == {'H'}:
+            label = f"đỉnh tháng {_month(last['date'])}"
+        elif kinds == {'L'}:
+            label = f"đáy tháng {_month(last['date'])}"
+        else:
+            label = f"vùng đỉnh/đáy cũ (tháng {_month(last['date'])})"
+        levels.append({'price': sum(prices) / len(prices), 'lo': min(prices), 'hi': max(prices),
+                       'touches': len(g), 'label': label, 'source': 'pivot'})
+    closes = [b['close'] for b in bars]
+    for n in (50, 100, 200):
+        m = sma(closes, n)
+        if m:
+            levels.append({'price': m, 'lo': m, 'hi': m, 'touches': 0, 'label': f"MA{n}", 'source': 'ma'})
+    for m in manual or []:
+        p = float(m['price'])
+        # mốc admin nhập tay THAY THẾ mốc tự động gần nó (±2%) — kế hoạch đã thống nhất với khách được ưu tiên
+        levels = [l for l in levels if l['source'] == 'manual' or abs(l['price'] / p - 1) > CLUSTER_TOL]
+        levels.append({'price': p, 'lo': p, 'hi': p, 'touches': 0,
+                       'label': m.get('note') or 'mốc theo dõi', 'source': 'manual'})
+    return sorted(levels, key=lambda l: l['price'])
+
+
+def nearest(levels, price, above=True, prefer_manual=True):
+    """Mốc gần nhất phía trên (cản) / dưới (hỗ trợ). Mốc admin nhập tay được ưu tiên khi gần tương đương (<1%)."""
+    cands = [l for l in levels if (l['price'] > price if above else l['price'] < price)]
+    if not cands:
+        return None
+    cands.sort(key=lambda l: abs(l['price'] - price))
+    best = cands[0]
+    if prefer_manual:
+        for l in cands[1:]:
+            if l['source'] == 'manual' and abs(l['price'] - best['price']) / best['price'] < 0.01:
+                return l
+    return best
+
+
+def key_levels(levels):
+    """Mốc đủ mạnh để BÁO: đỉnh/đáy nổi bật, mốc admin, MA200. MA50/MA100 chỉ dùng tham khảo (quá dày, gây nhiễu)."""
+    return [l for l in levels if l['source'] != 'ma' or l['label'] == 'MA200']
+
+
+PEAK_MIN_AGE   = 40      # đỉnh cũ phải cách >= 40 phiên (~2 tháng)
+PEAK_PULLBACK  = 10.0    # và sau đỉnh giá đã điều chỉnh >= 10% (nếu không: chỉ là cổ phiếu đang lập đỉnh mới)
+
+
+def old_peak(bars):
+    """Đỉnh lớn nhất ~1 năm đã CŨ (>= 40 phiên) và đã có nhịp điều chỉnh >= 10% sau đó."""
+    hist = bars[-LOOKBACK:-PEAK_MIN_AGE]
+    if len(hist) < 30:
+        return None
+    i = max(range(len(hist)), key=lambda k: hist[k]['high'])
+    peak = hist[i]['high']
+    after = bars[len(bars) - len(bars[-LOOKBACK:]) + i + 1:]
+    if not after or min(x['close'] for x in after) > peak * (1 - PEAK_PULLBACK / 100):
+        return None
+    return {'price': peak, 'date': hist[i]['date']}
+
+
+def _zone_txt(l):
+    if l['hi'] - l['lo'] > l['price'] * 0.004:
+        return f"{fp(l['lo'])}–{fp(l['hi'])}"
+    return fp(l['price'])
+
+
+def _lvl_txt(l):
+    return f"{_zone_txt(l)} ({l['label']})"
+
+
+# ------------------------------------------------------------------ action helpers
+def _fraction(weight):
+    return '1/3' if (weight or 0) >= 15 else '1/4'
+
+
+def _liquidity_note(pos, avg_vol, fraction='1/3'):
+    """Mã thanh khoản thấp so với vị thế -> chia nhiều phiên."""
+    if not pos or not avg_vol or not pos.get('qty'):
+        return None
+    part = pos['qty'] * {'1/3': 1 / 3, '1/4': 1 / 4, '1/2': 1 / 2}.get(fraction, 1 / 3)
+    per_session = avg_vol * LIQ_SHARE
+    if part <= per_session:
+        return None
+    n = math.ceil(part / per_session)
+    return (f"Thanh khoản ~{fqty(round(avg_vol, -3))} cp/phiên → chia {n} phiên, "
+            f"mỗi phiên ≤ {fqty(round(per_session, -2))} cp để không đè giá")
+
+
+def _ctx(pos):
+    """Dòng bối cảnh vị thế: lãi/lỗ + tỷ trọng."""
+    if not pos:
+        return ''
+    parts = []
+    if pos.get('pl_pct') is not None:
+        parts.append(f"{'lãi' if pos['pl_pct'] >= 0 else 'lỗ'} {fpct(abs(pos['pl_pct']), sign=False)}")
+    if pos.get('weight') is not None:
+        parts.append(f"tỷ trọng {fpct(pos['weight'], sign=False)}")
+    return ('Vị thế: ' + ', '.join(parts) + '.') if parts else ''
+
+
+# ------------------------------------------------------------------ EOD detection
+def detect_eod(ticker, bars, pos=None, manual=None):
+    """
+    Biến cố của phiên cuối cùng trong bars. pos = {qty, pl_pct, weight} (tùy chọn).
+    Trả (events, info). Mỗi event: {type, ticker, key, level, price, headline, context, actions[]}
+    """
+    if len(bars) < MIN_BARS:
+        return [], {'skip': f'chỉ có {len(bars)} phiên dữ liệu (cần >= {MIN_BARS})'}
+    today, prev = bars[-1], bars[-2]
+    hist = bars[:-1]                                   # mốc tính trên dữ liệu ĐẾN HÔM QUA
+    c, pc = today['close'], prev['close']
+    chg = (c / pc - 1) * 100 if pc else 0.0
+    av = avg_volume(bars)
+    vr = (today['volume'] / av) if av and today.get('volume') else None
+    levels = find_levels(hist, manual)
+    key = key_levels(levels)                           # chỉ mốc "cấu trúc" mới kích hoạt cảnh báo
+    res_prev = nearest(key, pc, above=True)            # cản tính theo giá hôm qua (để bắt vượt cản)
+    sup_prev = nearest(key, pc, above=False)           # hỗ trợ theo giá hôm qua (để bắt thủng)
+    res = nearest(key, c, above=True)
+    sup = nearest(key, c, above=False)
+    peak = old_peak(bars)
+    weight = (pos or {}).get('weight')
+    pl = (pos or {}).get('pl_pct')
+    frac = _fraction(weight)
+    ctx = _ctx(pos)
+    ev = []
+    vol_txt = f", KL gấp {str(round(vr, 1)).replace('.', ',')} lần TB20" if vr and vr >= 1.3 else ''
+    head_px = f"<b>{ticker}</b> {fp(c)} ({fpct(chg)})"
+
+    def add(t, key, level, headline, actions):
+        ev.append({'type': t, 'ticker': ticker, 'key': key, 'level': level, 'price': c, 'chg': chg,
+                   'headline': headline, 'context': ctx, 'actions': [a for a in actions if a]})
+
+    # 1) THỦNG HỖ TRỢ
+    broke = sup_prev and pc >= sup_prev['price'] * (1 - BREAK_PCT / 100) and c <= sup_prev['price'] * (1 - BREAK_PCT / 100)
+    if broke:
+        nxt = nearest(key, c, above=False)
+        strong = vr is not None and vr >= VOL_BREAKOUT
+        add('BREAKDOWN', f"BREAKDOWN:{round(sup_prev['price'], -2)}", sup_prev['price'],
+            f"{head_px} thủng hỗ trợ {_lvl_txt(sup_prev)}{vol_txt}" + (" — tín hiệu xấu được xác nhận bằng khối lượng" if strong else ""),
+            [f"Cân nhắc giảm {frac} vị thế" + (" (vị thế đang lỗ — ưu tiên bảo vệ phần vốn còn lại)" if pl is not None and pl < 0 else ""),
+             _liquidity_note(pos, av, frac),
+             f"Hồi lại trên {fp(sup_prev['price'])} → tạm dừng bán, đánh giá lại",
+             f"Hỗ trợ tiếp theo: {_lvl_txt(nxt)}" if nxt else "Không còn vùng hỗ trợ nào trong 1 năm — rủi ro giảm sâu cao hơn"])
+
+    # 2) BÁN ĐỘT BIẾN
+    rng = today['high'] - today['low']
+    low_close = rng > 0 and (c - today['low']) / rng <= 0.33 and chg < 0
+    if vr is not None and vr >= VOL_SPIKE and (chg <= -2 or low_close) and not broke:
+        add('SELL_VOLUME', 'SELL_VOLUME', None,
+            f"{head_px} — <b>bán đột biến</b>: KL gấp {str(round(vr, 1)).replace('.', ',')} lần TB20"
+            + (", đóng cửa sát giá thấp nhất phiên" if low_close else ""),
+            [("Đang lãi: cân nhắc chốt một phần (" + frac + ") để giữ thành quả") if pl is not None and pl > 0
+             else "Dấu hiệu phân phối — chưa nên mua thêm / bình quân giá",
+             f"Phiên tới tiếp tục giảm với KL lớn" + (f" hoặc thủng {fp(sup['price'])}" if sup else "")
+             + " → giảm tỷ trọng",
+             _liquidity_note(pos, av, frac) if pl is not None and pl <= 0 else None])
+
+    # 3) GIẢM MẠNH (khi chưa có biến cố nặng hơn)
+    if chg <= -SHARP_PCT and not any(e['type'] in ('BREAKDOWN', 'SELL_VOLUME') for e in ev):
+        add('SHARP_DROP', 'SHARP_DROP', None, f"{head_px} giảm mạnh trong phiên{vol_txt}",
+            [f"Giữ bình tĩnh, chưa bán đuổi; mốc cần giữ: {_lvl_txt(sup)}" if sup else "Theo dõi phiên tới trước khi quyết định",
+             f"Đóng cửa dưới {fp(sup['price'] * (1 - BREAK_PCT / 100))} → cân nhắc giảm {frac}" if sup else None])
+
+    # 4) VƯỢT CẢN CÓ KHỐI LƯỢNG
+    if (res_prev and pc <= res_prev['price'] * (1 + BREAK_PCT / 100) and c >= res_prev['price'] * (1 + BREAK_PCT / 100)
+            and vr is not None and vr >= VOL_BREAKOUT):
+        nxt = nearest(key, c, above=True)
+        add('BREAKOUT', f"BREAKOUT:{round(res_prev['price'], -2)}", res_prev['price'],
+            f"{head_px} vượt cản {_lvl_txt(res_prev)}{vol_txt}",
+            ["Giữ vị thế — xu hướng đang được xác nhận",
+             f"Dời điểm dừng lên ~{fp(res_prev['lo'] * 0.97)} (ngay dưới vùng cản vừa vượt)",
+             f"Cản tiếp theo: {_lvl_txt(nxt)}" if nxt else "Không còn cản lớn trong 1 năm — để lãi chạy, dời điểm dừng theo MA20"])
+
+    # 5) VÙNG ĐỈNH CŨ / VÙNG CẢN
+    if not any(e['type'] in ('BREAKOUT', 'BREAKDOWN') for e in ev) and chg > -SHARP_PCT:
+        at_peak = peak and abs(c / peak['price'] - 1) * 100 <= PEAK_ZONE_PCT
+        touched = res and today['high'] >= res['lo'] * 0.997 and c < res['lo']
+        near = res and (res['lo'] - c) / res['lo'] * 100 <= NEAR_PCT
+        if at_peak and c >= peak['price']:
+            add('NEAR_PEAK', f"NEAR_PEAK:{round(peak['price'], -2)}", peak['price'],
+                f"{head_px} đang thử vượt đỉnh cũ {fp(peak['price'])} (tháng {_month(peak['date'])}){vol_txt}",
+                [f"Giữ được trên {fp(peak['price'])} 2–3 phiên với KL tốt → giữ, dời điểm dừng lên ~{fp(peak['price'] * 0.95)}",
+                 (f"Rơi lại dưới {fp(peak['price'] * (1 - BREAK_PCT / 100))} → cân nhắc chốt bớt {frac}"
+                  if pl is None or pl >= 0 else
+                  f"Rơi lại dưới {fp(peak['price'] * (1 - BREAK_PCT / 100))} → tận dụng vùng giá này để giảm {frac}")])
+        elif at_peak:
+            add('NEAR_PEAK', f"NEAR_PEAK:{round(peak['price'], -2)}", peak['price'],
+                f"{head_px} vào vùng đỉnh cũ {fp(peak['price'])} (tháng {_month(peak['date'])}){vol_txt}",
+                [(f"Không vượt được {fp(peak['price'])} trong 2–3 phiên → cân nhắc chốt bớt {frac}"
+                  if pl is None or pl >= 0 else
+                  f"Vùng đỉnh cũ là cơ hội giảm tỷ trọng: cân nhắc bán bớt {frac} nếu không vượt"),
+                 f"Vượt {fp(peak['price'] * (1 + BREAK_PCT / 100))} với KL lớn → giữ, dời điểm dừng lên ~{fp(peak['price'] * 0.95)}"])
+        elif touched or near:
+            add('NEAR_RESIST', f"NEAR_RESIST:{round(res['price'], -2)}", res['price'],
+                f"{head_px} " + ("chạm cản " if touched else "áp sát vùng cản ") + _lvl_txt(res)
+                + (" rồi bị đẩy xuống" if touched else "") + vol_txt,
+                [(f"Không vượt được {fp(res['lo'])} trong 2–3 phiên → cân nhắc bán bớt {frac}"
+                  if pl is None or pl >= 0 else
+                  f"Đang lỗ: nhịp hồi lên cản là cơ hội giảm tỷ trọng — cân nhắc bán bớt {frac} nếu không vượt"),
+                 f"Vượt {fp(res['hi'] * (1 + BREAK_PCT / 100))} với KL lớn → giữ, dời điểm dừng lên ~{fp(res['lo'] * 0.95)}"])
+
+    info = {'close': c, 'chg': round(chg, 2), 'vol_ratio': round(vr, 2) if vr else None,
+            'resistance': res, 'support': sup, 'peak': peak, 'levels': levels}
+    return ev, info
+
+
+# ------------------------------------------------------------------ intraday detection
+def detect_intraday(ticker, bars, price, pos=None, manual=None):
+    """Trong phiên: so giá hiện tại với nến đã đóng gần nhất (bars[-1] = hôm qua)."""
+    if len(bars) < MIN_BARS or not price:
+        return []
+    pc = bars[-1]['close']
+    chg = (price / pc - 1) * 100
+    sup = nearest(key_levels(find_levels(bars, manual)), pc, above=False)
+    broke = sup and price <= sup['price'] * (1 - INTRADAY_BREAK / 100) and pc >= sup['price']
+    if chg > -SHARP_PCT and not broke:
+        return []
+    frac = _fraction((pos or {}).get('weight'))
+    what = f"giảm {fpct(abs(chg), sign=False)} so với hôm qua" + (f", xuyên hỗ trợ {_lvl_txt(sup)}" if broke else "")
+    return [{'type': 'INTRADAY', 'ticker': ticker, 'key': 'INTRADAY', 'level': sup['price'] if sup else None,
+             'price': price, 'chg': chg,
+             'headline': f"<b>{ticker}</b> {fp(price)} — {what} (trong phiên)",
+             'context': _ctx(pos),
+             'actions': [f"Chờ giá đóng cửa: đóng cửa dưới {fp(sup['price'] * (1 - BREAK_PCT / 100))} → cân nhắc giảm {frac}"
+                         if sup else "Chờ giá đóng cửa trước khi quyết định",
+                         "Tránh bán tháo giữa phiên khi thanh khoản mỏng"]}]

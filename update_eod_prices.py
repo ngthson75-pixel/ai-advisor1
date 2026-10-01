@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI ADVISOR - EOD PRICE UPDATER v2 (2026-09-27)
+AI ADVISOR - EOD PRICE UPDATER v2.1 (2026-10-01: + mã trong danh mục khách VIP)
 ==============================================
 Ghi giá mới nhất của các mã trong danh sách scanner vào bảng eod_prices (PostgreSQL).
 
@@ -193,7 +193,7 @@ def fetch_prices_board(tickers):
 
 def fetch_price_history(ticker, start_date, end_date):
     from vnstock import Quote
-    for source in ("VCI", "vci", "TCBS", "tcbs", "SSI", "ssi", "DNSE", "dnse"):
+    for source in ('VCI', 'vci', 'KBS', 'kbs'):
         try:
             try:
                 q = Quote(symbol=ticker, source=source)
@@ -231,8 +231,27 @@ def fetch_prices_history(tickers, start_date, end_date, pause=1.0):
 # MAIN
 # ============================================================
 
+def portfolio_tickers():
+    """v2.1: mã trong danh mục khách VIP — để Giám sát danh mục có giá trong phiên kể cả mã ngoài danh sách quét."""
+    if DRY_RUN or engine is None:
+        return []
+    try:
+        from sqlalchemy import text
+        with engine.connect() as c:
+            return [r[0] for r in c.execute(text("""
+                SELECT DISTINCT UPPER(TRIM(p.ticker)) FROM portfolios p JOIN vip_users u ON u.email = p.user_id
+                WHERE u.is_active = TRUE AND LOWER(u.tier) = 'vip' AND p.quantity > 0""")) if r[0]]
+    except Exception as e:
+        logger.warning(f"Không đọc được danh mục khách VIP: {e}")
+        return []
+
+
 def update_eod_prices():
     tickers = load_ticker_list()
+    extra = [t for t in portfolio_tickers() if t not in set(tickers)]
+    if extra:
+        logger.info(f"➕ Thêm {len(extra)} mã từ danh mục khách VIP: {', '.join(extra)}")
+        tickers = tickers + extra
     if not tickers:
         return {'success': False, 'error': 'No tickers loaded'}
 
