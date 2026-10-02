@@ -2,6 +2,7 @@
 AI ADVISOR - RESCUE WATCH v2 · GIÁM SÁT DANH MỤC VIP (Telegram + Email)
 =======================================================================
 File: rescue_watch.py
+Version: 2.3 (2026-10-02) — báo 'chạm đỉnh cũ' NGAY TRONG PHIÊN (giá hiện tại); không cảnh báo tăng nóng
 Version: 2.2c (2026-10-02) — tín hiệu bán theo đỉnh cũ, không gợi ý tỷ lệ, cảnh báo MỌI vị thế
 Version: 2.1 (2026-10-01) — mở gửi thật THEO TỪNG KHÁCH (stage draft|live), mặc định bản nháp
 

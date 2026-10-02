@@ -19,8 +19,10 @@ Biến cố (EOD — sau phiên, giá đóng cửa đã xác nhận):
   NEAR_PEAK    Chạm vùng đỉnh cũ (±2% quanh đỉnh lớn nhất 1 năm, trừ 10 phiên gần nhất)
   NEAR_RESIST  Áp sát vùng cản (cách <= 3%) hoặc chạm cản trong phiên rồi bị đẩy xuống
   BREAKOUT     Vượt cản >= 1% với KL >= 1,5x TB20
-Biến cố trong phiên:
+Biến cố trong phiên (10h30–14h30):
   INTRADAY     Giảm >= 5% so với giá đóng cửa hôm trước, hoặc thủng hỗ trợ > 2%
+  NEAR_PEAK cũng được kiểm tra trong phiên (giá hiện tại) để báo kịp lúc giá chạm đỉnh cũ
+  (Không cảnh báo 'tăng nóng/quá mua' — triết lý: cắt lỗ nhanh, giữ lãi lâu nhất có thể)
 """
 
 import math
@@ -74,6 +76,31 @@ def _month(d):
 # ------------------------------------------------------------------ indicators
 def sma(vals, n):
     return sum(vals[-n:]) / n if len(vals) >= n else None
+
+
+def rsi(closes, n=14):
+    """RSI Wilder (như TradingView)."""
+    if len(closes) < n + 1:
+        return None
+    gains = losses = 0.0
+    for i in range(1, n + 1):
+        d = closes[i] - closes[i - 1]
+        gains += max(d, 0); losses += max(-d, 0)
+    ag, al = gains / n, losses / n
+    for i in range(n + 1, len(closes)):
+        d = closes[i] - closes[i - 1]
+        ag = (ag * (n - 1) + max(d, 0)) / n
+        al = (al * (n - 1) + max(-d, 0)) / n
+    return 100.0 if al == 0 else 100 - 100 / (1 + ag / al)
+
+
+def bollinger(closes, n=20, k=2.0):
+    if len(closes) < n:
+        return None
+    w = closes[-n:]
+    m = sum(w) / n
+    sd = (sum((x - m) ** 2 for x in w) / n) ** 0.5
+    return m, m + k * sd, m - k * sd
 
 
 def avg_volume(bars, n=20, exclude_last=True):
@@ -253,7 +280,7 @@ def _ctx(pos):
 
 
 # ------------------------------------------------------------------ EOD detection
-def detect_eod(ticker, bars, pos=None, manual=None):
+def detect_eod(ticker, bars, pos=None, manual=None, intraday=False):
     """
     Biến cố của phiên cuối cùng trong bars. pos = {qty, pl_pct, weight} (tùy chọn).
     Trả (events, info). Mỗi event: {type, ticker, key, level, price, headline, context, actions[], short}
@@ -369,17 +396,17 @@ def detect_eod(ticker, bars, pos=None, manual=None):
         if P and (P['price'] - c) / P['price'] * 100 <= PEAK_NEAR_PCT:
             testing = c >= P['price']
             add('NEAR_PEAK', f"NEAR_PEAK:{round(P['price'], -2)}", P['price'],
-                f"{head_px} " + ("đang thử vượt " if testing else "về vùng ") + f"đỉnh cũ {fp(P['price'])} ({P['label'].replace('đỉnh cũ ', '')}){vol_txt}",
-                ([f"Giữ được trên {fp(P['price'])} 2–3 phiên với KL tốt → giữ, dời điểm dừng lên ~{fp(P['price'] * 0.95)}",
-                  f"Rơi lại dưới {fp(P['price'] * (1 - BREAK_PCT / 100))} → tín hiệu bán (vượt đỉnh thất bại)",
-                  ("Có thể chốt lời từng phần để giảm rủi ro (" + CHOICE + ")") if profit
-                  else f"Đang lỗ: nếu không giữ được trên {fp(P['price'])}, đây là vùng giá tốt để giảm tỷ trọng ({CHOICE})"]
+                f"{head_px} " + ("chạm / đang thử vượt " if testing else "về vùng ") + f"đỉnh cũ {fp(P['price'])} ({P['label'].replace('đỉnh cũ ', '')}){vol_txt}",
+                ([("Cân nhắc chốt lời từng phần (" + CHOICE + ")") if profit
+                  else f"Đang lỗ: vùng đỉnh cũ là cơ hội giảm tỷ trọng ({CHOICE})",
+                  f"Phần còn lại: giữ được trên {fp(P['price'])} 2–3 phiên với KL tốt → tiếp tục giữ, dời điểm dừng lên ~{fp(P['price'] * 0.95)}",
+                  f"Rơi lại dưới {fp(P['price'] * (1 - BREAK_PCT / 100))} → tín hiệu bán (vượt đỉnh thất bại)"]
                  if testing else
                  [("Cân nhắc chốt lời từng phần (" + CHOICE + ")") if profit
                   else "Đang lỗ: vùng đỉnh cũ là cơ hội giảm tỷ trọng (" + CHOICE + ")",
                   f"Vượt {fp(P['price'] * (1 + BREAK_PCT / 100))} với KL lớn → giữ phần còn lại, dời điểm dừng lên ~{fp(P['price'] * 0.95)}",
                   f"Vượt lên rồi rơi lại dưới {fp(P['price'] * (1 - BREAK_PCT / 100))} → tín hiệu bán (vượt đỉnh thất bại)"]),
-                short=(f"<b>{ticker}</b> {fp(c)} — đang thử vượt đỉnh cũ {fp(P['price'])}: giữ được thì giữ, rơi lại dưới thì bán"
+                short=(f"<b>{ticker}</b> {fp(c)} — chạm đỉnh cũ {fp(P['price'])}: cân nhắc chốt lời từng phần, rơi lại dưới thì bán"
                        if testing else f"<b>{ticker}</b> {fp(c)} — về vùng đỉnh cũ {fp(P['price'])}: cân nhắc chốt lời từng phần"))
             ev[-1]['testing'] = testing
 
@@ -395,6 +422,11 @@ def detect_eod(ticker, bars, pos=None, manual=None):
                  f"Vượt {fp(m['price'] * (1 + BREAK_PCT / 100))} với KL lớn → giữ, theo dõi mốc tiếp theo"],
                 short=f"<b>{ticker}</b> {fp(c)} — áp sát mốc theo dõi {fp(m['price'])}")
 
+    if intraday:
+        # Trong phiên chỉ dùng tín hiệu tính được từ GIÁ (chưa có KL/đỉnh-đáy phiên chính xác)
+        ev = [e for e in ev if e['type'] == 'NEAR_PEAK']
+        for e in ev:
+            e['headline'] += " <i>(trong phiên, giá tạm tính)</i>"
     near_pk = min([p for p in peaks if p['price'] >= c], key=lambda p: p['price'], default=None)
     info = {'close': c, 'chg': round(chg, 2), 'vol_ratio': round(vr, 2) if vr else None,
             'resistance': res, 'support': sup, 'levels': levels, 'peaks': peaks,
@@ -411,8 +443,13 @@ def detect_intraday(ticker, bars, price, pos=None, manual=None):
     chg = (price / pc - 1) * 100
     sup = nearest(key_levels(find_levels(bars, manual)), pc, above=False)
     broke = sup and price <= sup['price'] * (1 - INTRADAY_BREAK / 100) and pc >= sup['price']
+    # Phía TĂNG: tăng nóng / về vùng đỉnh cũ — dựng nến tạm của phiên từ giá hiện tại
+    from datetime import date as _date
+    tmp = {'date': _date.today().isoformat(), 'open': pc, 'high': max(pc, price), 'low': min(pc, price),
+           'close': price, 'volume': 0}
+    up = detect_eod(ticker, bars + [tmp], pos, manual, intraday=True)[0] if chg > 0 else []
     if chg > -SHARP_PCT and not broke:
-        return []
+        return up
     what = f"giảm {fpct(abs(chg), sign=False)} so với hôm qua" + (f", xuyên hỗ trợ {_lvl_txt(sup)}" if broke else "")
     return [{'type': 'INTRADAY', 'ticker': ticker, 'key': 'INTRADAY', 'level': sup['price'] if sup else None,
              'price': price, 'chg': chg,
