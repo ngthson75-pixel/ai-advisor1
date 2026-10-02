@@ -80,7 +80,7 @@ MARKET_DROP_PTS    = float(os.getenv('RW_MARKET_DROP_PTS', '15'))   # tỷ trọ
 COOLDOWN_DAYS      = int(os.getenv('RW_COOLDOWN_DAYS', '7'))          # ~5 phiên
 STALE_DAYS         = int(os.getenv('RW_STALE_DAYS', '4'))
 # Biến cố "theo phiên" lặp lại sớm hơn biến cố "theo mốc" (mốc dùng khóa riêng theo giá nên vẫn báo khi thủng mốc mới)
-TYPE_COOLDOWN      = {'INTRADAY': 1, 'SHARP_DROP': 2, 'SELL_VOLUME': 3}
+TYPE_COOLDOWN      = {'INTRADAY': 1, 'SHARP_DROP': 2, 'SELL_VOLUME': 3, 'TOP_SELL': 3, 'NEAR_PEAK': 15}
 HISTORY_DAYS       = 420                                              # nến tải cho phân tích (~1 năm + đệm)
 MAX_EVENTS_PER_MSG = 8
 PORTFOLIO_ROW      = '*'
@@ -275,10 +275,28 @@ def _alert_state(session, uid):
             _rows(session, "SELECT ticker, ekey, last_date, value FROM watch_alert_state WHERE user_id = :u", u=uid)}
 
 
-def _cooled(astate, ticker, ekey, today, days=COOLDOWN_DAYS):
-    r = astate.get((ticker, ekey))
-    d = _parse_date(r['last_date']) if r else None
-    return d is not None and (today - d).days < days
+LEVEL_SAME_PCT = 3.0        # hai mốc lệch nhau <= 3% coi là CÙNG một mốc (đỉnh cũ có thể nhích nhẹ theo dữ liệu mới)
+AFTER_SELL_QUIET = {'NEAR_PEAK': 10}   # sau tín hiệu bán ở đỉnh, im lặng 'về vùng đỉnh cũ' 10 ngày
+
+
+def _cooled(astate, ticker, ekey, today, days=COOLDOWN_DAYS, level=None):
+    etype = ekey.split(':')[0]
+    for (t, k), r in astate.items():
+        if t != ticker:
+            continue
+        d = _parse_date(r['last_date'])
+        if d is None:
+            continue
+        ktype = k.split(':')[0]
+        if ktype == etype:
+            same = (k == ekey or level is None or r.get('value') is None
+                    or abs(float(r['value']) / float(level) - 1) * 100 <= LEVEL_SAME_PCT)
+            if same and (today - d).days < days:
+                return True
+        if etype in AFTER_SELL_QUIET and ktype in ('TOP_SELL', 'FAILED_BREAKOUT') \
+                and (today - d).days < AFTER_SELL_QUIET[etype]:
+            return True
+    return False
 
 
 # ============================================================
@@ -328,7 +346,7 @@ def evaluate_user(session, user, prices, market, today=None, scope='eod'):
         ev.setdefault('weight', weights.get(ev['ticker'], 0))
         ev.setdefault('pl_pct', pls.get(ev['ticker']))
         cd = TYPE_COOLDOWN.get(ev['type'], COOLDOWN_DAYS)
-        if _cooled(astate, ev['ticker'], ev['key'], today, cd):
+        if _cooled(astate, ev['ticker'], ev['key'], today, cd, ev.get('level')):
             return
         events.append(ev)
         marks.append({'user_id': uid, 'ticker': ev['ticker'], 'ekey': ev['key'], 'last_date': today.isoformat(),
@@ -370,7 +388,7 @@ def evaluate_user(session, user, prices, market, today=None, scope='eod'):
                   'headline': f"<b>{t}</b> {ta.fp(l['price'])} đã rời đỉnh {ta.fp(peak)} {ta.fpct(abs(from_peak), sign=False)}"
                               f" — lãi còn {ta.fpct(l['pl_pct'])}",
                   'context': ta._ctx(pos),
-                  'actions': [f"Bảo vệ lãi: cân nhắc chốt {ta._fraction(l['weight'])} hoặc đặt điểm dừng ~{ta.fp(l['price'] * 0.95)}",
+                  'actions': [f"Bảo vệ lãi: cân nhắc chốt lời từng phần ({ta.CHOICE}) hoặc đặt điểm dừng ~{ta.fp(l['price'] * 0.95)}",
                               "Lấy lại đỉnh cũ với KL tốt → giữ tiếp"]})
         new_state.append({'user_id': uid, 'ticker': t, 'last_price': l['price'], 'last_trade_date': l['tdate'],
                           'peak_price': peak, 'alert_level': None, 'giveback_alerted': alerted, 'top_pct': None})
@@ -442,7 +460,7 @@ def evaluate_user(session, user, prices, market, today=None, scope='eod'):
 # ============================================================
 
 MAX_DETAIL = 5                       # số biến cố viết chi tiết; phần còn lại 1 dòng/mã (không giấu mã nào)
-SELL_SIDE = ('BREAKDOWN', 'SELL_VOLUME', 'SHARP_DROP', 'NEAR_PEAK', 'NEAR_RESIST', 'GIVEBACK', 'SYSTEM_SELL', 'INTRADAY')
+SELL_SIDE = ('TOP_SELL', 'FAILED_BREAKOUT', 'BREAKDOWN', 'SELL_VOLUME', 'SHARP_DROP', 'NEAR_PEAK', 'NEAR_RESIST', 'GIVEBACK', 'SYSTEM_SELL', 'INTRADAY')
 
 
 def risk_overview(result, market):
@@ -465,7 +483,7 @@ def risk_overview(result, market):
     if not pri:
         pri = [h['ticker'] for h in sorted(result.get('holdings') or [], key=lambda h: h['pl_pct'])]
     tip = (f"Tỷ trọng cổ phiếu cao hơn khuyến nghị {sp - alloc:.0f} điểm % → cân nhắc hạ dần, "
-           f"ưu tiên các mã đang chạm cản / có tín hiệu xấu: {', '.join(pri[:3])}")
+           f"ưu tiên các mã có tín hiệu bán: {', '.join(pri[:3])}")
     return head, tip
 
 
