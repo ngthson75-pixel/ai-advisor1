@@ -2,6 +2,7 @@
 AI ADVISOR - RESCUE WATCH v2 · GIÁM SÁT DANH MỤC VIP (Telegram + Email)
 =======================================================================
 File: rescue_watch.py
+Version: 2.2c (2026-10-02) — tín hiệu bán theo đỉnh cũ, không gợi ý tỷ lệ, cảnh báo MỌI vị thế
 Version: 2.1 (2026-10-01) — mở gửi thật THEO TỪNG KHÁCH (stage draft|live), mặc định bản nháp
 
 Mục đích
@@ -275,6 +276,10 @@ def _alert_state(session, uid):
             _rows(session, "SELECT ticker, ekey, last_date, value FROM watch_alert_state WHERE user_id = :u", u=uid)}
 
 
+# v2.2c: KHÔNG lọc vị thế nhỏ — mọi mã đều là tiền thật của khách (admin 02/10). Để 0 = báo mọi mã.
+MIN_WEIGHT_ANY   = float(os.getenv('RW_MIN_WEIGHT', '0'))
+MIN_WEIGHT_LIGHT = float(os.getenv('RW_MIN_WEIGHT_LIGHT', '0'))
+LIGHT_TYPES      = ('NEAR_PEAK', 'BREAKOUT', 'NEAR_RESIST')
 LEVEL_SAME_PCT = 3.0        # hai mốc lệch nhau <= 3% coi là CÙNG một mốc (đỉnh cũ có thể nhích nhẹ theo dữ liệu mới)
 AFTER_SELL_QUIET = {'NEAR_PEAK': 10}   # sau tín hiệu bán ở đỉnh, im lặng 'về vùng đỉnh cũ' 10 ngày
 
@@ -342,9 +347,13 @@ def evaluate_user(session, user, prices, market, today=None, scope='eod'):
     pls = {l['ticker']: l['pl_pct'] for l in lines}
 
     def push(ev):
-        """Áp dụng chống lặp; ghi lại mốc đã báo."""
+        """Áp dụng chống lặp; ghi lại mốc đã báo. Bỏ qua vị thế quá nhỏ (không đáng làm phiền khách)."""
         ev.setdefault('weight', weights.get(ev['ticker'], 0))
         ev.setdefault('pl_pct', pls.get(ev['ticker']))
+        if ev['ticker'] != PORTFOLIO_ROW and ev['ticker'] in weights:
+            w = ev['weight'] or 0
+            if w < MIN_WEIGHT_ANY or (ev['type'] in LIGHT_TYPES and w < MIN_WEIGHT_LIGHT):
+                return
         cd = TYPE_COOLDOWN.get(ev['type'], COOLDOWN_DAYS)
         if _cooled(astate, ev['ticker'], ev['key'], today, cd, ev.get('level')):
             return
@@ -471,19 +480,25 @@ def risk_overview(result, market):
     alloc = float(market['allocation'])
     sp = result['summary']['stock_pct']
     label = str(market.get('mode_label') or market.get('market_mode'))
+    if label.lower().startswith('thị trường '):
+        label = label[len('thị trường '):]
     head = (f"Thị trường {label} · khuyến nghị {alloc:.0f}% cổ phiếu · danh mục đang {ta.fpct(sp, sign=False)}")
     if sp <= alloc + 10:
         return head, None
-    # ưu tiên giảm: mã đang có tín hiệu xấu / chạm cản, tỷ trọng lớn trước
+    # ưu tiên giảm: mã có TÍN HIỆU BÁN thật (không tính 'đang thử vượt đỉnh'), tỷ trọng lớn trước
     seen, pri = set(), []
-    for e in sorted([e for e in result['events'] if e['type'] in SELL_SIDE and e['ticker'] != PORTFOLIO_ROW],
-                    key=lambda e: -(e.get('weight') or 0)):
+    for e in sorted([e for e in result['events'] if e['type'] in SELL_SIDE and e['ticker'] != PORTFOLIO_ROW
+                     and not e.get('testing')], key=lambda e: -(e.get('weight') or 0)):
         if e['ticker'] not in seen:
             seen.add(e['ticker']); pri.append(e['ticker'])
-    if not pri:
-        pri = [h['ticker'] for h in sorted(result.get('holdings') or [], key=lambda h: h['pl_pct'])]
-    tip = (f"Tỷ trọng cổ phiếu cao hơn khuyến nghị {sp - alloc:.0f} điểm % → cân nhắc hạ dần, "
-           f"ưu tiên các mã có tín hiệu bán: {', '.join(pri[:3])}")
+    gap = f"Tỷ trọng cổ phiếu cao hơn khuyến nghị {sp - alloc:.0f} điểm % → cân nhắc hạ dần"
+    if pri:
+        tip = f"{gap}, ưu tiên các mã có tín hiệu bán: {', '.join(pri[:3])}"
+    else:
+        weak = [h for h in sorted(result.get('holdings') or [], key=lambda h: h['pl_pct'])
+                if h['pl_pct'] < 0 and h['weight'] >= MIN_WEIGHT_LIGHT][:3]
+        tip = (f"{gap}, ưu tiên các mã yếu nhất: " + ', '.join(f"{h['ticker']} ({ta.fpct(h['pl_pct'])})" for h in weak)
+               if weak else gap)
     return head, tip
 
 
@@ -502,7 +517,7 @@ def build_message(result, market, today=None):
         if head:
             emoji = {'BULL': '🟢', 'BEAR': '🔴'}.get((market or {}).get('market_mode'), '🔴' if tip else '🟡')
             out.append("")
-            out.append(f"{'⚖️ <b>Rủi ro tổng thể</b>' if tip else emoji + ' Thị trường'}: {html.escape(head)}")
+            out.append(f"⚖️ <b>Rủi ro tổng thể</b>: {html.escape(head)}" if tip else f"{emoji} {html.escape(head)}")
             if tip:
                 out.append(f"▸ {html.escape(tip)}")
     detail, rest = events[:MAX_DETAIL], events[MAX_DETAIL:]
@@ -543,7 +558,7 @@ def build_email(result, market, today=None):
     if head:
         risk = (f"<div style='background:{'#fef2f2' if tip else '#f8fafc'};border:1px solid {'#fca5a5' if tip else '#e2e8f0'};"
                 f"border-radius:6px;padding:12px 14px;margin:0 0 16px'>"
-                f"<div style='font-size:14px;color:#0f172a'>{'⚖️ <b>Rủi ro tổng thể:</b> ' if tip else 'Thị trường: '}{html.escape(head)}</div>"
+                f"<div style='font-size:14px;color:#0f172a'>{'⚖️ <b>Rủi ro tổng thể:</b> ' if tip else ''}{html.escape(head)}</div>"
                 + (f"<div style='font-size:14px;color:#b91c1c;margin-top:6px'>▸ {html.escape(tip)}</div>" if tip else '')
                 + "</div>")
     blocks = []

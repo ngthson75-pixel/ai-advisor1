@@ -372,13 +372,16 @@ def detect_eod(ticker, bars, pos=None, manual=None):
                 f"{head_px} " + ("đang thử vượt " if testing else "về vùng ") + f"đỉnh cũ {fp(P['price'])} ({P['label'].replace('đỉnh cũ ', '')}){vol_txt}",
                 ([f"Giữ được trên {fp(P['price'])} 2–3 phiên với KL tốt → giữ, dời điểm dừng lên ~{fp(P['price'] * 0.95)}",
                   f"Rơi lại dưới {fp(P['price'] * (1 - BREAK_PCT / 100))} → tín hiệu bán (vượt đỉnh thất bại)",
-                  ("Có thể chốt lời từng phần để giảm rủi ro (" + CHOICE + ")") if profit else None]
+                  ("Có thể chốt lời từng phần để giảm rủi ro (" + CHOICE + ")") if profit
+                  else f"Đang lỗ: nếu không giữ được trên {fp(P['price'])}, đây là vùng giá tốt để giảm tỷ trọng ({CHOICE})"]
                  if testing else
                  [("Cân nhắc chốt lời từng phần (" + CHOICE + ")") if profit
                   else "Đang lỗ: vùng đỉnh cũ là cơ hội giảm tỷ trọng (" + CHOICE + ")",
                   f"Vượt {fp(P['price'] * (1 + BREAK_PCT / 100))} với KL lớn → giữ phần còn lại, dời điểm dừng lên ~{fp(P['price'] * 0.95)}",
                   f"Vượt lên rồi rơi lại dưới {fp(P['price'] * (1 - BREAK_PCT / 100))} → tín hiệu bán (vượt đỉnh thất bại)"]),
-                short=f"<b>{ticker}</b> {fp(c)} — về vùng đỉnh cũ {fp(P['price'])}: cân nhắc chốt lời từng phần")
+                short=(f"<b>{ticker}</b> {fp(c)} — đang thử vượt đỉnh cũ {fp(P['price'])}: giữ được thì giữ, rơi lại dưới thì bán"
+                       if testing else f"<b>{ticker}</b> {fp(c)} — về vùng đỉnh cũ {fp(P['price'])}: cân nhắc chốt lời từng phần"))
+            ev[-1]['testing'] = testing
 
     # 7) MỐC THEO DÕI ADMIN NHẬP TAY (kế hoạch đã thống nhất với khách)
     if not ev:
