@@ -2,6 +2,7 @@
 AI ADVISOR - WATCH TA (phân tích kỹ thuật cho Giám sát danh mục VIP)
 ====================================================================
 File: watch_ta.py
+Version: 2.4b (2026-10-02) — chân nền = giá thấp nhất KỂ CẢ RÂU của các phiên chạm nền (khớp MBB thật: 19.600, thủng 02/10)
 Version: 2.4 (2026-10-02) — thêm THỦNG NỀN GIÁ (vùng nhiều lần về rồi bật lên trong 1 năm), cả trong phiên lẫn cuối ngày
 Version: 1.0 (2026-10-01)
 
@@ -267,7 +268,7 @@ def base_levels(bars, win=BASE_WIN):
     """
     NỀN GIÁ = vùng giá cổ phiếu NHIỀU LẦN về rồi bật lên trong ~1 năm (đáy THÂN NẾN, không tính râu —
     để nhịp rũ bỏ râu dài kiểu 'spring' không kéo nền xuống). Gộp các lần chạm cách nhau <= 2%.
-    Trả list {price (= chân nền: tứ phân vị dưới của các lần chạm), hi, touches, label} sắp theo giá giảm dần.
+    Trả list {price (= chân nền: giá thấp nhất kể cả râu của các phiên chạm nền), hi, touches, label} sắp theo giá giảm dần.
     """
     bars = bars[-LOOKBACK:]
     n = len(bars)
@@ -281,7 +282,7 @@ def base_levels(bars, win=BASE_WIN):
             continue
         after = closes[i + 1:i + 16]
         if after and max(after) >= bots[i] * (1 + BASE_BOUNCE / 100):
-            pts.append({'price': bots[i], 'date': bars[i]['date'], 'i': i, 'kind': 'L'})
+            pts.append({'price': bots[i], 'low': bars[i]['low'], 'date': bars[i]['date'], 'i': i, 'kind': 'L'})
     # gộp kiểu chuỗi: mỗi lần chạm cách lần liền kề <= 1,5%, cả vùng rộng <= 4% (nền thường hơi xô lệch theo thời gian)
     groups = []
     for p in sorted(pts, key=lambda p: p['price']):
@@ -296,9 +297,9 @@ def base_levels(bars, win=BASE_WIN):
             continue
         months = sorted({_month(p['date']) for p in g}, key=lambda m: (m.split('/')[1], int(m.split('/')[0])))
         span = months[0] if len(months) == 1 else f"{months[0]} – {months[-1]}"
-        ps = sorted(p['price'] for p in g)
-        # chân nền = mức tứ phân vị dưới của các lần chạm (1–2 lần chạm sâu lẻ loi không kéo chân nền xuống)
-        out.append({'price': ps[len(ps) // 4], 'hi': ps[-1], 'touches': len(g),
+        # CHÂN NỀN = giá thấp nhất (tính cả râu) của các phiên chạm nền — mức mà mọi lần về nền đều giữ được.
+        # (Nhịp rũ bỏ sâu kiểu 'spring' nằm ngoài cụm nên không kéo chân nền xuống.)
+        out.append({'price': min(p['low'] for p in g), 'hi': max(p['price'] for p in g), 'touches': len(g),
                     'label': f"{len(g)} lần về nền rồi bật lên, tháng {span}"})
     return sorted(out, key=lambda l: -l['price'])
 
