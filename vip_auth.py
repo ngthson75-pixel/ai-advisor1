@@ -25,7 +25,7 @@ from functools import wraps
 
 import jwt  # pip install PyJWT
 from flask import request, jsonify, g
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import text
 
@@ -289,8 +289,9 @@ def init_vip_system(app, engine, Session):
 
         session = Session()
         try:
-            user = session.query(VIPUser).filter_by(
-                email=email, is_active=True
+            user = session.query(VIPUser).filter(
+                func.lower(VIPUser.email) == email,
+                VIPUser.is_active == True
             ).first()
 
             if not user or not _check_password(password, user.password_hash):
