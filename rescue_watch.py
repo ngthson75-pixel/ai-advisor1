@@ -2,6 +2,7 @@
 AI ADVISOR - RESCUE WATCH v2 · GIÁM SÁT DANH MỤC VIP (Telegram + Email)
 =======================================================================
 File: rescue_watch.py
+Version: 2.4 (2026-10-02) — cảnh báo THỦNG NỀN GIÁ trong phiên (chờ rút chân) và cuối ngày (xác nhận)
 Version: 2.3 (2026-10-02) — báo 'chạm đỉnh cũ' NGAY TRONG PHIÊN (giá hiện tại); không cảnh báo tăng nóng
 Version: 2.2c (2026-10-02) — tín hiệu bán theo đỉnh cũ, không gợi ý tỷ lệ, cảnh báo MỌI vị thế
 Version: 2.1 (2026-10-01) — mở gửi thật THEO TỪNG KHÁCH (stage draft|live), mặc định bản nháp
@@ -470,7 +471,7 @@ def evaluate_user(session, user, prices, market, today=None, scope='eod'):
 # ============================================================
 
 MAX_DETAIL = 5                       # số biến cố viết chi tiết; phần còn lại 1 dòng/mã (không giấu mã nào)
-SELL_SIDE = ('TOP_SELL', 'FAILED_BREAKOUT', 'BREAKDOWN', 'SELL_VOLUME', 'SHARP_DROP', 'NEAR_PEAK', 'NEAR_RESIST', 'GIVEBACK', 'SYSTEM_SELL', 'INTRADAY')
+SELL_SIDE = ('BASE_BREAK', 'TOP_SELL', 'FAILED_BREAKOUT', 'BREAKDOWN', 'SELL_VOLUME', 'SHARP_DROP', 'NEAR_PEAK', 'NEAR_RESIST', 'GIVEBACK', 'SYSTEM_SELL', 'INTRADAY')
 
 
 def risk_overview(result, market):
@@ -779,6 +780,9 @@ def analyze_ticker(Session, ticker, email=None):
                 'supports': [fmt(l) for l in reversed(key) if l['price'] < c][:4],
                 'ma': {l['label']: round(l['price']) for l in info['levels'] if l['source'] == 'ma'},
                 'old_peak': info['peak'], 'manual': manual,
+                'bases': [{'price': round(b['price']), 'zone': f"{ta.fp(b['price'])}–{ta.fp(b['hi'])}", 'label': b['label'],
+                           'break_below': round(b['price'] * (1 - ta.BASE_BREAK_PCT / 100))}
+                          for b in ta.base_levels(bars[:-1])][:4],
                 'events_last_session': [{'type': e['type'], 'headline': _strip_tags(e['headline']), 'actions': e['actions']}
                                         for e in evs]}
     finally:

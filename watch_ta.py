@@ -2,6 +2,7 @@
 AI ADVISOR - WATCH TA (phân tích kỹ thuật cho Giám sát danh mục VIP)
 ====================================================================
 File: watch_ta.py
+Version: 2.4 (2026-10-02) — thêm THỦNG NỀN GIÁ (vùng nhiều lần về rồi bật lên trong 1 năm), cả trong phiên lẫn cuối ngày
 Version: 1.0 (2026-10-01)
 
 Module THUẦN (không Flask, không DB) — nhận chuỗi nến ngày và trả về:
@@ -40,9 +41,9 @@ INTRADAY_BREAK = 2.0     # thủng hỗ trợ trong phiên
 LIQ_SHARE      = 0.15    # mỗi phiên chỉ nên bán <= 15% KL TB
 MIN_BARS       = 60
 
-SEVERITY = {'TOP_SELL': 1, 'FAILED_BREAKOUT': 1, 'BREAKDOWN': 1, 'INTRADAY': 1, 'SELL_VOLUME': 2, 'SYSTEM_SELL': 2, 'SHARP_DROP': 2,
+SEVERITY = {'BASE_BREAK': 1, 'TOP_SELL': 1, 'FAILED_BREAKOUT': 1, 'BREAKDOWN': 1, 'INTRADAY': 1, 'SELL_VOLUME': 2, 'SYSTEM_SELL': 2, 'SHARP_DROP': 2,
             'MARKET': 3, 'NEAR_PEAK': 3, 'NEAR_RESIST': 4, 'GIVEBACK': 4, 'BREAKOUT': 5, 'CONCENTRATION': 5}
-EMOJI = {'TOP_SELL': '🔴', 'FAILED_BREAKOUT': '🔴', 'BREAKDOWN': '🔴', 'INTRADAY': '⚡', 'SELL_VOLUME': '🔴', 'SYSTEM_SELL': '🔔', 'SHARP_DROP': '📉',
+EMOJI = {'BASE_BREAK': '🔴', 'TOP_SELL': '🔴', 'FAILED_BREAKOUT': '🔴', 'BREAKDOWN': '🔴', 'INTRADAY': '⚡', 'SELL_VOLUME': '🔴', 'SYSTEM_SELL': '🔔', 'SHARP_DROP': '📉',
          'MARKET': '🌐', 'NEAR_PEAK': '🟡', 'NEAR_RESIST': '🟠', 'GIVEBACK': '💰', 'BREAKOUT': '🟢',
          'CONCENTRATION': '🎯'}
 
@@ -250,6 +251,74 @@ def peak_levels(bars, win=PIVOT_WIN):
     return sorted(out, key=lambda l: l['price'])
 
 
+BASE_WIN       = 5       # đáy thân nến = thấp nhất trong ±5 phiên (nền đi ngang có nhiều nhịp chạm ngắn)
+BASE_BOUNCE    = 3.0     # sau mỗi lần chạm phải bật lên >= 3% trong 15 phiên
+BASE_TOUCHES   = 3       # nền giá = >= 3 lần về rồi bật lên
+BASE_SPAN      = 40      # các lần chạm trải >= 40 phiên (~2 tháng) — không phải 1 nhịp tích lũy ngắn
+BASE_HELD      = 20      # trước khi thủng, nền phải giữ được >= 20 phiên (đóng cửa trên chân nền)
+BASE_BREAK_PCT = 0.3     # thủng nền = giá dưới chân nền >= 0,3% (~1 bước giá)
+
+
+def _body_bot(b):
+    return min(b['open'], b['close'])
+
+
+def base_levels(bars, win=BASE_WIN):
+    """
+    NỀN GIÁ = vùng giá cổ phiếu NHIỀU LẦN về rồi bật lên trong ~1 năm (đáy THÂN NẾN, không tính râu —
+    để nhịp rũ bỏ râu dài kiểu 'spring' không kéo nền xuống). Gộp các lần chạm cách nhau <= 2%.
+    Trả list {price (= chân nền: tứ phân vị dưới của các lần chạm), hi, touches, label} sắp theo giá giảm dần.
+    """
+    bars = bars[-LOOKBACK:]
+    n = len(bars)
+    if n < 2 * win + 20:
+        return []
+    bots = [_body_bot(b) for b in bars]
+    closes = [b['close'] for b in bars]
+    pts = []
+    for i in range(win, n - win):
+        if bots[i] != min(bots[i - win:i + win + 1]):
+            continue
+        after = closes[i + 1:i + 16]
+        if after and max(after) >= bots[i] * (1 + BASE_BOUNCE / 100):
+            pts.append({'price': bots[i], 'date': bars[i]['date'], 'i': i, 'kind': 'L'})
+    # gộp kiểu chuỗi: mỗi lần chạm cách lần liền kề <= 1,5%, cả vùng rộng <= 4% (nền thường hơi xô lệch theo thời gian)
+    groups = []
+    for p in sorted(pts, key=lambda p: p['price']):
+        if groups and p['price'] <= groups[-1][-1]['price'] * 1.015 and p['price'] <= groups[-1][0]['price'] * 1.04:
+            groups[-1].append(p)
+        else:
+            groups.append([p])
+    out = []
+    for g in groups:
+        idx = sorted(p['i'] for p in g)
+        if len(g) < BASE_TOUCHES or idx[-1] - idx[0] < BASE_SPAN:
+            continue
+        months = sorted({_month(p['date']) for p in g}, key=lambda m: (m.split('/')[1], int(m.split('/')[0])))
+        span = months[0] if len(months) == 1 else f"{months[0]} – {months[-1]}"
+        ps = sorted(p['price'] for p in g)
+        # chân nền = mức tứ phân vị dưới của các lần chạm (1–2 lần chạm sâu lẻ loi không kéo chân nền xuống)
+        out.append({'price': ps[len(ps) // 4], 'hi': ps[-1], 'touches': len(g),
+                    'label': f"{len(g)} lần về nền rồi bật lên, tháng {span}"})
+    return sorted(out, key=lambda l: -l['price'])
+
+
+def _base_txt(b):
+    rng = f"{fp(b['price'])}–{fp(b['hi'])}" if b['hi'] > b['price'] * 1.004 else fp(b['price'])
+    return f"nền giá {rng} ({b['label']})"
+
+
+def base_break(bars, price, prev_close):
+    """Nền giá vừa bị thủng: giá < chân nền -0,3%, trong khi ~1 tháng qua (20 phiên) giá vẫn đóng cửa trên ngưỡng đó
+    (nền đang giữ — không báo lại khi giá đã lình xình quanh/dưới nền). Lấy nền cao nhất."""
+    recent = min([b['close'] for b in bars[-BASE_HELD:]] + [prev_close])
+    for b in base_levels(bars):
+        lim = b['price'] * (1 - BASE_BREAK_PCT / 100)
+        if price < lim <= recent:
+            return b
+    return None
+
+
 def _fraction(weight):
     """Không còn đề xuất tỷ lệ cụ thể (để khách tự chọn) — giữ hàm cho tương thích."""
     return CHOICE
@@ -289,6 +358,7 @@ def detect_eod(ticker, bars, pos=None, manual=None, intraday=False):
       TOP_SELL         Bán lớn ở đỉnh: KL >= 2x TB20 + giảm mạnh / râu trên dài, ngay tại vùng đỉnh
       FAILED_BREAKOUT  Vượt đỉnh cũ rồi thất bại: đã đóng cửa trên đỉnh cũ trong 10 phiên, nay rơi lại dưới
       NEAR_PEAK        Về vùng đỉnh cũ: cân nhắc chốt lời từng phần
+    BASE_BREAK       Thủng nền giá: đóng cửa dưới vùng giá đã nhiều lần về rồi bật lên trong 1 năm
     Rủi ro: BREAKDOWN (thủng hỗ trợ), SHARP_DROP (giảm >= 5%). Tích cực: BREAKOUT (vượt cản có KL).
     Mốc admin nhập tay: NEAR_RESIST (áp sát mốc theo dõi).
     Không đề xuất tỷ lệ bán cụ thể — khách tự chọn.
@@ -358,8 +428,21 @@ def detect_eod(ticker, bars, pos=None, manual=None, intraday=False):
                 short=f"<b>{ticker}</b> {fp(c)} — vượt đỉnh cũ {fp(P)} thất bại: tín hiệu bán")
             break
 
+    # 3a) THỦNG NỀN GIÁ (vùng nhiều lần về rồi bật lên trong 1 năm)
+    bb = base_break(hist, c, pc) if not has('FAILED_BREAKOUT') else None
+    if bb:
+        nxt = nearest(key, c, above=False)
+        strong = vr is not None and vr >= VOL_BREAKOUT
+        add('BASE_BREAK', f"BASE_BREAK:{round(bb['price'], -2)}", bb['price'],
+            f"{head_px} — <b>đóng cửa thủng {_base_txt(bb)}</b>{vol_txt}" + (" — xác nhận bằng khối lượng" if strong else ""),
+            ["Tín hiệu hạ tỷ trọng (" + CHOICE + ")" + (" — vị thế đang lỗ, ưu tiên bảo vệ phần vốn còn lại" if pl is not None and pl < 0 else ""),
+             liq,
+             f"Rút chân lấy lại {fp(bb['price'])} trong 1–2 phiên (rũ bỏ) → tạm dừng bán, đánh giá lại",
+             f"Hỗ trợ tiếp theo: {_lvl_txt(nxt)}" if nxt else "Không còn vùng hỗ trợ nào trong 1 năm — rủi ro giảm sâu cao hơn"],
+            short=f"<b>{ticker}</b> {fp(c)} — thủng nền giá {fp(bb['price'])}: tín hiệu hạ tỷ trọng")
+
     # 3) THỦNG HỖ TRỢ
-    broke = sup_prev and pc >= sup_prev['price'] * (1 - BREAK_PCT / 100) and c <= sup_prev['price'] * (1 - BREAK_PCT / 100)
+    broke = not bb and sup_prev and pc >= sup_prev['price'] * (1 - BREAK_PCT / 100) and c <= sup_prev['price'] * (1 - BREAK_PCT / 100)
     if broke and not has('FAILED_BREAKOUT'):
         nxt = nearest(key, c, above=False)
         strong = vr is not None and vr >= VOL_BREAKOUT
@@ -372,7 +455,7 @@ def detect_eod(ticker, bars, pos=None, manual=None, intraday=False):
             short=f"<b>{ticker}</b> {fp(c)} — thủng hỗ trợ {_zone_txt(sup_prev)}: cân nhắc giảm tỷ trọng")
 
     # 4) GIẢM MẠNH (khi chưa có tín hiệu nặng hơn)
-    if chg <= -SHARP_PCT and not has('TOP_SELL', 'FAILED_BREAKOUT', 'BREAKDOWN'):
+    if chg <= -SHARP_PCT and not has('TOP_SELL', 'FAILED_BREAKOUT', 'BREAKDOWN', 'BASE_BREAK'):
         add('SHARP_DROP', 'SHARP_DROP', None, f"{head_px} giảm mạnh trong phiên{vol_txt}",
             [f"Giữ bình tĩnh, chưa bán đuổi; mốc cần giữ: {_lvl_txt(sup)}" if sup else "Theo dõi phiên tới trước khi quyết định",
              f"Đóng cửa dưới {fp(sup['price'] * (1 - BREAK_PCT / 100))} → cân nhắc giảm tỷ trọng" if sup else None])
@@ -390,7 +473,7 @@ def detect_eod(ticker, bars, pos=None, manual=None, intraday=False):
             short=f"<b>{ticker}</b> {fp(c)} — vượt cản {_zone_txt(res_prev)}: giữ, dời điểm dừng lên ~{fp(res_prev['lo'] * 0.97)}")
 
     # 6) VỀ VÙNG ĐỈNH CŨ → chốt lời từng phần
-    if not has('TOP_SELL', 'FAILED_BREAKOUT', 'BREAKDOWN', 'BREAKOUT') and chg > -SHARP_PCT:
+    if not has('TOP_SELL', 'FAILED_BREAKOUT', 'BREAKDOWN', 'BASE_BREAK', 'BREAKOUT') and chg > -SHARP_PCT:
         above = [p for p in peaks if p['price'] * (1 + PEAK_ZONE_PCT / 100) >= c]   # gồm cả lúc vừa nhú qua đỉnh <= 2%
         P = min(above, key=lambda p: p['price']) if above else None
         if P and (P['price'] - c) / P['price'] * 100 <= PEAK_NEAR_PCT:
@@ -448,6 +531,21 @@ def detect_intraday(ticker, bars, price, pos=None, manual=None):
     tmp = {'date': _date.today().isoformat(), 'open': pc, 'high': max(pc, price), 'low': min(pc, price),
            'close': price, 'volume': 0}
     up = detect_eod(ticker, bars + [tmp], pos, manual, intraday=True)[0] if chg > 0 else []
+    # Phía GIẢM: thủng nền giá ngay trong phiên → báo sớm, chờ xem cuối phiên có rút chân không
+    bb = base_break(bars, price, pc) if chg < 0 else None
+    if bb:
+        pl = (pos or {}).get('pl_pct')
+        nxt = nearest(key_levels(find_levels(bars, manual)), price, above=False)
+        return [{'type': 'BASE_BREAK', 'ticker': ticker, 'key': f"BASE_BREAK_I:{round(bb['price'], -2)}", 'level': bb['price'],
+                 'price': price, 'chg': chg,
+                 'headline': f"<b>{ticker}</b> {fp(price)} ({fpct(chg)}) — <b>thủng {_base_txt(bb)}</b> <i>(trong phiên, giá tạm tính)</i>",
+                 'context': _ctx(pos),
+                 'actions': [a for a in [f"Cuối phiên không rút chân (đóng cửa dưới {fp(bb['price'])}) → điểm hạ tỷ trọng ({CHOICE})"
+                             + (" — vị thế đang lỗ, ưu tiên bảo vệ vốn" if pl is not None and pl < 0 else ""),
+                             f"Rút chân đóng cửa lại trên {fp(bb['price'])} → nền giá vẫn giữ, chưa cần bán",
+                             _liquidity_note(pos, avg_volume(bars, exclude_last=False)),
+                             f"Hỗ trợ tiếp theo: {_lvl_txt(nxt)}" if nxt else None] if a],
+                 'short': f"<b>{ticker}</b> {fp(price)} — thủng nền giá {fp(bb['price'])} trong phiên: cuối phiên không rút chân → hạ tỷ trọng"}]
     if chg > -SHARP_PCT and not broke:
         return up
     what = f"giảm {fpct(abs(chg), sign=False)} so với hôm qua" + (f", xuyên hỗ trợ {_lvl_txt(sup)}" if broke else "")
