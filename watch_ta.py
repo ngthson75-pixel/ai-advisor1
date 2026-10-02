@@ -118,7 +118,7 @@ def find_levels(bars, manual=None):
         elif kinds == {'L'}:
             label = f"đáy tháng {_month(last['date'])}"
         else:
-            label = f"vùng đỉnh/đáy cũ (tháng {_month(last['date'])})"
+            label = f"vùng đỉnh/đáy cũ tháng {_month(last['date'])}"
         levels.append({'price': sum(prices) / len(prices), 'lo': min(prices), 'hi': max(prices),
                        'touches': len(g), 'label': label, 'source': 'pivot'})
     closes = [b['close'] for b in bars]
@@ -240,9 +240,10 @@ def detect_eod(ticker, bars, pos=None, manual=None):
     vol_txt = f", KL gấp {str(round(vr, 1)).replace('.', ',')} lần TB20" if vr and vr >= 1.3 else ''
     head_px = f"<b>{ticker}</b> {fp(c)} ({fpct(chg)})"
 
-    def add(t, key, level, headline, actions):
+    def add(t, key, level, headline, actions, short=None):
         ev.append({'type': t, 'ticker': ticker, 'key': key, 'level': level, 'price': c, 'chg': chg,
-                   'headline': headline, 'context': ctx, 'actions': [a for a in actions if a]})
+                   'headline': headline, 'context': ctx, 'actions': [a for a in actions if a],
+                   'short': short or headline})
 
     # 1) THỦNG HỖ TRỢ
     broke = sup_prev and pc >= sup_prev['price'] * (1 - BREAK_PCT / 100) and c <= sup_prev['price'] * (1 - BREAK_PCT / 100)
@@ -254,7 +255,8 @@ def detect_eod(ticker, bars, pos=None, manual=None):
             [f"Cân nhắc giảm {frac} vị thế" + (" (vị thế đang lỗ — ưu tiên bảo vệ phần vốn còn lại)" if pl is not None and pl < 0 else ""),
              _liquidity_note(pos, av, frac),
              f"Hồi lại trên {fp(sup_prev['price'])} → tạm dừng bán, đánh giá lại",
-             f"Hỗ trợ tiếp theo: {_lvl_txt(nxt)}" if nxt else "Không còn vùng hỗ trợ nào trong 1 năm — rủi ro giảm sâu cao hơn"])
+             f"Hỗ trợ tiếp theo: {_lvl_txt(nxt)}" if nxt else "Không còn vùng hỗ trợ nào trong 1 năm — rủi ro giảm sâu cao hơn"],
+            short=f"<b>{ticker}</b> {fp(c)} — thủng hỗ trợ {_zone_txt(sup_prev)}: cân nhắc giảm {frac}")
 
     # 2) BÁN ĐỘT BIẾN
     rng = today['high'] - today['low']
@@ -283,7 +285,8 @@ def detect_eod(ticker, bars, pos=None, manual=None):
             f"{head_px} vượt cản {_lvl_txt(res_prev)}{vol_txt}",
             ["Giữ vị thế — xu hướng đang được xác nhận",
              f"Dời điểm dừng lên ~{fp(res_prev['lo'] * 0.97)} (ngay dưới vùng cản vừa vượt)",
-             f"Cản tiếp theo: {_lvl_txt(nxt)}" if nxt else "Không còn cản lớn trong 1 năm — để lãi chạy, dời điểm dừng theo MA20"])
+             f"Cản tiếp theo: {_lvl_txt(nxt)}" if nxt else "Không còn cản lớn trong 1 năm — để lãi chạy, dời điểm dừng theo MA20"],
+            short=f"<b>{ticker}</b> {fp(c)} — vượt cản {_zone_txt(res_prev)}: giữ, dời điểm dừng lên ~{fp(res_prev['lo'] * 0.97)}")
 
     # 5) VÙNG ĐỈNH CŨ / VÙNG CẢN
     if not any(e['type'] in ('BREAKOUT', 'BREAKDOWN') for e in ev) and chg > -SHARP_PCT:
@@ -305,13 +308,16 @@ def detect_eod(ticker, bars, pos=None, manual=None):
                   f"Vùng đỉnh cũ là cơ hội giảm tỷ trọng: cân nhắc bán bớt {frac} nếu không vượt"),
                  f"Vượt {fp(peak['price'] * (1 + BREAK_PCT / 100))} với KL lớn → giữ, dời điểm dừng lên ~{fp(peak['price'] * 0.95)}"])
         elif touched or near:
+            inside = c >= res['lo']                       # giá đã nằm TRONG vùng cản
+            gate = res['hi'] if inside else res['lo']
+            what = ("đang ở trong vùng cản " if inside else "chạm cản " if touched else "áp sát vùng cản ")
             add('NEAR_RESIST', f"NEAR_RESIST:{round(res['price'], -2)}", res['price'],
-                f"{head_px} " + ("chạm cản " if touched else "áp sát vùng cản ") + _lvl_txt(res)
-                + (" rồi bị đẩy xuống" if touched else "") + vol_txt,
-                [(f"Không vượt được {fp(res['lo'])} trong 2–3 phiên → cân nhắc bán bớt {frac}"
+                f"{head_px} " + what + _lvl_txt(res) + (" rồi bị đẩy xuống" if touched and not inside else "") + vol_txt,
+                [(f"Không vượt được {fp(gate)} trong 2–3 phiên → cân nhắc bán bớt {frac}"
                   if pl is None or pl >= 0 else
-                  f"Đang lỗ: nhịp hồi lên cản là cơ hội giảm tỷ trọng — cân nhắc bán bớt {frac} nếu không vượt"),
-                 f"Vượt {fp(res['hi'] * (1 + BREAK_PCT / 100))} với KL lớn → giữ, dời điểm dừng lên ~{fp(res['lo'] * 0.95)}"])
+                  f"Đang lỗ: nhịp hồi lên cản là cơ hội giảm tỷ trọng — cân nhắc bán bớt {frac} nếu không vượt {fp(gate)}"),
+                 f"Vượt {fp(res['hi'] * (1 + BREAK_PCT / 100))} với KL lớn → giữ, dời điểm dừng lên ~{fp(res['lo'] * 0.95)}"],
+                short=f"<b>{ticker}</b> {fp(c)} — sát cản {_zone_txt(res)}: không vượt thì cân nhắc bán bớt {frac}")
 
     info = {'close': c, 'chg': round(chg, 2), 'vol_ratio': round(vr, 2) if vr else None,
             'resistance': res, 'support': sup, 'peak': peak, 'levels': levels}

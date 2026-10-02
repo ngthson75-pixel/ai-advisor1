@@ -320,8 +320,13 @@ def evaluate_user(session, user, prices, market, today=None, scope='eod'):
     for l in lines:
         l['weight'] = l['value'] / total_assets * 100 if total_assets > 0 else 0
 
+    weights = {l['ticker']: l['weight'] for l in lines}
+    pls = {l['ticker']: l['pl_pct'] for l in lines}
+
     def push(ev):
         """Áp dụng chống lặp; ghi lại mốc đã báo."""
+        ev.setdefault('weight', weights.get(ev['ticker'], 0))
+        ev.setdefault('pl_pct', pls.get(ev['ticker']))
         cd = TYPE_COOLDOWN.get(ev['type'], COOLDOWN_DAYS)
         if _cooled(astate, ev['ticker'], ev['key'], today, cd):
             return
@@ -418,13 +423,15 @@ def evaluate_user(session, user, prices, market, today=None, scope='eod'):
             marks.append({'user_id': uid, 'ticker': PORTFOLIO_ROW, 'ekey': 'MARKET_ALLOC',
                           'last_date': today.isoformat(), 'value': alloc})
 
-    events.sort(key=lambda e: ta.SEVERITY.get(e['type'], 9))
+    # Quan trọng trước: mức độ biến cố, rồi mã có tỷ trọng lớn
+    events.sort(key=lambda e: (ta.SEVERITY.get(e['type'], 9), -(e.get('weight') or 0)))
     stock_pct = (total_value / total_assets * 100) if total_assets > 0 else 0.0
     return {
         'user': uid, 'name': user.get('full_name') or uid, 'scope': scope,
         'baseline': not any(k != PORTFOLIO_ROW for k in state),
         'stale_prices': stale, 'events': events, 'warnings': warnings,
         'new_state': new_state, 'marks': marks,
+        'holdings': [{'ticker': l['ticker'], 'weight': l['weight'], 'pl_pct': l['pl_pct']} for l in lines],
         'summary': {'holdings': len(lines), 'stock_pct': round(stock_pct, 1),
                     'market_mode': (market or {}).get('market_mode'), 'allocation': (market or {}).get('allocation')},
     }
@@ -434,8 +441,36 @@ def evaluate_user(session, user, prices, market, today=None, scope='eod'):
 # BẢN TIN
 # ============================================================
 
+MAX_DETAIL = 5                       # số biến cố viết chi tiết; phần còn lại 1 dòng/mã (không giấu mã nào)
+SELL_SIDE = ('BREAKDOWN', 'SELL_VOLUME', 'SHARP_DROP', 'NEAR_PEAK', 'NEAR_RESIST', 'GIVEBACK', 'SYSTEM_SELL', 'INTRADAY')
+
+
+def risk_overview(result, market):
+    """Rủi ro tổng thể: tỷ trọng cổ phiếu đang giữ so với khuyến nghị Market Dashboard.
+    Trả (dòng tiêu đề, dòng gợi ý) — dòng gợi ý None nếu tỷ trọng đã phù hợp."""
+    if not market or market.get('allocation') is None:
+        return None, None
+    alloc = float(market['allocation'])
+    sp = result['summary']['stock_pct']
+    label = str(market.get('mode_label') or market.get('market_mode'))
+    head = (f"Thị trường {label} · khuyến nghị {alloc:.0f}% cổ phiếu · danh mục đang {ta.fpct(sp, sign=False)}")
+    if sp <= alloc + 10:
+        return head, None
+    # ưu tiên giảm: mã đang có tín hiệu xấu / chạm cản, tỷ trọng lớn trước
+    seen, pri = set(), []
+    for e in sorted([e for e in result['events'] if e['type'] in SELL_SIDE and e['ticker'] != PORTFOLIO_ROW],
+                    key=lambda e: -(e.get('weight') or 0)):
+        if e['ticker'] not in seen:
+            seen.add(e['ticker']); pri.append(e['ticker'])
+    if not pri:
+        pri = [h['ticker'] for h in sorted(result.get('holdings') or [], key=lambda h: h['pl_pct'])]
+    tip = (f"Tỷ trọng cổ phiếu cao hơn khuyến nghị {sp - alloc:.0f} điểm % → cân nhắc hạ dần, "
+           f"ưu tiên các mã đang chạm cản / có tín hiệu xấu: {', '.join(pri[:3])}")
+    return head, tip
+
+
 def build_message(result, market, today=None):
-    """Telegram (HTML)."""
+    """Telegram (HTML). Thứ tự: rủi ro tổng thể → tối đa 5 điểm chi tiết → các điểm còn lại 1 dòng/mã."""
     events = result['events']
     if not events:
         return None
@@ -444,20 +479,30 @@ def build_message(result, market, today=None):
     out = [f"{'⚡' if intraday else '🛡️'} <b>AI Advisor · Giám sát danh mục</b> — {today.strftime('%d/%m')}"
            + (" (trong phiên)" if intraday else ""),
            f"Chào anh/chị {html.escape(str(result['name']))},"]
-    if market and not intraday:
-        emoji = {'BULL': '🟢', 'BEAR': '🔴'}.get(market.get('market_mode'), '🟡')
-        out.append(f"{emoji} Thị trường: {html.escape(str(market.get('mode_label') or market.get('market_mode')))} · "
-                   f"khuyến nghị cổ phiếu {market.get('allocation')}% · danh mục đang "
-                   f"{ta.fpct(result['summary']['stock_pct'], sign=False)}")
-    for e in events[:MAX_EVENTS_PER_MSG]:
+    if not intraday:
+        head, tip = risk_overview(result, market)
+        if head:
+            emoji = {'BULL': '🟢', 'BEAR': '🔴'}.get((market or {}).get('market_mode'), '🔴' if tip else '🟡')
+            out.append("")
+            out.append(f"{'⚖️ <b>Rủi ro tổng thể</b>' if tip else emoji + ' Thị trường'}: {html.escape(head)}")
+            if tip:
+                out.append(f"▸ {html.escape(tip)}")
+    detail, rest = events[:MAX_DETAIL], events[MAX_DETAIL:]
+    if detail:
+        out.append("")
+        out.append(f"<b>Cần chú ý ({len(events)})</b>" if rest else "<b>Cần chú ý</b>")
+    for e in detail:
         out.append("")
         out.append(f"{ta.EMOJI.get(e['type'], '•')} {e['headline']}")
         if e.get('context'):
             out.append(f"<i>{html.escape(e['context'])}</i>")
         for a in e['actions']:
             out.append(f"▸ {html.escape(a)}")
-    if len(events) > MAX_EVENTS_PER_MSG:
-        out.append(f"\n… và {len(events) - MAX_EVENTS_PER_MSG} điểm khác trên VIP Dashboard")
+    if rest:
+        out.append("")
+        out.append("<b>Theo dõi thêm</b>")
+        for e in rest:
+            out.append(f"{ta.EMOJI.get(e['type'], '•')} {e.get('short') or e['headline']}")
     out.append("")
     out.append(f"👉 <a href=\"{DASHBOARD_URL}\">VIP Dashboard</a> · hỏi AI Advisor trước khi đặt lệnh")
     out.append(f"<i>{DISCLAIMER}</i>")
@@ -466,17 +511,25 @@ def build_message(result, market, today=None):
 
 
 def build_email(result, market, today=None):
-    """(subject, html) cho email. None nếu không có biến cố."""
+    """(subject, html) cho email. None nếu không có biến cố. Cùng cấu trúc với bản Telegram."""
     events = result['events']
     if not events:
         return None
     today = today or date.today()
     tickers = list(dict.fromkeys(e['ticker'] for e in events if e['ticker'] != PORTFOLIO_ROW))
     subject = (f"AI Advisor · Giám sát danh mục {today.strftime('%d/%m')}: "
-               f"{len(events)} điểm cần chú ý" + (f" ({', '.join(tickers[:4])})" if tickers else ""))
+               f"{len(events)} điểm cần chú ý" + (f" ({', '.join(tickers[:4])}{'…' if len(tickers) > 4 else ''})" if tickers else ""))
     color = {1: '#b91c1c', 2: '#c2410c', 3: '#b45309', 4: '#b45309', 5: '#15803d'}
+    head, tip = risk_overview(result, market)
+    risk = ''
+    if head:
+        risk = (f"<div style='background:{'#fef2f2' if tip else '#f8fafc'};border:1px solid {'#fca5a5' if tip else '#e2e8f0'};"
+                f"border-radius:6px;padding:12px 14px;margin:0 0 16px'>"
+                f"<div style='font-size:14px;color:#0f172a'>{'⚖️ <b>Rủi ro tổng thể:</b> ' if tip else 'Thị trường: '}{html.escape(head)}</div>"
+                + (f"<div style='font-size:14px;color:#b91c1c;margin-top:6px'>▸ {html.escape(tip)}</div>" if tip else '')
+                + "</div>")
     blocks = []
-    for e in events[:MAX_EVENTS_PER_MSG]:
+    for e in events[:MAX_DETAIL]:
         c = color.get(ta.SEVERITY.get(e['type'], 4), '#334155')
         acts = ''.join(f"<li style='margin:2px 0'>{html.escape(a)}</li>" for a in e['actions'])
         blocks.append(
@@ -484,10 +537,12 @@ def build_email(result, market, today=None):
             f"<div style='font-size:15px;color:#0f172a'>{ta.EMOJI.get(e['type'], '')} {e['headline']}</div>"
             + (f"<div style='font-size:13px;color:#64748b;margin-top:4px'>{html.escape(e['context'])}</div>" if e.get('context') else '')
             + f"<ul style='margin:8px 0 0;padding-left:18px;font-size:14px;color:#334155'>{acts}</ul></div>")
-    mk = ''
-    if market:
-        mk = (f"<p style='font-size:13px;color:#475569;margin:0 0 14px'>Thị trường: <b>{html.escape(str(market.get('mode_label') or market.get('market_mode')))}</b>"
-              f" · khuyến nghị cổ phiếu {market.get('allocation')}% · danh mục đang {ta.fpct(result['summary']['stock_pct'], sign=False)}</p>")
+    rest = events[MAX_DETAIL:]
+    more = ''
+    if rest:
+        more = ("<div style='font-size:14px;font-weight:700;color:#0f172a;margin:16px 0 6px'>Theo dõi thêm</div>"
+                + ''.join(f"<div style='font-size:14px;color:#334155;padding:4px 0;border-bottom:1px solid #f1f5f9'>"
+                          f"{ta.EMOJI.get(e['type'], '•')} {e.get('short') or e['headline']}</div>" for e in rest))
     body = f"""
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;background:#ffffff">
       <div style="background:#0d2b5e;padding:18px 22px;border-top:4px solid #e8a020">
@@ -496,7 +551,7 @@ def build_email(result, market, today=None):
       </div>
       <div style="padding:20px 22px">
         <p style="font-size:14px;color:#334155">Chào anh/chị <b>{html.escape(str(result['name']))}</b>,</p>
-        {mk}{''.join(blocks)}
+        {risk}{''.join(blocks)}{more}
         <div style="text-align:center;margin:18px 0">
           <a href="{DASHBOARD_URL}" style="background:#0d2b5e;color:#fff;padding:11px 22px;border-radius:6px;text-decoration:none;font-weight:700;font-size:14px">Mở VIP Dashboard</a>
         </div>
