@@ -4,6 +4,7 @@
 AI ADVISOR - PRICE HISTORY (nến ngày) cho Giám sát danh mục VIP
 ================================================================
 File: update_price_history.py
+Version: 1.1 (2026-10-03) — nghỉ 3,5s/mã, bắt sys.exit khi bị giới hạn, thử lại mã lỗi, báo đỏ khi còn mã thiếu
 Version: 1.0 (2026-10-01)
 
 Chạy trên GitHub Actions lúc 16:00 (sau update_eod_prices.py). Ghi bảng price_history
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 DRY_RUN = '--dry-run' in sys.argv
 ONLY = [a.upper() for a in sys.argv[1:] if not a.startswith('--')]
 HISTORY_DAYS = int(os.getenv('HISTORY_DAYS', '400'))
-PAUSE = float(os.getenv('HISTORY_PAUSE', '1.5'))
+PAUSE = float(os.getenv('HISTORY_PAUSE', '3.5'))   # ~17 lượt/phút: dưới giới hạn ~20/phút của vnstock gói miễn phí
 
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///signals.db')
 if DATABASE_URL.startswith('postgresql://'):
@@ -126,9 +127,9 @@ def fetch(ticker, start, end):
                              'c': cl,
                              'v': float(r[cols['volume']]) if 'volume' in cols and r[cols['volume']] == r[cols['volume']] else 0.0})
             return rows, source
-        except Exception as e:
-            if _is_rate_limit(e):
-                raise
+        except (Exception, SystemExit) as e:          # vnstock có thể gọi sys.exit khi bị giới hạn tần suất
+            if _is_rate_limit(e) or isinstance(e, SystemExit):
+                raise RuntimeError(f'rate limit: {e}')
             last_err = e
     if last_err:
         logger.warning(f"   {ticker}: {str(last_err)[:120]}")
@@ -175,36 +176,47 @@ def main():
     logger.info(f"🚀 Price history | {len(tickers)} mã | {'DRY-RUN' if DRY_RUN else 'GHI DB'} | {', '.join(tickers)}")
 
     ok, failed, total_rows, latest = 0, [], 0, {}
-    for i, t in enumerate(tickers):
+
+    def one(t):
         start = ((datetime.strptime(have[t], '%Y-%m-%d') - timedelta(days=5)).strftime('%Y-%m-%d')
                  if have.get(t) else (datetime.now() - timedelta(days=HISTORY_DAYS)).strftime('%Y-%m-%d'))
-        rows = []
-        for attempt in range(3):
+        for attempt in range(2):
             try:
-                rows, src = fetch(t, start, end)
-                break
-            except Exception:
-                logger.warning(f"   ⏳ Rate limit ({t}), chờ {45 * (attempt + 1)}s")
-                time.sleep(45 * (attempt + 1))
-        if rows:
-            ok += 1
-            total_rows += len(rows)
-            latest[t] = (rows[-1]['d'], rows[-1]['c'])
-            if DRY_RUN:
-                logger.info(f"   {t}: {len(rows)} nến, cuối {rows[-1]['d']} close {rows[-1]['c']:,.0f} vol {rows[-1]['v']:,.0f}")
+                return fetch(t, start, end)[0]
+            except Exception as e:
+                logger.warning(f"   ⏳ {t}: {str(e)[:80]} — chờ {30 * (attempt + 1)}s")
+                time.sleep(30 * (attempt + 1))
+        return []
+
+    queue = list(tickers)
+    for rnd in (1, 2):                     # vòng 2: thử lại các mã lỗi sau khi nghỉ 60s
+        failed = []
+        for i, t in enumerate(queue):
+            rows = one(t)
+            if rows:
+                ok += 1
+                total_rows += len(rows)
+                latest[t] = (rows[-1]['d'], rows[-1]['c'])
+                if DRY_RUN:
+                    logger.info(f"   {t}: {len(rows)} nến, cuối {rows[-1]['d']} close {rows[-1]['c']:,.0f} vol {rows[-1]['v']:,.0f}")
+                else:
+                    upsert(engine, rows)
             else:
-                upsert(engine, rows)
-        else:
-            failed.append(t)
-        time.sleep(PAUSE)
-        if (i + 1) % 20 == 0:
-            logger.info(f"   … {i + 1}/{len(tickers)}")
+                failed.append(t)
+            time.sleep(PAUSE)
+            if (i + 1) % 20 == 0:
+                logger.info(f"   … {i + 1}/{len(queue)}")
+        if not failed or rnd == 2:
+            break
+        logger.warning(f"   🔁 Thử lại {len(failed)} mã lỗi sau 60s: {', '.join(failed)}")
+        time.sleep(60)
+        queue = failed
 
     added = 0 if DRY_RUN else fill_eod(engine, latest)
     logger.info(f"✅ Xong {ok}/{len(tickers)} mã, {total_rows} nến, thêm {added} mã vào eod_prices | "
                 f"lỗi: {', '.join(failed) or 'không'} | {(datetime.now() - t0).total_seconds():.0f}s")
-    if tickers and ok == 0:
-        sys.exit(1)
+    if failed:
+        sys.exit(1)                        # bước Actions báo đỏ để admin biết còn mã thiếu nến
 
 
 if __name__ == '__main__':

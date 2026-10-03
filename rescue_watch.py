@@ -2,6 +2,7 @@
 AI ADVISOR - RESCUE WATCH v2 · GIÁM SÁT DANH MỤC VIP (Telegram + Email)
 =======================================================================
 File: rescue_watch.py
+Version: 2.4c (2026-10-03) — job nến thiếu phiên cuối: dựng nến tạm từ giá đóng cửa thay vì bỏ qua mã
 Version: 2.4 (2026-10-02) — cảnh báo THỦNG NỀN GIÁ trong phiên (chờ rút chân) và cuối ngày (xác nhận)
 Version: 2.3 (2026-10-02) — báo 'chạm đỉnh cũ' NGAY TRONG PHIÊN (giá hiện tại); không cảnh báo tăng nóng
 Version: 2.2c (2026-10-02) — tín hiệu bán theo đỉnh cũ, không gợi ý tỷ lệ, cảnh báo MỌI vị thế
@@ -377,7 +378,15 @@ def evaluate_user(session, user, prices, market, today=None, scope='eod'):
             continue
 
         bars = load_bars(session, t, until=today.isoformat())
-        if not bars or bars[-1]['date'] != l['tdate']:
+        d_px, d_bar = _parse_date(l['tdate']), _parse_date(bars[-1]['date']) if bars else None
+        if d_px and d_bar and d_bar < d_px and (d_px - d_bar).days <= 7:
+            # Job nến 16h lỗi/thiếu mã (VD bị giới hạn tần suất): dựng nến TẠM từ giá đóng cửa trong eod_prices
+            # để vẫn bắt được thủng nền / đỉnh cũ / thủng hỗ trợ; tín hiệu cần khối lượng tạm bỏ qua.
+            pc = bars[-1]['close']
+            bars = bars + [{'date': str(l['tdate'])[:10], 'open': pc, 'high': max(pc, l['price']), 'low': min(pc, l['price']),
+                            'close': l['price'], 'volume': 0.0}]
+            warnings.append(f"{t}: lịch sử nến thiếu phiên {l['tdate']} — dùng nến tạm từ giá đóng cửa (chưa có khối lượng)")
+        if not bars or bars[-1]['date'] != str(l['tdate'])[:10]:
             warnings.append(f"{t}: lịch sử nến chưa có phiên {l['tdate']} — bỏ qua phân tích kỹ thuật hôm nay")
         else:
             evs, info = ta.detect_eod(t, bars, pos, manual)
