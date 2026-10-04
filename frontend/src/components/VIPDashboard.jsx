@@ -317,7 +317,9 @@ function SignalCard({ signal }) {
 
 // ─── Signals Tab ─────────────────────────────────────────────
 function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysChange }) {
-  const [filter, setFilter] = useState('vn30')
+  // BUG8 FIX (2026-10-04): đổi default 'vn30' → 'buy'
+  // Khi không có tín hiệu VN30, tab mặc định hiện rỗng. Fix: luôn mở tab "Tất cả MUA".
+  const [filter, setFilter] = useState('buy')
 
   // isOpen: chỉ hiện signal đang mở hoặc bán 1 phần
   const isOpen  = s => !s.status || s.status === 'open' || s.status === 'partial'
