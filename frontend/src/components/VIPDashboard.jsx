@@ -11,6 +11,10 @@
  *          → Fix: detect hostname production → hardcode production backend URL
  * v2.5 (2026-10-01):
  *   ~ TelegramBadge: badge tĩnh → công tắc Giám sát danh mục (bật/tắt + kênh Telegram/Email).
+ * FIXES (2026-10-05):
+ *   BUG9 - VN30 signal cards hiển thị "—" cho ngày mở lệnh
+ *          → Root cause: SignalCard đọc created_at || entry_date nhưng scanner lưu field 'date'
+ *          → Fix: thêm || signal.date làm fallback cuối trong SignalCard date display
  * v2.4 (2026-09-27):
  *   + ModelPortfolioCard — "Lướt sóng AI" danh mục mẫu 1 tỷ (mô phỏng), đặt DƯỚI ô chat.
  *   + CollapsibleSection — khung IIS thu gọn / mở rộng (mặc định thu gọn, nhớ theo trình duyệt).
@@ -239,7 +243,8 @@ function SignalCard({ signal }) {
           )}
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ color: C.muted, fontSize: '11px' }}>{fmtDate(signal.created_at || signal.entry_date)}</div>
+          {/* BUG9 FIX: thêm || signal.date — scanner lưu field 'date', không phải created_at/entry_date */}
+          <div style={{ color: C.muted, fontSize: '11px' }}>{fmtDate(signal.created_at || signal.entry_date || signal.date)}</div>
           {signal.status && <span style={badge(signal.status === 'open' ? C.green : signal.status === 'closed' ? C.muted : C.yellow)}>
             {signal.status === 'open' ? 'Đang mở' : signal.status === 'closed' ? 'Đã đóng' : signal.status}
           </span>}
