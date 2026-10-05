@@ -328,33 +328,27 @@ function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysCh
   const getDate = s => s.created_at || s.entry_date || s.signal_date || s.date || ''
   const sortDesc = arr => [...arr].sort((a, b) => getDate(b).localeCompare(getDate(a)))
 
-  // BUG9 FIX (2026-10-05): Ẩn signals không có ngày khi filter theo ngày
-  // Signals cũ (trước khi scanner chạy đúng) có created_at=null → hiện như "tín hiệu mới"
-  // → Nếu days < 999, bắt buộc phải có ngày VÀ ngày đó phải trong khoảng
-  const hasRecentDate = s => {
-    const dateStr = getDate(s)
-    if (!dateStr) return days === 999  // không có ngày: chỉ hiện khi chọn "Tất cả"
-    const d = new Date(dateStr)
-    if (isNaN(d.getTime())) return days === 999
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - (days === 999 ? 36500 : days))
-    return d >= cutoff
-  }
+  // BUG9 REVERT (2026-10-05): Đã xác định root cause thực sự:
+  // - Daily Scanner lỗi từ 25/09 → không có signal mới → mọi signal đều không có ngày
+  // - hasRecentDate() sai: ẩn hết signals → màn hình trắng
+  // FIX ĐÚNG: Luôn hiển thị tất cả signal đang mở (isOpen), dùng badge "(cũ)" để phân biệt
+  // KHÔNG lọc theo ngày — tín hiệu cũ nhưng status=open vẫn là vị thế đang mở thật sự
+  const isOldSignal = s => !getDate(s)  // không có ngày = signal cũ, đánh dấu bằng badge
 
-  // Tab VN30: chỉ VN30 đang mở, có ngày hợp lệ, mới nhất lên trên
+  // Tab VN30: chỉ VN30 đang mở, mới nhất lên trên (cũ không có ngày xuống dưới)
   const vn30Buy = sortDesc(signals.filter(s =>
-    isVN30s(s) && (s.action || 'BUY') === 'BUY' && isOpen(s) && hasRecentDate(s)
+    isVN30s(s) && (s.action || 'BUY') === 'BUY' && isOpen(s)
   ))
 
-  // Tab Tất cả MUA: VN30 + non-VN30 score >= 80%, đang mở, có ngày hợp lệ
+  // Tab Tất cả MUA: VN30 + non-VN30 score >= 80%, đang mở
   const allBuy  = sortDesc(signals.filter(s =>
-    (s.action || 'BUY') === 'BUY' && isOpen(s) && hasRecentDate(s) &&
+    (s.action || 'BUY') === 'BUY' && isOpen(s) &&
     (isVN30s(s) || (s.strength || s.confidence || 0) >= 80)
   ))
 
-  // Tab BÁN: VN30 only
+  // Tab BÁN: VN30 only, đang mở
   const allSell = sortDesc(signals.filter(s =>
-    s.action === 'SELL' && isVN30s(s) && hasRecentDate(s)
+    s.action === 'SELL' && isVN30s(s)
   ))
 
   // BUG8 v2: nếu tab vn30 rỗng nhưng có allBuy → tự chuyển sang 'buy'
@@ -367,7 +361,7 @@ function VIPSignalsTab({ signals, loading, fetchError, onRefresh, days, onDaysCh
   const filtered = filter === 'vn30' ? vn30Buy
                  : filter === 'buy'  ? allBuy
                  : filter === 'sell' ? allSell
-                 : sortDesc(signals.filter(hasRecentDate))
+                 : sortDesc(signals.filter(isOpen))
 
   // BUG5 FIX: Hiển thị label date filter rõ ràng
   const dayLabel = days === 999 ? 'Tất cả' : `${days} ngày gần nhất`
