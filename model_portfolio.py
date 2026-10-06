@@ -2,6 +2,7 @@
 AI ADVISOR - LƯỚT SÓNG AI MODEL PORTFOLIO (danh mục mẫu VIP)
 =============================================================
 File: model_portfolio.py
+Version: 1.4 (2026-10-06) — đếm số phiên nắm giữ theo lịch giao dịch (không phụ thuộc bảng NAV)
 Version: 1.3 (2026-09-27) — nhãn [Thủ công] chỉ hiện cho admin, API khách chỉ trả lý do
 Version: 1.2 (2026-09-27) — can thiệp thủ công, bật/tắt tự động, hủy giao dịch, loại mã (quản lý qua signal_reviewer.py mục 23)
 
@@ -48,7 +49,8 @@ import os
 import hmac
 import html
 import logging
-from datetime import datetime, date
+import json
+from datetime import datetime, date, timedelta
 from functools import wraps
 
 from flask import request, jsonify
@@ -208,11 +210,44 @@ def _open_positions(s):
     return _rows(s, "SELECT * FROM mp_positions WHERE status = 'open' ORDER BY entry_date, id")
 
 
+_HOLIDAYS = None
+
+
+def _holidays():
+    """Ngày nghỉ lễ HOSE từ vietnam_holidays.json (cùng thư mục / thư mục chạy); thiếu file -> danh sách 2026 dựng sẵn."""
+    global _HOLIDAYS
+    if _HOLIDAYS is None:
+        days = {'2026-01-01', '2026-02-16', '2026-02-17', '2026-02-18', '2026-02-19', '2026-02-20',
+                '2026-04-30', '2026-05-01', '2026-09-02'}
+        for path in (os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vietnam_holidays.json'), 'vietnam_holidays.json'):
+            try:
+                with open(path, encoding='utf-8') as f:
+                    for lst in json.load(f).get('holidays', {}).values():
+                        days.update(str(d)[:10] for d in lst)
+                break
+            except Exception:
+                continue
+        _HOLIDAYS = days
+    return _HOLIDAYS
+
+
 def _sessions_held(s, entry_date, trade_date):
-    """Số phiên đã giữ = số ngày giao dịch có trong mp_nav sau ngày mua (+ hôm nay nếu chưa ghi)."""
-    n = _one(s, "SELECT COUNT(*) AS n FROM mp_nav WHERE trade_date > :e AND trade_date < :t",
-             e=entry_date, t=trade_date)['n']
-    return int(n) + (1 if trade_date > entry_date else 0)
+    """
+    Số phiên đã giữ = số NGÀY GIAO DỊCH (thứ 2–6, trừ lễ) sau ngày mua, tính đến hết trade_date.
+    v1.4: trước đây đếm theo bảng mp_nav -> ngày job lỗi không ghi NAV bị bỏ sót (HDB giữ 7 phiên chỉ hiện 4),
+    làm lệch quy tắc T+2 và bán sau 15 phiên.
+    """
+    try:
+        d0 = datetime.strptime(str(entry_date)[:10], '%Y-%m-%d').date()
+        d1 = datetime.strptime(str(trade_date)[:10], '%Y-%m-%d').date()
+    except Exception:
+        return 0
+    hol, n, d = _holidays(), 0, d0 + timedelta(days=1)
+    while d <= d1:
+        if d.weekday() < 5 and d.isoformat() not in hol:
+            n += 1
+        d += timedelta(days=1)
+    return n
 
 
 def _fmt(v):
