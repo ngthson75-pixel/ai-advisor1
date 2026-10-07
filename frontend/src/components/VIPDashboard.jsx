@@ -9,6 +9,9 @@
  * FIXES (2026-06-01):
  *   BUG6 - Production (ai-advisor.vn) fallback về localhost vì VITE_API_URL không set
  *          → Fix: detect hostname production → hardcode production backend URL
+ * FIXES (2026-10-07):
+ *   BUG10 - Giám sát danh mục không hiện: prefs.live undefined vì backend trả stage:'live' (string)
+ *           → Fix: check cả prefs.stage === 'live' tại TelegramBadge line 161
  * v2.5 (2026-10-01):
  *   ~ TelegramBadge: badge tĩnh → công tắc Giám sát danh mục (bật/tắt + kênh Telegram/Email).
  * FIXES (2026-10-05):
@@ -158,7 +161,7 @@ function TelegramBadge() {
   }
 
   // Chỉ hiện khi admin đã mở gửi thật cho khách này (giai đoạn thử nghiệm: khách chưa thấy tính năng)
-  if (!prefs || !prefs.live) return null
+  if (!prefs || !(prefs.live || prefs.stage === 'live')) return null
   const on  = prefs.enabled
   const col = on ? '#22c55e' : C.muted
   const CH  = [['both', 'Telegram + Email'], ['telegram', 'Chỉ Telegram'], ['email', 'Chỉ Email']]
