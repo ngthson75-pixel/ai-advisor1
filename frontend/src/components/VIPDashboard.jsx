@@ -10,8 +10,10 @@
  *   BUG6 - Production (ai-advisor.vn) fallback về localhost vì VITE_API_URL không set
  *          → Fix: detect hostname production → hardcode production backend URL
  * FIXES (2026-10-07):
- *   BUG10 - Giám sát danh mục không hiện: prefs.live undefined vì backend trả stage:'live' (string)
- *           → Fix: check cả prefs.stage === 'live' tại TelegramBadge line 161
+ *   BUG10 - Giám sát danh mục không hiện: prefs.live undefined vì backend trả stage:'live'
+ *           → Fix dòng 161: check cả prefs.stage === 'live'
+ *   BUG11 - Portfolio summary 3 cột bị tràn số trên mobile
+ *           → Fix: repeat(3,1fr) → repeat(auto-fit,minmax(130px,1fr)) + wordBreak:'break-all'
  * v2.5 (2026-10-01):
  *   ~ TelegramBadge: badge tĩnh → công tắc Giám sát danh mục (bật/tắt + kênh Telegram/Email).
  * FIXES (2026-10-05):
@@ -577,7 +579,7 @@ Hãy đánh giá rủi ro tổng thể của danh mục và đề xuất hướn
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: '10px', marginBottom: '16px' }}>
         {[
           { label: 'Tổng tài sản', val: fmt(totalValue) + ' đ', color: C.purpleLight },
           { label: 'Tiền mặt', val: fmt(cash) + ' đ', color: C.text },
@@ -585,7 +587,7 @@ Hãy đánh giá rủi ro tổng thể của danh mục và đề xuất hướn
         ].map(({ label, val, color }) => (
           <div key={label} style={{ ...card, marginBottom: 0, textAlign: 'center', padding: '14px' }}>
             <div style={{ fontSize: '11px', color: C.muted, marginBottom: '6px' }}>{label}</div>
-            <div style={{ fontSize: '15px', fontWeight: '700', color }}>{val}</div>
+            <div style={{ fontSize: '14px', fontWeight: '700', color, wordBreak: 'break-all' }}>{val}</div>
           </div>
         ))}
       </div>
