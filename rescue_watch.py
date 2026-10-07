@@ -2,6 +2,8 @@
 AI ADVISOR - RESCUE WATCH v2 · GIÁM SÁT DANH MỤC VIP (Telegram + Email)
 =======================================================================
 File: rescue_watch.py
+Version: 2.4e (2026-10-07) — POST /api/admin/rescue-watch/email-test: chẩn đoán kênh email
+Version: 2.4d (2026-10-07) — email: khách chỉ cần trả lời DỪNG để ngừng nhận tin
 Version: 2.4c (2026-10-03) — job nến thiếu phiên cuối: dựng nến tạm từ giá đóng cửa thay vì bỏ qua mã
 Version: 2.4 (2026-10-02) — cảnh báo THỦNG NỀN GIÁ trong phiên (chờ rút chân) và cuối ngày (xác nhận)
 Version: 2.3 (2026-10-02) — báo 'chạm đỉnh cũ' NGAY TRONG PHIÊN (giá hiện tại); không cảnh báo tăng nóng
@@ -600,7 +602,7 @@ def build_email(result, market, today=None):
           <a href="{DASHBOARD_URL}" style="background:#0d2b5e;color:#fff;padding:11px 22px;border-radius:6px;text-decoration:none;font-weight:700;font-size:14px">Mở VIP Dashboard</a>
         </div>
         <p style="font-size:12px;color:#94a3b8;line-height:1.6">{DISCLAIMER}<br>
-          Không muốn nhận tin? Tắt tại VIP Dashboard (nút 🛡️ Giám sát) hoặc gõ /tat trong Telegram.</p>
+          Không muốn nhận tin? Chỉ cần trả lời email này với chữ <b>DỪNG</b>, hoặc tắt tại VIP Dashboard (nút 🛡️ Giám sát).</p>
       </div>
     </div>"""
     return subject, body
@@ -639,6 +641,41 @@ def send_email(to, subject, body):
     except Exception as e:
         logger.error(f'[RescueWatch] Email error {to}: {e}')
         return False
+
+
+def email_diag(to=None):
+    """Chẩn đoán gửi email (Gmail API): biến môi trường có đủ không, lấy được access token không, gửi thử được không.
+    Không trả ra giá trị bí mật — chỉ có/không và thông báo lỗi của Google."""
+    import json as _json
+    import urllib.request
+    import urllib.parse
+    import urllib.error
+    out = {'env': {k: bool(os.getenv(k)) for k in ('GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET', 'GMAIL_REFRESH_TOKEN')},
+           'sender': os.getenv('SMTP_USER', 'aiadvisorhotline@gmail.com')}
+    if not all(out['env'].values()):
+        out['error'] = 'Thiếu biến môi trường Gmail trên Render (xem mục env) — email bị bỏ qua'
+        return out
+    try:
+        data = urllib.parse.urlencode({'client_id': os.getenv('GMAIL_CLIENT_ID'), 'client_secret': os.getenv('GMAIL_CLIENT_SECRET'),
+                                       'refresh_token': os.getenv('GMAIL_REFRESH_TOKEN'), 'grant_type': 'refresh_token'}).encode()
+        req = urllib.request.Request('https://oauth2.googleapis.com/token', data=data,
+                                     headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            out['token_ok'] = bool(_json.loads(r.read()).get('access_token'))
+    except urllib.error.HTTPError as e:
+        out['token_ok'] = False
+        out['error'] = f"Google từ chối refresh token: {e.read().decode(errors='ignore')[:300]}"
+        return out
+    except Exception as e:
+        out['token_ok'] = False
+        out['error'] = f'Lỗi kết nối Google: {e}'
+        return out
+    if to:
+        out['test_sent'] = send_email(to, '🛡️ AI Advisor — kiểm tra email Giám sát danh mục',
+                                      '<p>Email kiểm tra từ hệ thống Giám sát danh mục. Nếu anh/chị nhận được thư này, kênh email đã hoạt động.</p>')
+        if not out['test_sent']:
+            out['error'] = 'Lấy token được nhưng gửi thất bại — xem log Render dòng [Email]'
+    return out
 
 
 def _save_state(session, rows):
@@ -831,6 +868,13 @@ def init_rescue_watch_routes(app, engine, Session):
         except Exception as e:
             logger.exception('[RescueWatch] run error')
             return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/admin/rescue-watch/email-test', methods=['POST'])
+    @_require_admin
+    def rescue_watch_email_test():
+        to = ((request.get_json(silent=True) or {}).get('to') or ADMIN_EMAIL or '').strip()
+        d = email_diag(to)
+        return jsonify({'success': not d.get('error'), **d})
 
     @app.route('/api/admin/rescue-watch/log', methods=['GET'])
     @_require_admin
