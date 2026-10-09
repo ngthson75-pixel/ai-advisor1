@@ -2,6 +2,9 @@
 AI ADVISOR - RESCUE WATCH v2 · GIÁM SÁT DANH MỤC VIP (Telegram + Email)
 =======================================================================
 File: rescue_watch.py
+Version: 2.4h (2026-10-09) — báo rõ lỗi gửi Telegram/Email cho admin; gửi hỏng thì lượt sau báo lại; bản nháp admin không 'tiêu' cảnh báo của khách đã mở
+Version: 2.4g (2026-10-08) — không nhắn khách 21h–7h: job chạy trễ ban đêm thì giữ lại, gửi bù lượt quét sáng
+Version: 2.4f (2026-10-07) — 1 mã kẹt giá cũ không còn chặn cả bản tin của khách
 Version: 2.4e (2026-10-07) — POST /api/admin/rescue-watch/email-test: chẩn đoán kênh email
 Version: 2.4d (2026-10-07) — email: khách chỉ cần trả lời DỪNG để ngừng nhận tin
 Version: 2.4c (2026-10-03) — job nến thiếu phiên cuối: dựng nến tạm từ giá đóng cửa thay vì bỏ qua mã
@@ -91,6 +94,8 @@ HISTORY_DAYS       = 420                                              # nến t�
 MAX_EVENTS_PER_MSG = 8
 PORTFOLIO_ROW      = '*'
 CHANNELS           = ('telegram', 'email', 'both')
+QUIET_START        = int(os.getenv('RW_QUIET_START', '21'))   # sau 21h VN: không nhắn khách — giữ lại
+QUIET_END          = int(os.getenv('RW_QUIET_END', '7'))      # gửi bù từ 7h sáng (lượt quét đầu tiên)
 DISCLAIMER         = 'Công cụ hỗ trợ quyết định, không phải tư vấn đầu tư. Quyết định thuộc về nhà đầu tư.'
 
 
@@ -128,6 +133,10 @@ def ensure_tables(engine):
             CREATE TABLE IF NOT EXISTS watch_alert_state (
                 user_id VARCHAR(255) NOT NULL, ticker VARCHAR(10) NOT NULL, ekey VARCHAR(60) NOT NULL,
                 last_date VARCHAR(10), value DOUBLE PRECISION, PRIMARY KEY (user_id, ticker, ekey))"""))
+        conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS watch_outbox (
+                id {id_col}, user_id VARCHAR(255), for_date VARCHAR(10), tg_chat VARCHAR(50), tg_msg TEXT,
+                email_to VARCHAR(255), subject TEXT, body TEXT, created_at TIMESTAMP, sent_at TIMESTAMP)"""))
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS watch_prefs (
                 user_id VARCHAR(255) PRIMARY KEY, enabled BOOLEAN DEFAULT TRUE,
@@ -339,10 +348,12 @@ def evaluate_user(session, user, prices, market, today=None, scope='eod'):
             warnings.append(f"{t}: giá vốn {avg:,.0f} có vẻ nhập theo nghìn đồng — kiểm tra lại, bỏ qua mã này")
             continue
         d = _parse_date(tdate)
-        if d is None or (today - d).days > STALE_DAYS:
-            stale = True
+        is_stale = d is None or (today - d).days > STALE_DAYS
+        if is_stale:
+            # v2.4f: 1 mã kẹt giá cũ KHÔNG chặn cả bản tin — chỉ bỏ phân tích mã đó (vẫn tính vào tỷ trọng)
+            warnings.append(f"{t}: giá còn ngày {tdate or '?'} (cũ hơn {STALE_DAYS} ngày) — bỏ qua mã này, kiểm tra job giá")
         lines.append({'ticker': t, 'qty': qty, 'avg': avg, 'price': price, 'tdate': tdate,
-                      'value': qty * price, 'pl_pct': (price / avg - 1) * 100})
+                      'value': qty * price, 'pl_pct': (price / avg - 1) * 100, 'stale': is_stale})
     total_value = sum(l['value'] for l in lines)
     total_assets = total_value + cash
     for l in lines:
@@ -366,9 +377,13 @@ def evaluate_user(session, user, prices, market, today=None, scope='eod'):
         marks.append({'user_id': uid, 'ticker': ev['ticker'], 'ekey': ev['key'], 'last_date': today.isoformat(),
                       'value': ev.get('level')})
 
+    stale = bool(lines) and all(l['stale'] for l in lines)     # chỉ chặn gửi khi TOÀN BỘ giá đều cũ (job giá hỏng)
+
     # --- biến cố theo từng mã
     for l in lines:
         t = l['ticker']
+        if l['stale']:
+            continue
         pos = {'qty': l['qty'], 'pl_pct': l['pl_pct'], 'weight': l['weight']}
         manual = load_levels(session, t, uid)
         if scope == 'intraday':
@@ -612,7 +627,11 @@ def build_email(result, market, today=None):
 # GỬI + LƯU
 # ============================================================
 
+LAST_TG_ERROR = {}
+
+
 def send_telegram(chat_id, message):
+    LAST_TG_ERROR.pop(str(chat_id), None)
     if not TELEGRAM_BOT_TOKEN or not chat_id:
         return False
     try:
@@ -625,9 +644,14 @@ def send_telegram(chat_id, message):
             ok = ok and r.status_code == 200
             if r.status_code != 200:
                 logger.error(f'[RescueWatch] Telegram {chat_id}: {r.text[:200]}')
+                try:
+                    LAST_TG_ERROR[str(chat_id)] = r.json().get('description') or r.text[:120]
+                except Exception:
+                    LAST_TG_ERROR[str(chat_id)] = r.text[:120]
         return ok
     except Exception as e:
         logger.error(f'[RescueWatch] Telegram error: {e}')
+        LAST_TG_ERROR[str(chat_id)] = str(e)[:120]
         return False
 
 
@@ -706,7 +730,32 @@ def _log_events(session, result, mode, sent):
              'm': mode, 's': bool(sent), 'now': datetime.now()})
 
 
-def run_watch(Session, mode='preview', only_user=None, today=None, scope='eod', email_test=False):
+def _vn_now():
+    return datetime.utcnow() + timedelta(hours=7)
+
+
+def _is_quiet(vn_now):
+    return vn_now.hour >= QUIET_START or vn_now.hour < QUIET_END
+
+
+def _flush_outbox(session):
+    """Gửi các bản tin bị giữ lại do job chạy trễ vào ban đêm (GitHub cron đôi khi trễ hàng giờ)."""
+    sent = 0
+    for r in _rows(session, "SELECT * FROM watch_outbox WHERE sent_at IS NULL ORDER BY id"):
+        p = get_prefs(session, r['user_id'])
+        if p['enabled'] and p['stage'] == 'live':
+            head = f"🕘 <i>Bản tin cuối ngày {r['for_date'][8:10]}/{r['for_date'][5:7]} (hệ thống giữ lại, không nhắn đêm)</i>\n\n"
+            if r['tg_chat'] and r['tg_msg']:
+                send_telegram(r['tg_chat'], head + r['tg_msg'])
+            if r['email_to'] and r['body']:
+                send_email(r['email_to'], r['subject'], r['body'])
+            sent += 1
+        session.execute(text("UPDATE watch_outbox SET sent_at = :now WHERE id = :i"), {'now': datetime.now(), 'i': r['id']})
+    session.commit()
+    return sent
+
+
+def run_watch(Session, mode='preview', only_user=None, today=None, scope='eod', email_test=False, vn_now=None):
     if mode not in ('preview', 'admin', 'live'):
         raise ValueError('mode phải là preview | admin | live')
     if scope not in ('eod', 'intraday'):
@@ -714,15 +763,29 @@ def run_watch(Session, mode='preview', only_user=None, today=None, scope='eod', 
     if mode == 'admin' and not ADMIN_CHAT_ID:
         raise ValueError('Chưa có chat_id admin: đặt TELEGRAM_CHAT_ID hoặc ADMIN_TELEGRAM_CHAT_ID trên Render')
 
-    if scope == 'intraday' and today is None:
-        vn_now = datetime.utcnow() + timedelta(hours=7)
+    real_run = today is None
+    clock = real_run or vn_now is not None          # có đồng hồ thật (hoặc test truyền vn_now) -> áp dụng giờ yên lặng
+    vn_now = vn_now or _vn_now()
+    quiet = clock and _is_quiet(vn_now)
+    flushed = 0
+    if mode == 'live' and clock and not quiet:
+        s0 = Session()
+        try:
+            flushed = _flush_outbox(s0)
+        except Exception as e:
+            s0.rollback()
+            logger.warning(f'[RescueWatch] outbox: {e}')
+        finally:
+            s0.close()
+    if scope == 'intraday' and real_run:
         if not (9 <= vn_now.hour < 15) or vn_now.weekday() >= 5:
             # GitHub đôi khi chạy lịch trễ hàng giờ — ngoài giờ giao dịch thì "trong phiên" không còn ý nghĩa
             return {'mode': mode, 'scope': scope, 'date': vn_now.date().isoformat(), 'users': [],
+                    'flushed': flushed,
                     'note': f'Bỏ qua: ngoài giờ giao dịch ({vn_now.strftime("%H:%M")} giờ VN) — để lần quét cuối ngày xử lý'}
     today = today or date.today()
     session = Session()
-    report = {'mode': mode, 'scope': scope, 'date': today.isoformat(), 'users': []}
+    report = {'mode': mode, 'scope': scope, 'date': today.isoformat(), 'users': [], 'flushed': flushed, 'quiet': quiet}
     try:
         prices, market = _load_common(session)
         users = _rows(session, """SELECT email, full_name, telegram_chat_id, is_push_enabled, tier
@@ -756,21 +819,50 @@ def run_watch(Session, mode='preview', only_user=None, today=None, scope='eod', 
             elif msg and mode == 'live':
                 if not prefs['enabled']:
                     skipped = 'Khách đã TẮT nhận khuyến nghị'
+                elif quiet:
+                    # Job chạy trễ vào ban đêm: không nhắn khách lúc khuya — giữ lại, gửi ở lượt quét đầu tiên từ 7h sáng
+                    session.execute(text("""INSERT INTO watch_outbox (user_id, for_date, tg_chat, tg_msg, email_to, subject, body, created_at)
+                                            VALUES (:u, :d, :c, :m, :e, :s, :b, :now)"""),
+                                    {'u': u['email'], 'd': today.isoformat(),
+                                     'c': u.get('telegram_chat_id') if prefs['channel'] in ('telegram', 'both') else None,
+                                     'm': msg, 'e': u['email'] if prefs['channel'] in ('email', 'both') and mail else None,
+                                     's': mail[0] if mail else None, 'b': mail[1] if mail else None, 'now': datetime.now()})
+                    skipped = f"Job chạy lúc {vn_now.strftime('%H:%M')} (đêm) — giữ lại, gửi từ {QUIET_END}h sáng"
                 else:
+                    fails = []
                     if prefs['channel'] in ('telegram', 'both') and u.get('telegram_chat_id'):
                         if send_telegram(u['telegram_chat_id'], msg):
                             channels.append('telegram')
+                        else:
+                            err = LAST_TG_ERROR.get(str(u['telegram_chat_id']), 'lỗi không rõ')
+                            hint = (' — khách cần mở bot và bấm Start' if 'initiate' in err or 'chat not found' in err
+                                    else ' — khách đã chặn bot' if 'blocked' in err else '')
+                            fails.append(f"Telegram lỗi: {err}{hint}")
+                    elif prefs['channel'] in ('telegram', 'both'):
+                        fails.append('chưa có Telegram chat_id')
                     if prefs['channel'] in ('email', 'both') and mail:
                         if send_email(u['email'], *mail):
                             channels.append('email')
+                        else:
+                            fails.append('Email lỗi (chạy email-test)')
                     sent = bool(channels)
-                    if not sent:
-                        skipped = 'Không gửi được (khách chưa có Telegram và email lỗi?)'
+                    if sent:                                # khách chỉ dùng email (chưa có Telegram) là bình thường
+                        fails = [f for f in fails if f != 'chưa có Telegram chat_id']
+                    if fails:
+                        skipped = ('Gửi được ' + '+'.join(channels) + '; ' if sent else 'Không gửi được: ') + '; '.join(fails)
 
             if mode != 'preview' and not res['stale_prices']:
                 if scope == 'eod':
                     _save_state(session, res['new_state'])
-                _save_marks(session, res['marks'])
+                undelivered = (msg and mode == 'live' and prefs['stage'] == 'live' and prefs['enabled']
+                               and not quiet and not sent)
+                # Bản nháp admin (24 -> 6, hoặc công tắc RESCUE_WATCH_MODE=admin) KHÔNG được "tiêu" cảnh báo của khách
+                # đã mở gửi thật — nếu không, lượt gửi thật ngay sau đó thấy 0 biến cố (sự cố khách Nghĩa 09/10).
+                draft_of_live = mode == 'admin' and prefs['stage'] == 'live'
+                if not undelivered and not draft_of_live:   # gửi hỏng hết kênh -> KHÔNG đánh dấu, lượt sau báo lại
+                    _save_marks(session, res['marks'])
+                else:                                        # mốc tham chiếu (tỷ trọng thị trường) vẫn cập nhật
+                    _save_marks(session, [m for m in res['marks'] if m['ekey'] == 'MARKET_ALLOC'])
                 _log_events(session, res, mode, sent)
                 session.commit()
 
