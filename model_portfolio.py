@@ -2,7 +2,7 @@
 AI ADVISOR - LƯỚT SÓNG AI MODEL PORTFOLIO (danh mục mẫu VIP)
 =============================================================
 File: model_portfolio.py
-Version: 1.4.1 (2026-10-09) — reset mở khóa DATA GUARD (SET LOCAL app.allow_bulk_delete) để không bị chặn khi xóa hàng loạt có chủ đích
+Version: 1.5 (2026-10-11) — gồm 1.4.1 (reset mở khóa DATA GUARD) + điều chỉnh quyền (corporate_actions): áp dụng trước khi chạy; KHÔNG bán cắt lỗ khi giá vượt biên độ sàn
 Version: 1.4 (2026-10-06) — đếm số phiên nắm giữ theo lịch giao dịch (không phụ thuộc bảng NAV)
 Version: 1.3 (2026-09-27) — nhãn [Thủ công] chỉ hiện cho admin, API khách chỉ trả lý do
 Version: 1.2 (2026-09-27) — can thiệp thủ công, bật/tắt tự động, hủy giao dịch, loại mã (quản lý qua signal_reviewer.py mục 23)
@@ -395,12 +395,55 @@ def reset_portfolio(Session, capital=MP_CAPITAL):
         s.close()
 
 
+# ============================================================
+# ĐIỀU CHỈNH QUYỀN (v1.5) — sự cố HDB 09/10: GDKHQ giá giảm ~21% bị đọc thành "chạm cắt lỗ"
+# ============================================================
+
+def _engine_of(Session):
+    try:
+        return Session.kw.get('bind')
+    except Exception:
+        return None
+
+
+def _apply_corporate_actions(Session):
+    eng = _engine_of(Session)
+    if eng is None:
+        return []
+    try:
+        from corporate_actions import apply_pending
+        return apply_pending(eng)
+    except Exception as e:
+        logger.warning(f'[ModelPortfolio] corporate actions: {e}')
+        return []
+
+
+def _prev_close(s, ticker, trade_date):
+    try:
+        with s.begin_nested():                         # savepoint: lỗi đọc không xóa các lệnh khác trong lượt chạy
+            r = _one(s, """SELECT close FROM price_history WHERE ticker = :t AND trade_date < :d
+                           ORDER BY trade_date DESC LIMIT 1""", t=ticker, d=str(trade_date)[:10])
+        return float(r['close']) if r and r['close'] else None
+    except Exception:
+        return None
+
+
+def _suspicious(prev_close, price):
+    try:
+        from corporate_actions import suspicious_move
+        return suspicious_move(prev_close, price)
+    except Exception:
+        return bool(prev_close and price and abs(price / prev_close - 1) > 0.075)
+
+
 def run_model(Session, dry_run=False, force_rebalance=False):
     """
     Gọi sau MỖI lần cập nhật giá:
       - Luôn: định giá lại + kiểm tra cắt lỗ + đi theo tín hiệu bán của hệ thống.
       - Lần đầu tiên trong phiên (hoặc force_rebalance): mua mới / bán theo thời gian / cân lại tỷ trọng.
     """
+    if not dry_run:
+        _apply_corporate_actions(Session)          # chỉnh SL cp / giá vốn / cắt lỗ TRƯỚC khi so với giá mới
     s = Session()
     log = []
     try:
@@ -429,6 +472,14 @@ def run_model(Session, dry_run=False, force_rebalance=False):
             if _sessions_held(s, p['entry_date'], trade_date) < MP_MIN_HOLD:
                 continue
             if p['stop_loss'] and px <= p['stop_loss']:
+                pc = _prev_close(s, p['ticker'], trade_date)
+                if pc and _suspicious(pc, px):
+                    # Giá rơi quá biên độ sàn so với phiên trước: gần như chắc chắn là ngày GDKHQ chưa được điều chỉnh
+                    # -> KHÔNG bán; báo admin (1 lần/ngày, ở lượt đầu phiên)
+                    if rebalance:
+                        log.append(f"⚠️ {p['ticker']} {_fmt(px)} lệch {(px / pc - 1) * 100:+.1f}% so với phiên trước "
+                                   f"({_fmt(pc)}) — vượt biên độ sàn, nghi điều chỉnh quyền: KHÔNG tự bán, admin kiểm tra")
+                    continue
                 _sell(s, st, p, p['qty'], px, trade_date, f"Chạm cắt lỗ {_fmt(p['stop_loss'])}", log)
 
         # 2) Đi theo tín hiệu hệ thống (tín hiệu MUA gốc bị đóng / bán 1 phần) — mọi lần quét
@@ -663,6 +714,25 @@ def void_trade(Session, trade_id):
             s.execute(text("""UPDATE mp_positions SET qty = qty + :q, cost = cost + :c, status = 'open', closed_at = NULL
                               WHERE id = :p"""), dict(q=int(t['qty']), c=float(t['cost_basis'] or 0), p=pos['id']))
             st['cash'] -= float(t['value']) - float(t['fee'])
+            # v1.5: quyền được áp dụng SAU lệnh bán (lúc đó vị thế đã đóng nên chưa được chỉnh) -> chỉnh ngay khi khôi phục
+            try:
+                with s.begin_nested():                 # savepoint: bảng chưa có cũng không làm hỏng lệnh hủy
+                    cas = _rows(s, """SELECT ex_date, factor FROM corporate_actions WHERE ticker = :t AND status = 'applied'
+                                      AND applied_at > :a ORDER BY ex_date""", t=t['ticker'], a=t['created_at'])
+            except Exception:
+                cas = []
+            if cas:
+                try:
+                    for ca in cas:
+                        if str(pos['entry_date'])[:10] < ca['ex_date']:
+                            f = float(ca['factor'])
+                            cur = _one(s, "SELECT qty, init_qty FROM mp_positions WHERE id = :p", p=pos['id'])
+                            s.execute(text("""UPDATE mp_positions SET qty = :q, init_qty = :iq, entry_price = entry_price * :f,
+                                              stop_loss = stop_loss * :f, take_profit = take_profit * :f WHERE id = :p"""),
+                                      dict(q=int(round(int(cur['qty']) / f)), iq=int(round(int(cur['init_qty'] or cur['qty']) / f)),
+                                           f=f, p=pos['id']))
+                except Exception as e:
+                    logger.warning(f'[ModelPortfolio] void CA: {e}')
             note = (f"Vị thế {t['ticker']} đã được khôi phục. Nếu giá vẫn dưới cắt lỗ {_fmt(float(pos['stop_loss'] or 0))}, "
                     "lần quét sau sẽ tự bán lại — hãy sửa cắt lỗ hoặc tạm dừng tự động nếu không muốn")
         s.execute(text("DELETE FROM mp_trades WHERE id = :i"), dict(i=t['id']))

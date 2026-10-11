@@ -1,63 +1,44 @@
-name: Hourly Sell Signal Scanner v5.3
+name: Hourly Sell Signal Scanner v6
 
 on:
   schedule:
-    # Runs every hour from 9:30-15:30 VN time (2:30-8:30 UTC)
-    # Cron format: minute hour day month weekday
+    # 9:30-15:30 giờ VN (2:30-8:30 UTC), T2-T6. GitHub hay chạy trễ: lượt nào rơi ngoài giờ sẽ tự thoát.
     - cron: '30 2,3,4,5,6,7,8 * * 1-5'
-  
-  # Allow manual trigger
   workflow_dispatch:
+
+concurrency:
+  group: sell-scanner
+  cancel-in-progress: false
 
 jobs:
   scan-sell-signals:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-      
+        uses: actions/checkout@v4
+
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-      
+          python-version: '3.11'
+
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install --extra-index-url https://vnstocks.com/api/simple "vnstock==4.0.9" "vnai==2.6.2"
-          pip install psycopg2-binary python-dotenv pandas numpy
-      
-      - name: Run Sell Scanner v5.3
+          pip install psycopg2-binary python-dotenv pandas numpy sqlalchemy
+
+      - name: Run Sell Scanner v6
         env:
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_PORT: ${{ secrets.DB_PORT }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          ADMIN_TELEGRAM_CHAT_ID: ${{ secrets.ADMIN_TELEGRAM_CHAT_ID }}
           CI: 'true'
           GITHUB_ACTIONS: 'true'
           PYTHONUNBUFFERED: '1'
-        run: |
-          echo "========================================"
-          echo "🔍 SELL SIGNAL SCANNER v5.3"
-          echo "========================================"
-          echo "UTC Time: $(date '+%Y-%m-%d %H:%M:%S UTC')"
-          echo "VN Time:  $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S VN')"
-          echo ""
-          echo "EXIT CRITERIA:"
-          echo "  1. Daily MACD + RSI>80 + Support → 100%"
-          echo "  2. 4H MACD + Volume div → 50%"
-          echo "  3. 1H Volume Climax → 100%"
-          echo ""
-          
-          python sell_signal_scanner_v5_2.py
-      
-      - name: Summary
-        if: always()
-        run: |
-          echo ""
-          echo "========================================"
-          echo "✅ Scan complete - check logs above"
-          echo "========================================"
+        run: python sell_signal_scanner_v6.py

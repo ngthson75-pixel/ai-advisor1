@@ -2,6 +2,7 @@
 AI ADVISOR - RESCUE WATCH v2 · GIÁM SÁT DANH MỤC VIP (Telegram + Email)
 =======================================================================
 File: rescue_watch.py
+Version: 2.5 (2026-10-09) — điều chỉnh quyền (corporate_actions) trước mỗi lần quét + đăng ký API corporate-actions
 Version: 2.4h (2026-10-09) — báo rõ lỗi gửi Telegram/Email cho admin; gửi hỏng thì lượt sau báo lại; bản nháp admin không 'tiêu' cảnh báo của khách đã mở
 Version: 2.4g (2026-10-08) — không nhắn khách 21h–7h: job chạy trễ ban đêm thì giữ lại, gửi bù lượt quét sáng
 Version: 2.4f (2026-10-07) — 1 mã kẹt giá cũ không còn chặn cả bản tin của khách
@@ -784,6 +785,12 @@ def run_watch(Session, mode='preview', only_user=None, today=None, scope='eod', 
                     'flushed': flushed,
                     'note': f'Bỏ qua: ngoài giờ giao dịch ({vn_now.strftime("%H:%M")} giờ VN) — để lần quét cuối ngày xử lý'}
     today = today or date.today()
+    if mode != 'preview':
+        try:                                     # v2.5: điều chỉnh quyền (GDKHQ) trước khi phân tích — tránh "thủng hỗ trợ" giả
+            from corporate_actions import apply_pending
+            apply_pending(Session.kw.get('bind'))
+        except Exception as e:
+            logger.warning(f'[RescueWatch] corporate actions: {e}')
     session = Session()
     report = {'mode': mode, 'scope': scope, 'date': today.isoformat(), 'users': [], 'flushed': flushed, 'quiet': quiet}
     try:
@@ -1077,6 +1084,13 @@ def init_rescue_watch_routes(app, engine, Session):
             return jsonify({'success': False, 'error': 'Thiếu ticker'}), 400
         ensure_tables(engine)
         return jsonify({'success': True, **analyze_ticker(Session, t, request.args.get('user'))})
+
+    # --- Điều chỉnh quyền (corporate_actions.py) — đăng ký chung ở đây để không phải sửa backend_api.py
+    try:
+        import corporate_actions
+        corporate_actions.init_routes(app, engine, _require_admin)
+    except Exception as e:
+        print(f"⚠️  corporate_actions routes: {e}")
 
     # --- VIP: bật/tắt + kênh
     try:

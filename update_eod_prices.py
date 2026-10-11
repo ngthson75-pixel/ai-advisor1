@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI ADVISOR - EOD PRICE UPDATER v2.1 (2026-10-01: + mã trong danh mục khách VIP)
+AI ADVISOR - EOD PRICE UPDATER v2.2 (2026-10-09: + phát hiện ngày GDKHQ qua giá tham chiếu -> corporate_actions)
+(v2.1 2026-10-01: + mã trong danh mục khách VIP)
 ==============================================
 Ghi giá mới nhất của các mã trong danh sách scanner vào bảng eod_prices (PostgreSQL).
 
@@ -127,6 +128,9 @@ def _make_trading():
     raise RuntimeError('Không khởi tạo được Trading: ' + ' | '.join(errors))
 
 
+BOARD_INFO = {}   # v2.2: {ticker: {'ref': giá tham chiếu, 'exchange': sàn}} — để phát hiện ngày GDKHQ
+
+
 def _parse_board(df):
     """DataFrame bảng giá -> {ticker: price_vnd}. Chịu được cột phẳng hoặc MultiIndex."""
     if df is None or len(df) == 0:
@@ -145,6 +149,7 @@ def _parse_board(df):
         if price_col:
             break
     ref_col = next((low[c] for c in low if c.endswith('ref_price') or c.endswith('reference_price')), None)
+    ex_col = next((low[c] for c in low if c.endswith('exchange') or c in ('board', 'floor', 'market')), None)
     if not sym_col or not price_col:
         raise RuntimeError(f"Không nhận ra cột symbol/giá trong bảng giá: {cols[:25]}")
 
@@ -152,10 +157,13 @@ def _parse_board(df):
     for _, row in df.iterrows():
         t = str(row[sym_col]).upper().strip()
         p = _to_vnd(row[price_col])
-        if p is None and ref_col:           # chưa khớp lệnh nào trong phiên -> dùng giá tham chiếu
-            p = _to_vnd(row[ref_col])
+        ref = _to_vnd(row[ref_col]) if ref_col else None
+        if p is None and ref:               # chưa khớp lệnh nào trong phiên -> dùng giá tham chiếu
+            p = ref
         if t and p:
             out[t] = p
+        if t and ref:
+            BOARD_INFO[t] = {'ref': ref, 'exchange': str(row[ex_col]) if ex_col and row[ex_col] == row[ex_col] else None}
     return out
 
 
@@ -296,10 +304,22 @@ def update_eod_prices():
     finally:
         session.close()
 
+    # v2.2: phát hiện ngày GDKHQ (giá tham chiếu bị Sở hạ so với đóng cửa phiên trước) -> backend tự điều chỉnh
+    ca_new = []
+    if BOARD_INFO:
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from corporate_actions import detect_and_record
+            ca_new = detect_and_record(engine, {t: BOARD_INFO[t] for t in prices if t in BOARD_INFO}, trade_date)
+            for c in ca_new:
+                logger.info(f"🏷️ {c['ticker']}: GDKHQ {c['ex_date']} — hệ số {c['factor']} (-{c['gap_pct']}%) [{c['status']}]")
+        except Exception as e:
+            logger.warning(f"⚠️ Không kiểm tra được điều chỉnh quyền: {str(e)[:150]}")
+
     elapsed = (datetime.now() - t0).total_seconds()
     logger.info(f"✅ Done! Updated {len(prices)}/{len(tickers)} | Failed {len(failed)} | {elapsed / 60:.1f} min | method={method}")
     return {'success': True, 'updated': len(prices), 'failed': len(failed), 'trade_date': trade_date,
-            'elapsed_minutes': round(elapsed / 60, 1), 'method': method}
+            'elapsed_minutes': round(elapsed / 60, 1), 'method': method, 'corporate_actions': ca_new}
 
 
 if __name__ == '__main__':

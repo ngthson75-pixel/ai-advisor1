@@ -1,23 +1,43 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Sell Signal Scanner v5.4 - DB-First Architecture
-Sử dụng eod_prices table làm nguồn giá chính (không phụ thuộc vnstock).
-Update EOD chạy mỗi 30 phút trong giờ giao dịch → giá luôn mới.
+AI ADVISOR — SELL SIGNAL SCANNER v6.0 (2026-10-11)
+==================================================
+File DUY NHẤT cho máy quét BÁN. Thay thế:
+  - sell_signal_scanner_v5_2.py  (bản "v5.4 DB-first" — logic được GIỮ NGUYÊN trong file này)
+  - sell_signal_scanner_v5.2.py  (bản cũ đẩy qua API, không còn workflow nào chạy)
 
-EXIT RULES:
-1. STOP LOSS: current_price <= stop_loss → SELL 100% (CRITICAL)
-2. TAKE PROFIT: current_price >= take_profit → SELL 50-100%
-3. Daily MACD + RSI>80: nếu có data kỹ thuật → SELL 100%
-4. 4H/1H signals: disabled (vnstock rate limit issues)
+Nguồn giá: bảng eod_prices (update_eod_prices.py cập nhật trong phiên). Không phụ thuộc vnstock.
 
-SCHEDULE: Mỗi giờ 9:30-15:30 VN time (trading hours)
+LUẬT BÁN (giữ nguyên v5.4):
+  1. STOP LOSS: giá <= cắt lỗ → bán 100%
+  2. Daily MACD + RSI>80 + thủng hỗ trợ → 100%   (tạm tắt: chưa có dữ liệu nến — giữ code để bật lại)
+  3. 1H volume climax → 100% · 4. 4H MACD + volume div → 50%   (tạm tắt, như v5.4)
+  5. TAKE PROFIT: giá >= mục tiêu → bán 50% / 30% / phần còn lại
+
+MỚI trong v6.0:
+  - Quyền cổ tức/thưởng (corporate actions): áp dụng các quyền đang chờ TRƯỚC khi quét (chỉnh giá tín hiệu MUA);
+    mã có quyền chưa áp dụng → KHÔNG xét cắt lỗ/chốt lời, báo admin.        (lỗi GMD 08/10, HDB 09/10)
+  - Chặn cắt lỗ bất thường: giá thấp hơn cắt lỗ > 15% (không thể xảy ra trong 1 phiên) → không bán, báo admin.
+  - Tín hiệu MUA thiếu signal_code → tự gán TICKER-ID; cập nhật vị thế theo id.  (lỗi bán lặp CNG/GMD)
+  - Không ghi trùng lệnh bán cùng tín hiệu, cùng lý do, cùng ngày.
+  - Ghi đủ created_at / exit_date cho lệnh bán; mỗi lệnh commit riêng (lỗi 1 mã không xóa lệnh mã khác).
+  - Kết nối: DATABASE_URL hoặc DB_HOST/DB_NAME/DB_USER/DB_PASSWORD/DB_PORT.
+
+Chạy:
+  python sell_signal_scanner_v6.py              # trong giờ 9:30–15:30, hỏi xác nhận (CI: tự chạy)
+  python sell_signal_scanner_v6.py --dry-run    # chỉ in, không ghi DB
+  python sell_signal_scanner_v6.py --yes        # không hỏi xác nhận
+  python sell_signal_scanner_v6.py --ignore-hours --dry-run   # thử ngoài giờ
 """
 
 import os
 import sys
-import time
-from datetime import datetime, timedelta
+import argparse
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta, timezone
+
 import psycopg2
 from dotenv import load_dotenv
 import pandas as pd
@@ -25,62 +45,93 @@ import numpy as np
 
 load_dotenv()
 
+VERSION = '6.0'
+ABNORMAL_GAP = 0.15          # giá thấp hơn cắt lỗ > 15% → bất thường (biên độ tối đa 1 phiên: HOSE 7%, HNX 10%, UPCoM 15%)
+
+
+# ============================================================================
 # DATABASE CONNECTION
 # ============================================================================
 
+def _db_params():
+    url = os.getenv('DATABASE_URL', '')
+    if url.startswith(('postgres://', 'postgresql://', 'postgresql+psycopg://', 'postgresql+psycopg2://')):
+        url = url.replace('postgresql+psycopg2://', 'postgresql://').replace('postgresql+psycopg://', 'postgresql://')
+        return {'dsn': url}
+    host, name, user, pw = (os.getenv(k) for k in ('DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'))
+    missing = [k for k, v in (('DB_HOST', host), ('DB_NAME', name), ('DB_USER', user), ('DB_PASSWORD', pw)) if not v]
+    if missing:
+        raise ValueError(f"❌ Thiếu {', '.join(missing)} (hoặc DATABASE_URL) — kiểm tra GitHub Secrets / .env")
+    return {'host': host, 'database': name, 'user': user, 'password': pw, 'port': int(os.getenv('DB_PORT', '5432'))}
+
+
 def get_db_connection():
-    """Connect to PostgreSQL database"""
-    db_host = os.getenv('DB_HOST')
-    db_name = os.getenv('DB_NAME')
-    db_user = os.getenv('DB_USER')
-    db_password = os.getenv('DB_PASSWORD')
-    db_port = os.getenv('DB_PORT', '5432')
-    
-    # Debug logging
-    print(f"ðŸ” DB Connection Debug:")
-    print(f"   Host: {db_host[:20]}... (length: {len(db_host) if db_host else 0})")
-    print(f"   Database: {db_name}")
-    print(f"   User: {db_user}")
-    print(f"   Port: {db_port}")
-    print(f"   Password: {'***SET***' if db_password else 'MISSING'}")
-    
-    if not db_host:
-        raise ValueError("âŒ DB_HOST not set! Check GitHub Secrets")
-    if not db_name:
-        raise ValueError("âŒ DB_NAME not set! Check GitHub Secrets")
-    if not db_user:
-        raise ValueError("âŒ DB_USER not set! Check GitHub Secrets")
-    if not db_password:
-        raise ValueError("âŒ DB_PASSWORD not set! Check GitHub Secrets")
-    
-    return psycopg2.connect(
-        host=db_host,
-        database=db_name,
-        user=db_user,
-        password=db_password,
-        port=int(db_port)
-    )
+    p = _db_params()
+    return psycopg2.connect(p['dsn']) if 'dsn' in p else psycopg2.connect(**p)
+
+
+def _sa_url():
+    p = _db_params()
+    if 'dsn' in p:
+        return p['dsn'].replace('postgres://', 'postgresql+psycopg2://', 1).replace('postgresql://', 'postgresql+psycopg2://', 1)
+    return (f"postgresql+psycopg2://{urllib.parse.quote(p['user'])}:{urllib.parse.quote(p['password'])}"
+            f"@{p['host']}:{p['port']}/{p['database']}")
+
+
+def notify_admin(msg):
+    token, chat = os.getenv('TELEGRAM_BOT_TOKEN', ''), os.getenv('ADMIN_TELEGRAM_CHAT_ID', '')
+    if not token or not chat:
+        return
+    try:
+        data = urllib.parse.urlencode({'chat_id': chat, 'text': msg}).encode()
+        urllib.request.urlopen(f'https://api.telegram.org/bot{token}/sendMessage', data=data, timeout=15).read()
+    except Exception as e:
+        print(f"   ⚠️ Telegram lỗi: {e}")
 
 
 # ============================================================================
-# DATA RETRIEVAL FUNCTIONS
+# CORPORATE ACTIONS (quyền cổ tức / cổ phiếu thưởng)
 # ============================================================================
+
+def apply_corporate_actions():
+    """Áp dụng các quyền 'detected' (chỉnh giá tín hiệu MUA, nến, danh mục mẫu) trước khi quét."""
+    try:
+        from sqlalchemy import create_engine
+        import corporate_actions
+    except Exception as e:
+        print(f"   ℹ️ Bỏ qua áp dụng quyền tự động ({e.__class__.__name__}) — vẫn chặn mã có quyền chờ")
+        return []
+    try:
+        eng = create_engine(_sa_url(), pool_pre_ping=True)
+        done = corporate_actions.apply_pending(eng) or []
+        for d in done:
+            print(f"   🏷️ Đã áp dụng quyền {d.get('ticker')} (GDKHQ {d.get('ex_date')}, hệ số {float(d.get('factor', 1)):.4f})")
+        return done
+    except Exception as e:
+        print(f"   ⚠️ Áp dụng quyền lỗi: {str(e)[:150]}")
+        return []
+
+
+def pending_corporate_actions(conn):
+    """{ticker: ex_date} các quyền CHƯA áp dụng (detected / review / applying). Bảng chưa có → {}."""
+    try:
+        cur = conn.cursor()
+        cur.execute("""SELECT ticker, MIN(ex_date) FROM corporate_actions
+                       WHERE status IN ('detected', 'review', 'applying') GROUP BY ticker""")
+        return {r[0]: str(r[1])[:10] for r in cur.fetchall()}
+    except Exception:
+        conn.rollback()
+        return {}
 
 
 # ============================================================================
-# DATA RETRIEVAL - DB FIRST ARCHITECTURE  
+# DATA RETRIEVAL - DB FIRST ARCHITECTURE (giữ nguyên v5.4)
 # ============================================================================
 
 def get_all_prices_from_db(tickers):
-    """
-    Batch fetch giá mới nhất cho tất cả tickers từ eod_prices table.
-    1 query duy nhất - nhanh, không rate limit.
-    
-    Returns: dict {ticker: price_vnd}
-    """
+    """Lấy giá mới nhất cho tất cả mã từ eod_prices — 1 truy vấn. Returns {ticker: price_vnd}"""
     if not tickers:
         return {}
-    
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -92,41 +143,34 @@ def get_all_prices_from_db(tickers):
         """, tickers)
         rows = cursor.fetchall()
         conn.close()
-        
+
         prices = {}
         now_vn = datetime.utcnow() + timedelta(hours=7)
         for ticker, price, trade_date, updated_at in rows:
             prices[ticker] = float(price)
-            # Warn if price is stale (> 2 hours old during trading hours)
             if updated_at:
                 age_minutes = (now_vn - updated_at).total_seconds() / 60
                 if age_minutes > 120:
-                    print(f"   ⚠️ {ticker}: price stale ({age_minutes:.0f} min old)")
-        
-        print(f"   📦 DB prices loaded: {len(prices)}/{len(tickers)} tickers")
+                    print(f"   ⚠️ {ticker}: giá cũ ({age_minutes:.0f} phút)")
+        print(f"   📦 Giá từ DB: {len(prices)}/{len(set(tickers))} mã")
         return prices
-        
     except Exception as e:
-        print(f"   ❌ DB batch price fetch failed: {e}")
+        print(f"   ❌ Lấy giá từ DB lỗi: {e}")
         return {}
 
 
 def get_daily_data(ticker, days_back=100):
-    """
-    Placeholder - vnstock bị deprecated/rate limit.
-    Technical analysis tạm thời disabled.
-    Returns None → scanner dùng DB price cho SL/TP check.
-    """
+    """Tạm tắt (vnstock giới hạn tần suất) — trả None → chỉ xét cắt lỗ / chốt lời theo giá DB."""
     return None
 
 
 def get_intraday_4h_data(ticker, days_back=15):
-    """Disabled - vnstock rate limit issues."""
+    """Tạm tắt."""
     return None
 
 
 def get_intraday_1h_data(ticker, days_back=10):
-    """Disabled - vnstock rate limit issues."""  
+    """Tạm tắt."""
     return None
 
 
@@ -309,7 +353,7 @@ def check_support_break(df, support_levels):
 def check_daily_critical_exit(df):
     """
     EXIT CRITERION 1: Daily MACD + RSI>80 + Support break
-    â†’ BÃN 100% (CRITICAL)
+    → BÁN 100% (CRITICAL)
     
     Returns:
         dict: Exit signal if all 3 conditions met
@@ -403,7 +447,7 @@ def detect_volume_divergence(df, lookback=20):
 def check_4h_medium_exit(df_4h):
     """
     EXIT CRITERION 2: 4H MACD + Volume divergence
-    â†’ BÃN 50% (HIGH)
+    → BÁN 50% (HIGH)
     
     Returns:
         dict: Exit signal if both conditions met
@@ -573,7 +617,7 @@ def detect_distribution_pattern_1h(df_1h, lookback_hours=60):
 def check_1h_climax_exit(df_1h):
     """
     EXIT CRITERION 3: 1H Volume Climax (BSR pattern)
-    â†’ BÃN 100% (HIGH)
+    → BÁN 100% (HIGH)
     
     Checks both:
     - Distribution pattern (multiple spikes) - PRIORITY
@@ -599,279 +643,161 @@ def check_1h_climax_exit(df_1h):
 
 
 
-def get_price_from_db(ticker, conn=None):
-    """
-    Fallback: lấy giá gần nhất từ eod_prices table trong DB.
-    Dùng khi vnstock API lỗi để vẫn check SL/TP được.
-    Returns: float price (VND) hoặc None
-    """
-    close_conn = False
-    try:
-        if conn is None:
-            conn = get_db_connection()
-            close_conn = True
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT close_price, trade_date
-            FROM eod_prices
-            WHERE ticker = %s
-            ORDER BY trade_date DESC
-            LIMIT 1
-        """, (ticker,))
-        row = cursor.fetchone()
-        if row:
-            price = float(row[0])
-            trade_date = row[1]
-            print(f"   📦 DB fallback price: {price:,.0f} (date: {trade_date})")
-            return price
-        return None
-    except Exception as e:
-        print(f"   ⚠️ DB price fallback failed: {e}")
-        return None
-    finally:
-        if close_conn and conn:
-            try:
-                conn.close()
-            except:
-                pass
-
 # ============================================================================
 # MAIN SCANNER
 # ============================================================================
 
-def scan_for_sell_signals():
+def _sell(ticker, code, sid, reason, entry, price, sl, tp, pnl, qty, pos, note, urgency, details=None):
+    d = {'ticker': ticker, 'signal_code': code, 'signal_id': sid, 'exit_reason': reason,
+         'entry_price': entry, 'exit_price': price, 'stop_loss': sl, 'take_profit': tp,
+         'profit_loss_pct': pnl, 'exit_quantity_pct': qty, 'position_pct': pos, 'note': note, 'urgency': urgency}
+    if details:
+        d['signal_details'] = details
+    return d
+
+
+def scan_for_sell_signals(dry_run=False):
     """
-    Main sell signal scanner with 3 technical exit criteria
-    
-    PRIORITY ORDER:
-    1. Stop Loss (URGENT!)
-    2. Daily Critical Exit (MACD+RSI+Support) â†’ 100%
-    3. 1H Volume Climax (BSR pattern) â†’ 100%
-    4. 4H Medium Exit (MACD+Volume div) â†’ 50%
-    5. Take Profit
-    
-    Returns:
-        list: Sell signals to execute
+    Thứ tự ưu tiên (giữ nguyên v5.4):
+      1. Cắt lỗ  2. Daily critical (tắt)  3. 1H climax (tắt)  4. 4H medium (tắt)  5. Chốt lời
+    Trả về (signals_to_sell, blocked) — blocked: mã không xét vì quyền chưa áp dụng / giá bất thường.
     """
-    print("\n" + "="*80)
-    print("ðŸ” SELL SIGNAL SCANNER v5.3 - TECHNICAL EXIT CRITERIA")
-    print(f"â° Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("="*80)
-    
+    print("\n" + "=" * 80)
+    print(f"🔍 SELL SIGNAL SCANNER v{VERSION}")
+    print(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("=" * 80)
+
+    if not dry_run:
+        apply_corporate_actions()
+
     conn = get_db_connection()
     cursor = conn.cursor()
-    
-    # Get open BUY signals
     cursor.execute("""
-        SELECT 
-            ticker,
-            signal_code,
-            entry_price,
-            stop_loss,
-            take_profit,
-            position_pct,
-            date
+        SELECT id, ticker, signal_code, entry_price, stop_loss, take_profit, position_pct, date
         FROM signals
-        WHERE action = 'BUY'
-          AND status = 'open'
-        ORDER BY ticker
+        WHERE action = 'BUY' AND status = 'open'
+        ORDER BY ticker, id
     """)
-    
     open_signals = cursor.fetchall()
+    pending_ca = pending_corporate_actions(conn)
+
+    # Tín hiệu thiếu signal_code → gán TICKER-ID (máy quét cũ không đóng được các tín hiệu này → bán lặp)
+    missing = [(r[0], f"{r[1]}-{r[0]}") for r in open_signals if not r[2]]
+    if missing and not dry_run:
+        for sid, code in missing:
+            cursor.execute("UPDATE signals SET signal_code = %s WHERE id = %s AND signal_code IS NULL", (code, sid))
+        conn.commit()
+        print(f"   🔧 Gán signal_code cho {len(missing)} tín hiệu MUA")
     conn.close()
-    
+
     if not open_signals:
-        print("\nâœ… KhÃ´ng cÃ³ signal nÃ o Ä‘ang open")
-        return []
-    
-    print(f"\nðŸ“‹ Checking {len(open_signals)} open positions\n")
-    
-    signals_to_sell = []
-    
-    
-    # ── BATCH FETCH ALL PRICES FROM eod_prices (1 query, no rate limit) ──
-    all_tickers = [s[0] for s in open_signals]
-    db_prices = get_all_prices_from_db(all_tickers)
+        print("\n✅ Không có tín hiệu MUA nào đang mở")
+        return [], []
+
+    print(f"\n📋 Kiểm tra {len(open_signals)} vị thế đang mở\n")
+    db_prices = get_all_prices_from_db(sorted({r[1] for r in open_signals}))
     print()
-    for signal in open_signals:
-        ticker = signal[0]
-        signal_code = signal[1]
-        entry_price = signal[2]
-        stop_loss = signal[3]
-        take_profit = signal[4]
-        position_pct = signal[5]
-        entry_date = signal[6]
-        
-        print(f"ðŸ” {ticker} ({signal_code})...", end=" ")
-        
+
+    signals_to_sell, blocked = [], []
+    for sid, ticker, signal_code, entry_price, stop_loss, take_profit, position_pct, entry_date in open_signals:
+        code = signal_code or f"{ticker}-{sid}"
+        position_pct = int(position_pct if position_pct is not None else 100)
+        print(f"🔍 {ticker} ({code})...", end=" ")
         try:
-            # ── GET PRICE FROM BATCH DB LOOKUP ──
             current_price = db_prices.get(ticker)
             if current_price is None:
-                print(f"⚠️ No price in DB for {ticker}")
+                print("⚠️ Không có giá trong DB")
                 continue
-            df_daily = None  # Technical analysis disabled (vnstock deprecated)
+            entry_price = float(entry_price or 0)
+            stop_loss = float(stop_loss or 0)
+            take_profit = float(take_profit or 0)
+            if entry_price <= 0:
+                print("⚠️ Thiếu giá vào")
+                continue
+
+            # ── Quyền chưa áp dụng: giá DB đã điều chỉnh, giá tín hiệu chưa → không so sánh ──
+            ex = pending_ca.get(ticker)
+            if ex and str(entry_date or '')[:10] < ex:
+                msg = f"{ticker} ({code}): có quyền GDKHQ {ex} chưa áp dụng — tạm không xét cắt lỗ/chốt lời"
+                print(f"⏸️ {msg}")
+                blocked.append(msg)
+                continue
+
+            df_daily = None  # phân tích kỹ thuật tạm tắt (như v5.4)
             pnl_pct = ((current_price - entry_price) / entry_price) * 100
-            
-            # ========================================
-            # PRIORITY 1: STOP LOSS (URGENT!)
-            # ========================================
-            if current_price <= stop_loss:
-                print(f"ðŸš¨ STOP LOSS @ {current_price:,.0f}")
-                
-                signals_to_sell.append({
-                    'ticker': ticker,
-                    'signal_code': signal_code,
-                    'exit_reason': 'STOP_LOSS',
-                    'entry_price': entry_price,
-                    'exit_price': current_price,
-                    'stop_loss': stop_loss,
-                    'take_profit': take_profit,
-                    'profit_loss_pct': pnl_pct,
-                    'exit_quantity_pct': 100,
-                    'position_pct': position_pct,
-                    'note': f'Stop loss triggered',
-                    'urgency': 'CRITICAL'
-                })
+
+            # PRIORITY 1: STOP LOSS
+            if stop_loss > 0 and current_price <= stop_loss:
+                if current_price < stop_loss * (1 - ABNORMAL_GAP):
+                    msg = (f"{ticker} ({code}): giá {current_price:,.0f} thấp hơn cắt lỗ {stop_loss:,.0f} "
+                           f"{(1 - current_price / stop_loss) * 100:.0f}% — nghi chia cổ tức/thưởng, KHÔNG bán, cần admin kiểm tra")
+                    print(f"⛔ {msg}")
+                    blocked.append(msg)
+                    continue
+                print(f"🚨 CẮT LỖ @ {current_price:,.0f}")
+                signals_to_sell.append(_sell(ticker, code, sid, 'STOP_LOSS', entry_price, current_price, stop_loss,
+                                             take_profit, pnl_pct, 100, position_pct, 'Stop loss triggered', 'CRITICAL'))
                 continue
-            
-            # ========================================
-            # PRIORITY 2: DAILY CRITICAL EXIT
-            # MACD + RSI>80 + Support break â†’ 100%
-            # ========================================
+
+            # PRIORITY 2: DAILY CRITICAL EXIT (MACD + RSI>80 + thủng hỗ trợ → 100%)
             daily_exit = check_daily_critical_exit(df_daily) if df_daily is not None else None
-            
             if daily_exit:
-                print(f"ðŸš¨ DAILY CRITICAL! RSI={daily_exit['rsi']:.0f}")
-                
-                signals_to_sell.append({
-                    'ticker': ticker,
-                    'signal_code': signal_code,
-                    'exit_reason': 'DAILY_CRITICAL_EXIT',
-                    'entry_price': entry_price,
-                    'exit_price': current_price,
-                    'stop_loss': stop_loss,
-                    'take_profit': take_profit,
-                    'profit_loss_pct': pnl_pct,
-                    'exit_quantity_pct': 100,
-                    'position_pct': position_pct,
-                    'note': daily_exit['note'],
-                    'urgency': 'CRITICAL',
-                    'signal_details': daily_exit
-                })
+                print(f"🚨 DAILY CRITICAL! RSI={daily_exit['rsi']:.0f}")
+                signals_to_sell.append(_sell(ticker, code, sid, 'DAILY_CRITICAL_EXIT', entry_price, current_price, stop_loss,
+                                             take_profit, pnl_pct, 100, position_pct, daily_exit['note'], 'CRITICAL', daily_exit))
                 continue
-            
-            # ========================================
-            # PRIORITY 3: 1H VOLUME CLIMAX
-            # BSR pattern â†’ 100%
-            # ========================================
+
+            # PRIORITY 3: 1H VOLUME CLIMAX → 100%
             df_1h = get_intraday_1h_data(ticker, days_back=10)
-            
             if df_1h is not None:
                 climax_1h = check_1h_climax_exit(df_1h)
-                
                 if climax_1h:
-                    print(f"âš ï¸ 1H CLIMAX! {climax_1h['signal']}")
-                    
-                    signals_to_sell.append({
-                        'ticker': ticker,
-                        'signal_code': signal_code,
-                        'exit_reason': climax_1h['signal'],
-                        'entry_price': entry_price,
-                        'exit_price': current_price,
-                        'stop_loss': stop_loss,
-                        'take_profit': take_profit,
-                        'profit_loss_pct': pnl_pct,
-                        'exit_quantity_pct': climax_1h['exit_pct'],
-                        'position_pct': position_pct,
-                        'note': climax_1h['note'],
-                        'urgency': climax_1h['urgency'],
-                        'signal_details': climax_1h
-                    })
+                    print(f"⚠️ 1H CLIMAX! {climax_1h['signal']}")
+                    signals_to_sell.append(_sell(ticker, code, sid, climax_1h['signal'], entry_price, current_price, stop_loss,
+                                                 take_profit, pnl_pct, climax_1h['exit_pct'], position_pct,
+                                                 climax_1h['note'], climax_1h['urgency'], climax_1h))
                     continue
-            
-            # ========================================
-            # PRIORITY 4: 4H MEDIUM EXIT
-            # MACD + Volume div â†’ 50%
-            # ========================================
+
+            # PRIORITY 4: 4H MEDIUM EXIT → 50%
             df_4h = get_intraday_4h_data(ticker, days_back=15)
-            
             if df_4h is not None:
                 medium_4h = check_4h_medium_exit(df_4h)
-                
                 if medium_4h:
-                    print(f"âš ï¸ 4H MEDIUM! BÃ¡n 50%")
-                    
-                    signals_to_sell.append({
-                        'ticker': ticker,
-                        'signal_code': signal_code,
-                        'exit_reason': '4H_MEDIUM_EXIT',
-                        'entry_price': entry_price,
-                        'exit_price': current_price,
-                        'stop_loss': stop_loss,
-                        'take_profit': take_profit,
-                        'profit_loss_pct': pnl_pct,
-                        'exit_quantity_pct': 50,
-                        'position_pct': position_pct,
-                        'note': medium_4h['note'],
-                        'urgency': 'HIGH',
-                        'signal_details': medium_4h
-                    })
+                    print("⚠️ 4H MEDIUM! Bán 50%")
+                    signals_to_sell.append(_sell(ticker, code, sid, '4H_MEDIUM_EXIT', entry_price, current_price, stop_loss,
+                                                 take_profit, pnl_pct, 50, position_pct, medium_4h['note'], 'HIGH', medium_4h))
                     continue
-            
-            # ========================================
+
             # PRIORITY 5: TAKE PROFIT
-            # ========================================
-            if current_price >= take_profit:
-                # Partial TP
+            if take_profit > 0 and current_price >= take_profit:
                 if position_pct == 100:
                     exit_qty = 50
                 elif position_pct == 50:
                     exit_qty = 30
                 else:
                     exit_qty = position_pct
-                
-                print(f"âœ… TP! Exit {exit_qty}%")
-                
-                signals_to_sell.append({
-                    'ticker': ticker,
-                    'signal_code': signal_code,
-                    'exit_reason': 'TAKE_PROFIT',
-                    'entry_price': entry_price,
-                    'exit_price': current_price,
-                    'stop_loss': stop_loss,
-                    'take_profit': take_profit,
-                    'profit_loss_pct': pnl_pct,
-                    'exit_quantity_pct': exit_qty,
-                    'position_pct': position_pct,
-                    'note': f'Take profit - exit {exit_qty}%',
-                    'urgency': 'MEDIUM'
-                })
+                print(f"✅ CHỐT LỜI! Bán {exit_qty}%")
+                signals_to_sell.append(_sell(ticker, code, sid, 'TAKE_PROFIT', entry_price, current_price, stop_loss,
+                                             take_profit, pnl_pct, exit_qty, position_pct,
+                                             f'Take profit - exit {exit_qty}%', 'MEDIUM'))
                 continue
-            
-            # No signal
-            print(f"âœ… No signal (P/L: {pnl_pct:+.2f}%)")
-            
+
+            print(f"✅ Chưa có tín hiệu (P/L: {pnl_pct:+.2f}%)")
         except Exception as e:
-            print(f"âŒ Error: {e}")
+            print(f"❌ Lỗi: {e}")
             import traceback
             traceback.print_exc()
             continue
-    
-    # Summary
+
     if signals_to_sell:
-        print("\n" + "="*80)
-        print(f"ðŸš¨ FOUND {len(signals_to_sell)} SELL SIGNALS!")
-        print("="*80)
-        
+        print("\n" + "=" * 80)
+        print(f"🚨 {len(signals_to_sell)} TÍN HIỆU BÁN")
+        print("=" * 80)
         for sig in signals_to_sell:
-            print(f"   {sig['ticker']}: {sig['exit_reason']} - Exit {sig['exit_quantity_pct']}% - {sig['urgency']}")
-        
-        print("="*80)
+            print(f"   {sig['ticker']}: {sig['exit_reason']} - Bán {sig['exit_quantity_pct']}% - {sig['urgency']}")
     else:
-        print("\nâœ… No sell signals detected")
-    
-    return signals_to_sell
+        print("\n✅ Không có tín hiệu bán")
+    return signals_to_sell, blocked
 
 
 # ============================================================================
@@ -879,139 +805,101 @@ def scan_for_sell_signals():
 # ============================================================================
 
 def execute_sell_signals(signals_to_sell):
-    """
-    Save sell signals to database and update positions
-    """
+    """Ghi lệnh bán + cập nhật vị thế MUA. Mỗi lệnh commit riêng; bỏ qua lệnh trùng trong ngày."""
     if not signals_to_sell:
-        return
-    
+        return 0
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+    done = 0
     for sig in signals_to_sell:
         try:
-            # Convert numpy types to native Python types for PostgreSQL
-            entry_price = float(sig['entry_price']) if sig['entry_price'] is not None else None
-            exit_price = float(sig['exit_price']) if sig['exit_price'] is not None else None
-            stop_loss = float(sig['stop_loss']) if sig['stop_loss'] is not None else None
-            take_profit = float(sig['take_profit']) if sig['take_profit'] is not None else None
-            profit_loss_pct = float(sig['profit_loss_pct']) if sig['profit_loss_pct'] is not None else None
-            exit_quantity_pct = int(sig['exit_quantity_pct']) if sig['exit_quantity_pct'] is not None else None
-            
-            # Insert SELL signal
+            cursor.execute("""SELECT 1 FROM signals WHERE action = 'SELL' AND buy_signal_code = %s
+                              AND exit_reason = %s AND date = CAST(CURRENT_DATE AS TEXT) LIMIT 1""",
+                           (sig['signal_code'], sig['exit_reason']))
+            if cursor.fetchone():
+                print(f"⏭️ {sig['ticker']}: đã có lệnh bán {sig['exit_reason']} hôm nay — bỏ qua")
+                conn.rollback()
+                continue
+
+            f = lambda v: float(v) if v is not None else None
             cursor.execute("""
-                INSERT INTO signals 
+                INSERT INTO signals
                 (ticker, action, entry_price, exit_price, stop_loss, take_profit,
                  profit_loss_pct, exit_quantity_pct, exit_reason, signal_code,
-                 buy_signal_code, note, date, status)
-                VALUES (%s, 'SELL', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_DATE, 'executed')
+                 buy_signal_code, note, date, exit_date, status, created_at)
+                VALUES (%s, 'SELL', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        CAST(CURRENT_DATE AS TEXT), CURRENT_DATE, 'executed', NOW())
             """, (
-                sig['ticker'],
-                entry_price,
-                exit_price,
-                stop_loss,
-                take_profit,
-                profit_loss_pct,
-                exit_quantity_pct,
-                sig['exit_reason'],
+                sig['ticker'], f(sig['entry_price']), f(sig['exit_price']), f(sig['stop_loss']), f(sig['take_profit']),
+                f(sig['profit_loss_pct']), int(sig['exit_quantity_pct']), sig['exit_reason'],
                 f"{sig['ticker']}-SELL-{datetime.now().strftime('%Y%m%d%H%M')}",
-                sig['signal_code'],
-                sig['note']
+                sig['signal_code'], sig['note'],
             ))
-            
-            # Update BUY signal position
+
             new_position_pct = int(sig['position_pct'] - sig['exit_quantity_pct'])
-            
             if new_position_pct <= 0:
-                # Full exit
-                cursor.execute("""
-                    UPDATE signals
-                    SET status = 'closed', position_pct = 0
-                    WHERE signal_code = %s
-                """, (sig['signal_code'],))
+                cursor.execute("UPDATE signals SET status = 'closed', position_pct = 0 WHERE id = %s", (sig['signal_id'],))
             else:
-                # Partial exit
-                cursor.execute("""
-                    UPDATE signals
-                    SET position_pct = %s
-                    WHERE signal_code = %s
-                """, (new_position_pct, sig['signal_code']))
-            
-            print(f"âœ… {sig['ticker']}: Saved SELL signal")
-            
+                cursor.execute("UPDATE signals SET position_pct = %s WHERE id = %s", (new_position_pct, sig['signal_id']))
+            conn.commit()
+            done += 1
+            print(f"✅ {sig['ticker']}: đã ghi lệnh bán")
         except Exception as e:
-            print(f"âŒ {sig['ticker']}: Error - {e}")
+            print(f"❌ {sig['ticker']}: lỗi - {e}")
             conn.rollback()
-            continue
-    
-    conn.commit()
     conn.close()
-    
-    print(f"\nâœ… Executed {len(signals_to_sell)} sell signals!")
+    print(f"\n✅ Đã ghi {done}/{len(signals_to_sell)} lệnh bán")
+    return done
 
 
 # ============================================================================
 # MAIN
 # ============================================================================
 
-if __name__ == '__main__':
-    # Check if running during trading hours (9:30-15:30 VN time)
-    from datetime import timezone, timedelta
-    
-    # Get current time in VN timezone (UTC+7)
+def main():
+    ap = argparse.ArgumentParser(description=f'Sell Signal Scanner v{VERSION}')
+    ap.add_argument('--dry-run', action='store_true', help='Chỉ in kết quả, không ghi DB')
+    ap.add_argument('--yes', action='store_true', help='Không hỏi xác nhận')
+    ap.add_argument('--ignore-hours', action='store_true', help='Chạy cả ngoài giờ giao dịch')
+    args = ap.parse_args()
+
     vn_tz = timezone(timedelta(hours=7))
     now_utc = datetime.now(timezone.utc)
     now_vn = now_utc.astimezone(vn_tz)
-    
-    current_hour = now_vn.hour
-    current_minute = now_vn.minute
-    
-    print(f"ðŸ• UTC Time: {now_utc.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-    print(f"ðŸ• VN Time:  {now_vn.strftime('%Y-%m-%d %H:%M:%S VN')}")
-    
-    # Weekend check (Saturday=5, Sunday=6)
-    if now_vn.weekday() >= 5:
-        day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        print("\n" + "="*80)
-        print(f"â° TODAY IS {day_names[now_vn.weekday()].upper()}")
-        print("="*80)
-        print("\nðŸ“… Stock market is CLOSED on weekends")
-        print("   Markets are open Monday-Friday only")
-        print("\nâœ… Scanner will exit gracefully")
-        print("   Run again on Monday during trading hours (9:30-15:30)")
-        print("\n" + "="*80 + "\n")
-        sys.exit(0)
-    
-    # VN time check (now using actual VN time, not UTC)
-    if current_hour < 9 or (current_hour == 9 and current_minute < 30):
-        print(f"â° Before market hours ({now_vn.strftime('%H:%M')} VN time)")
-        print("   Scanner runs 9:30-15:30 VN time")
-        sys.exit(0)
-    
-    if current_hour > 15 or (current_hour == 15 and current_minute > 30):
-        print(f"â° After market hours ({now_vn.strftime('%H:%M')} VN time)")
-        print("   Use daily_eod_workflow.py for EOD scan")
-        sys.exit(0)
-    
-    # Run scanner
-    sell_signals = scan_for_sell_signals()
-    
-    # Execute signals
+    print(f"🕐 UTC: {now_utc.strftime('%Y-%m-%d %H:%M:%S')} | VN: {now_vn.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    if not args.ignore_hours:
+        if now_vn.weekday() >= 5:
+            print("📅 Cuối tuần — thị trường nghỉ. Thoát.")
+            sys.exit(0)
+        h, m = now_vn.hour, now_vn.minute
+        if h < 9 or (h == 9 and m < 30):
+            print(f"⏰ Trước giờ giao dịch ({now_vn.strftime('%H:%M')}) — máy quét chạy 9:30–15:30")
+            sys.exit(0)
+        if h > 15 or (h == 15 and m > 30):
+            print(f"⏰ Sau giờ giao dịch ({now_vn.strftime('%H:%M')}) — máy quét chạy 9:30–15:30")
+            sys.exit(0)
+
+    sell_signals, blocked = scan_for_sell_signals(dry_run=args.dry_run)
+
+    if blocked and not args.dry_run:
+        notify_admin("⏸️ Máy quét BÁN tạm không xét các mã sau (cần admin kiểm tra):\n• " + "\n• ".join(blocked[:15]))
+
     if sell_signals:
-        # Check if running in CI environment
-        is_ci = os.getenv('CI') == 'true' or os.getenv('GITHUB_ACTIONS') == 'true'
-        
-        if is_ci:
-            # Auto-execute in CI
-            print(f"\nðŸ¤– CI MODE: Auto-executing {len(sell_signals)} sell signals")
+        if args.dry_run:
+            print("\n⚠️ DRY RUN — không ghi DB")
+        elif args.yes or os.getenv('CI') == 'true' or os.getenv('GITHUB_ACTIONS') == 'true':
+            print(f"\n🤖 Tự động ghi {len(sell_signals)} lệnh bán")
             execute_sell_signals(sell_signals)
         else:
-            # Manual confirmation in local/interactive mode
-            response = input(f"\nâš ï¸ Execute {len(sell_signals)} sell signals? (y/n): ")
+            response = input(f"\n⚠️ Ghi {len(sell_signals)} lệnh bán? (y/n): ")
             if response.lower() == 'y':
                 execute_sell_signals(sell_signals)
             else:
-                print("âŒ Cancelled - signals not executed")
-    
-    print("\nâœ… Scanner completed!")
+                print("❌ Đã hủy — không ghi")
 
+    print("\n✅ Hoàn tất")
+
+
+if __name__ == '__main__':
+    main()

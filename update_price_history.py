@@ -4,6 +4,7 @@
 AI ADVISOR - PRICE HISTORY (nến ngày) cho Giám sát danh mục VIP
 ================================================================
 File: update_price_history.py
+Version: 1.2 (2026-10-09) — thêm mã danh mục mẫu + tín hiệu mở; không ghi đè nến trước ngày GDKHQ đã điều chỉnh
 Version: 1.1 (2026-10-03) — nghỉ 3,5s/mã, bắt sys.exit khi bị giới hạn, thử lại mã lỗi, báo đỏ khi còn mã thiếu
 Version: 1.0 (2026-10-01)
 
@@ -91,6 +92,17 @@ def watched_tickers(engine):
                     out.add(r[0])
         except Exception:
             pass
+        # v1.2: thêm mã danh mục mẫu đang giữ + tín hiệu MUA đang mở (30 ngày) — cần nến phiên trước để
+        # phát hiện ngày GDKHQ (corporate_actions) và điều chỉnh đúng giá cắt lỗ.
+        for sql in ("SELECT DISTINCT UPPER(ticker) FROM mp_positions WHERE status = 'open'",
+                    """SELECT DISTINCT UPPER(ticker) FROM signals WHERE action = 'BUY'
+                       AND (status IS NULL OR status IN ('open', 'partial')) AND date >= :d"""):
+            try:
+                for r in c.execute(text(sql), {'d': (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')}):
+                    if r[0]:
+                        out.add(r[0])
+            except Exception:
+                c.rollback()
     out.update(t.strip().upper() for t in os.getenv('EXTRA_TICKERS', '').split(',') if t.strip())
     return sorted(t for t in out if t.isalnum() and len(t) <= 10)
 
@@ -188,11 +200,29 @@ def main():
                 time.sleep(30 * (attempt + 1))
         return []
 
+    # v1.2: nến TRƯỚC ngày GDKHQ đã được hệ thống điều chỉnh (corporate_actions) — không ghi đè bằng dữ liệu nguồn
+    # (nguồn có thể chưa điều chỉnh kịp). Mã mới nạp lần đầu thì vẫn lấy toàn bộ.
+    ca_cut = {}
+    if not DRY_RUN:
+        try:
+            with engine.connect() as c:
+                ca_cut = {r[0]: r[1] for r in c.execute(text(
+                    "SELECT ticker, MAX(ex_date) FROM corporate_actions WHERE status = 'applied' GROUP BY ticker"))}
+        except Exception:
+            ca_cut = {}
+
     queue = list(tickers)
     for rnd in (1, 2):                     # vòng 2: thử lại các mã lỗi sau khi nghỉ 60s
         failed = []
         for i, t in enumerate(queue):
             rows = one(t)
+            if rows and have.get(t) and ca_cut.get(t):
+                kept = [r for r in rows if r['d'] >= ca_cut[t]]
+                rows = kept
+                if not rows:                              # mọi nến tải về đều trước ngày GDKHQ -> không cần ghi
+                    ok += 1
+                    time.sleep(PAUSE)
+                    continue
             if rows:
                 ok += 1
                 total_rows += len(rows)
