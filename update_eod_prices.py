@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI ADVISOR - EOD PRICE UPDATER v2.2 (2026-10-09: + phát hiện ngày GDKHQ qua giá tham chiếu -> corporate_actions)
+AI ADVISOR - EOD PRICE UPDATER v2.3 (2026-10-11: lấy giá khớp gần nhất, KHÔNG lấy giá khớp bình quân) · v2.2 (2026-10-09: + phát hiện ngày GDKHQ qua giá tham chiếu -> corporate_actions)
 (v2.1 2026-10-01: + mã trong danh mục khách VIP)
 ==============================================
 Ghi giá mới nhất của các mã trong danh sách scanner vào bảng eod_prices (PostgreSQL).
@@ -128,6 +128,7 @@ def _make_trading():
     raise RuntimeError('Không khởi tạo được Trading: ' + ' | '.join(errors))
 
 
+_BOARD_COLS_LOGGED = False
 BOARD_INFO = {}   # v2.2: {ticker: {'ref': giá tham chiếu, 'exchange': sàn}} — để phát hiện ngày GDKHQ
 
 
@@ -143,12 +144,22 @@ def _parse_board(df):
 
     sym_col = next((low[c] for c in low if c == 'symbol' or c.endswith('_symbol') or c in ('ticker', 'code')), None)
     # Ưu tiên giá khớp gần nhất, rồi giá đóng cửa, cuối cùng giá tham chiếu (trước giờ mở cửa)
-    price_col = None
-    for key in ('match_price', 'last_price', 'close_price', 'close', 'price', 'ref_price', 'reference_price'):
-        price_col = next((low[c] for c in low if c == key or c.endswith('_' + key)), None)
-        if price_col:
-            break
-    ref_col = next((low[c] for c in low if c.endswith('ref_price') or c.endswith('reference_price')), None)
+    # v2.3: KHÔNG lấy giá khớp BÌNH QUÂN (vd 'match_avg_match_price' cũng kết thúc bằng '_match_price')
+    #       hay giá trần/sàn/dư mua-bán/đóng cửa phiên trước — chỉ giá khớp gần nhất.
+    bad = ('avg', 'average', 'bid', 'ask', 'ceil', 'floor', 'prior', 'prev')
+    def _pick(keys):
+        for key in keys:
+            hits = [c for c in low if c == key or c.endswith('_' + key)]
+            hits = [c for c in hits if not any(b in c[:len(c) - len(key)] for b in bad)]
+            if hits:
+                return low[min(hits, key=len)]          # tên ngắn nhất = cột chính (match_match_price)
+        return None
+    price_col = _pick(('match_price', 'last_price', 'close_price', 'close', 'price', 'ref_price', 'reference_price'))
+    ref_col = _pick(('ref_price', 'reference_price'))
+    global _BOARD_COLS_LOGGED
+    if not _BOARD_COLS_LOGGED:
+        logger.info(f"   🧭 Cột bảng giá dùng: giá={price_col} | tham chiếu={ref_col}")
+        _BOARD_COLS_LOGGED = True
     ex_col = next((low[c] for c in low if c.endswith('exchange') or c in ('board', 'floor', 'market')), None)
     if not sym_col or not price_col:
         raise RuntimeError(f"Không nhận ra cột symbol/giá trong bảng giá: {cols[:25]}")
