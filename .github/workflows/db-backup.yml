@@ -1,0 +1,79 @@
+# .github/workflows/db-backup.yml — v1.0 (2026-10-09)
+# Sao lưu database production 2 lần/ngày + kiểm tra dữ liệu bất thường (báo Telegram admin).
+# Bản sao lưu: file .dump mã hóa AES256, giữ 90 ngày trong mục Artifacts của mỗi lần chạy.
+#
+# Secrets cần có (Settings → Secrets and variables → Actions):
+#   DATABASE_URL            (đã có — External Database URL của Render)
+#   BACKUP_PASSPHRASE       (MỚI — mật khẩu mã hóa bản sao lưu, anh tự đặt và cất giữ cẩn thận)
+#   TELEGRAM_BOT_TOKEN      (nếu chưa có trong GitHub thì thêm — cùng giá trị trên Render)
+#   ADMIN_TELEGRAM_CHAT_ID  (chat id Telegram của admin)
+
+name: DB Backup & Health
+
+on:
+  schedule:
+    - cron: '5 5 * * *'     # 12:05 giờ VN
+    - cron: '5 14 * * *'    # 21:05 giờ VN
+  workflow_dispatch:
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cài pg_dump bản mới (đọc được mọi phiên bản server)
+        run: |
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
+
+      - name: Sao lưu toàn bộ database (mã hóa)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BACKUP_PASSPHRASE}" ]; then echo "❌ Thiếu secret BACKUP_PASSPHRASE"; exit 1; fi
+          pg_dump --version
+          STAMP=$(TZ=Asia/Ho_Chi_Minh date +%Y%m%d_%H%M)
+          pg_dump "$DATABASE_URL" -Fc --no-owner --no-privileges -f db_${STAMP}.dump
+          ls -lh db_${STAMP}.dump
+          gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase "$BACKUP_PASSPHRASE" \
+              -o db_${STAMP}.dump.gpg db_${STAMP}.dump
+          rm db_${STAMP}.dump
+          echo "STAMP=${STAMP}" >> $GITHUB_ENV
+
+      - name: Lưu bản sao lưu (90 ngày)
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ env.STAMP }}
+          path: db_*.dump.gpg
+          retention-days: 90
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Kiểm tra dữ liệu bất thường
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          ADMIN_TELEGRAM_CHAT_ID: ${{ secrets.ADMIN_TELEGRAM_CHAT_ID }}
+        run: |
+          pip install -q sqlalchemy "psycopg[binary]"
+          python scripts/db_health_check.py
+
+# ---------------------------------------------------------------------------
+# KHÔI PHỤC (trên máy Windows có pgAdmin / PostgreSQL client):
+#   1. Tải artifact về, giải nén → db_YYYYMMDD_HHMM.dump.gpg
+#   2. gpg --decrypt -o db.dump db_YYYYMMDD_HHMM.dump.gpg   (nhập BACKUP_PASSPHRASE)
+#   3. Khôi phục vào MỘT DATABASE MỚI (không ghi đè production):
+#        pg_restore --no-owner -d "<URL database mới>" db.dump
+#   4. Chép riêng bảng/dòng cần lấy lại sang production.
+# ---------------------------------------------------------------------------

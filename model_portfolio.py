@@ -2,6 +2,7 @@
 AI ADVISOR - LƯỚT SÓNG AI MODEL PORTFOLIO (danh mục mẫu VIP)
 =============================================================
 File: model_portfolio.py
+Version: 1.4.1 (2026-10-09) — reset mở khóa DATA GUARD (SET LOCAL app.allow_bulk_delete) để không bị chặn khi xóa hàng loạt có chủ đích
 Version: 1.4 (2026-10-06) — đếm số phiên nắm giữ theo lịch giao dịch (không phụ thuộc bảng NAV)
 Version: 1.3 (2026-09-27) — nhãn [Thủ công] chỉ hiện cho admin, API khách chỉ trả lý do
 Version: 1.2 (2026-09-27) — can thiệp thủ công, bật/tắt tự động, hủy giao dịch, loại mã (quản lý qua signal_reviewer.py mục 23)
@@ -381,8 +382,11 @@ def _save_nav(s, st, prices, trade_date, market, alloc, commit=True):
 def reset_portfolio(Session, capital=MP_CAPITAL):
     s = Session()
     try:
+        if s.get_bind().dialect.name == 'postgresql':
+            # Reset là thao tác admin có chủ đích (phải gửi confirm=RESET) → mở khóa DATA GUARD trong transaction này
+            s.execute(text("SET LOCAL app.allow_bulk_delete = 'on'"))
         for t in ('mp_positions', 'mp_trades', 'mp_nav', 'mp_state'):
-            s.execute(text(f"DELETE FROM {t}"))
+            s.execute(text(f"DELETE FROM {t}"))  # SAFE-DELETE: reset có xác nhận RESET, đã mở khóa DATA GUARD
         s.execute(text("""INSERT INTO mp_state (id, capital, cash, started_at, last_rebalance_date, updated_at)
                           VALUES (1, :c, :c, :now, NULL, :now)"""), dict(c=capital, now=datetime.now()))
         s.commit()

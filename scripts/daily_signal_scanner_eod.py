@@ -1,6 +1,6 @@
 """
 AI Advisor - Daily Signal Scanner
-Version: 5.0 (Yahoo Finance — không cần vnstock)
+Version: 5.0.1 (Yahoo Finance — không cần vnstock) — 2026-10-11: save ghi đủ signal_code/status/created_at
 THAY ĐỔI DUY NHẤT so với bản gốc:
   - Bỏ `from vnstock import Quote`
   - get_stock_data() dùng Yahoo Finance thay TCBS
@@ -807,11 +807,26 @@ def init_database():
 
 
 def save_signals_to_db(signals):
-    """Save signals — GIỮ NGUYÊN logic gốc (dedup theo ticker+date+action)"""
+    """Save signals — GIỮ NGUYÊN logic gốc (dedup theo ticker+date+action)
+    FIX 2026-10-11: ghi đủ created_at / status / position_pct và gán signal_code = TICKER-ID
+    (thiếu signal_code thì máy quét bán không đóng được tín hiệu MUA → báo bán lặp, như CNG/GMD 08–09/10)
+    """
     try:
         with engine.connect() as conn:
             inserted = 0
             skipped = 0
+            # Bảng production có cột theo dõi vị thế; SQLite local cũ có thể chưa có
+            try:
+                if engine.dialect.name == 'postgresql':
+                    cols = {r[0] for r in conn.execute(text(
+                        "SELECT column_name FROM information_schema.columns WHERE table_name = 'signals'"))}
+                else:
+                    cols = {r[1] for r in conn.execute(text("PRAGMA table_info(signals)"))}
+            except Exception:
+                cols = set()
+            has_tracking = {'signal_code', 'status', 'position_pct'} <= cols
+            extra_cols = ", status, position_pct" if has_tracking else ""
+            extra_vals = ", 'open', 100" if has_tracking else ""
             for signal in signals:
                 existing = conn.execute(text('''
                     SELECT id FROM signals
@@ -829,13 +844,13 @@ def save_signals_to_db(signals):
                     skipped += 1
                     continue
 
-                conn.execute(text('''
+                conn.execute(text(f'''
                     INSERT INTO signals (
                         ticker, strategy, entry_price, stop_loss, take_profit,
-                        risk_reward, strength, is_priority, stock_type, rsi, date, action
+                        risk_reward, strength, is_priority, stock_type, rsi, date, action, created_at{extra_cols}
                     ) VALUES (
                         :ticker, :strategy, :entry_price, :stop_loss, :take_profit,
-                        :risk_reward, :strength, :is_priority, :stock_type, :rsi, :date, :action
+                        :risk_reward, :strength, :is_priority, :stock_type, :rsi, :date, :action, :created_at{extra_vals}
                     )
                 '''), {
                     'ticker': signal['ticker'],
@@ -849,9 +864,15 @@ def save_signals_to_db(signals):
                     'stock_type': signal['stock_type'],
                     'rsi': signal['rsi'],
                     'date': signal['date'],
-                    'action': signal['action']
+                    'action': signal['action'],
+                    'created_at': datetime.now(),
                 })
                 inserted += 1
+
+            if has_tracking:
+                conn.execute(text(
+                    "UPDATE signals SET signal_code = ticker || '-' || CAST(id AS TEXT) "
+                    "WHERE signal_code IS NULL AND action = 'BUY'"))
 
             conn.commit()
         logger.info(f"✅ Signals: {inserted} inserted, {skipped} skipped (duplicate)")
