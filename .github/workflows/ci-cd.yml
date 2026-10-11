@@ -5,9 +5,22 @@ on:
     branches: [staging, main]
 
 jobs:
+  # 2026-10-11: chặn deploy nếu code có lệnh xóa dữ liệu nguy hiểm (DELETE không WHERE, TRUNCATE, DROP TABLE...)
+  safety-check:
+    name: Data Safety Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Chặn code xóa dữ liệu nguy hiểm
+        run: python scripts/check_dangerous_sql.py
+
   deploy-staging:
     name: Deploy Staging
     runs-on: ubuntu-latest
+    needs: safety-check
     if: github.ref == 'refs/heads/staging'
     
     steps:
@@ -20,6 +33,7 @@ jobs:
   deploy-production:
     name: Deploy Production
     runs-on: ubuntu-latest
+    needs: safety-check
     if: github.ref == 'refs/heads/main'
     
     steps:
