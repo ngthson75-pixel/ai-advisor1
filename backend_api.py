@@ -1413,6 +1413,21 @@ def signals_endpoint():
         
         session = Session()
         try:
+            # ✅ CHẶN TRÙNG BUY: nếu ticker đã có tín hiệu mua đang mở thì bỏ qua
+            if data.get('action', 'BUY') == 'BUY':
+                existing_open = session.query(Signal).filter(
+                    Signal.ticker == data['ticker'],
+                    Signal.action == 'BUY',
+                    Signal.status.in_(['open', 'partial'])
+                ).first()
+                if existing_open:
+                    session.close()
+                    return jsonify({
+                        'success': False,
+                        'error': f"Ticker {data['ticker']} đã có tín hiệu MUA đang mở (#{existing_open.id}, status={existing_open.status}). Bỏ qua để tránh trùng.",
+                        'existing_id': existing_open.id
+                    }), 409
+
             # Create new signal from push script data
             signal = Signal(
                 ticker=data['ticker'],

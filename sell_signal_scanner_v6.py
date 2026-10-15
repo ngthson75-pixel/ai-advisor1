@@ -814,10 +814,10 @@ def execute_sell_signals(signals_to_sell):
     for sig in signals_to_sell:
         try:
             cursor.execute("""SELECT 1 FROM signals WHERE action = 'SELL' AND buy_signal_code = %s
-                              AND exit_reason = %s AND date = CAST(CURRENT_DATE AS TEXT) LIMIT 1""",
+                              AND exit_reason = %s AND status = 'executed' LIMIT 1""",
                            (sig['signal_code'], sig['exit_reason']))
             if cursor.fetchone():
-                print(f"⏭️ {sig['ticker']}: đã có lệnh bán {sig['exit_reason']} hôm nay — bỏ qua")
+                print(f"⏭️ {sig['ticker']}: đã có lệnh bán {sig['exit_reason']} cho tín hiệu này — bỏ qua")
                 conn.rollback()
                 continue
 
