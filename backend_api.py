@@ -181,6 +181,14 @@ if _has_campaign:
     except Exception as _camp_err:
         print(f"⚠️  Campaign init error: {_camp_err}")
 
+
+# === LUK Model Portfolio: forward test, chỉ ĐỌC (graceful import) — 2026-10-25 ===
+# Routes: GET /api/luk/portfolio (cần LUK_VIEW_KEY), GET /luk (trang theo dõi admin)
+try:
+    from luk_portfolio_api import init_luk_routes
+    init_luk_routes(app, engine)
+except Exception as _luk_err:
+    print(f"⚠️  LUK routes not loaded: {_luk_err}")
 # === Auto-migrate chat_history for IIS behavioral columns ===
 try:
     with engine.connect() as _conn:
