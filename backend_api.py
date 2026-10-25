@@ -20,7 +20,13 @@ from openai import OpenAI
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Date, Text, text, func, Boolean, and_, or_, not_, exists
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from vnstock import Vnstock
+# vnstock bị PyPI cách ly (quarantined) từ ~24/09/2026 -> không cài được trên Render.
+# Import tùy chọn: backend vẫn khởi động; chỉ 2 endpoint giá realtime bên dưới tạm báo lỗi.
+try:
+    from vnstock import Vnstock
+except Exception as _vn_err:
+    Vnstock = None
+    print(f"⚠️  vnstock không khả dụng ({_vn_err}) — /api/stock/price và /api/stock/batch-prices tạm tắt")
 
 # === VIP + PWA Push (graceful import) ===
 try:
